@@ -1,0 +1,244 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Luxtronik SHI (Modbus/TCP)",
+        "description": "Connect to the Smart Home Interface of your alpha innotec / Luxtronik heat pump. Modbus/TCP must be enabled in the controller.",
+        "data": {
+          "name": "Name",
+          "host": "Host",
+          "port": "Port",
+          "slave": "Unit ID (slave)"
+        }
+      },
+      "reconfigure": {
+        "title": "Change connection",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "slave": "Unit ID (slave)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No connection to the heat pump. Check IP address, port and that Modbus/TCP is enabled.",
+      "not_supported": "The device answered, but does not look like a Luxtronik SHI."
+    },
+    "abort": {
+      "already_configured": "This heat pump is already configured.",
+      "reconfigure_successful": "The connection data was updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "scan_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "return": {
+        "name": "Return temperature"
+      },
+      "return_target": {
+        "name": "Return target temperature"
+      },
+      "flow": {
+        "name": "Flow temperature"
+      },
+      "outside": {
+        "name": "Outside temperature"
+      },
+      "dhw": {
+        "name": "Hot water temperature"
+      },
+      "dhw_target": {
+        "name": "Hot water target temperature"
+      },
+      "dhw_min": {
+        "name": "Hot water minimum"
+      },
+      "dhw_max": {
+        "name": "Hot water maximum"
+      },
+      "error_number": {
+        "name": "Error number"
+      },
+      "compressor_thermal_power": {
+        "name": "Thermal power"
+      },
+      "electric_power": {
+        "name": "Electric power"
+      },
+      "heat_generator_state": {
+        "name": "Heat generator state"
+      },
+      "operating_mode": {
+        "name": "Operating mode"
+      },
+      "heating_status": {
+        "name": "Heating status"
+      },
+      "hot_water_status": {
+        "name": "Hot water status"
+      },
+      "energy_el_total": {
+        "name": "Electric energy total"
+      },
+      "energy_el_heating": {
+        "name": "Electric energy heating"
+      },
+      "energy_el_dhw": {
+        "name": "Electric energy hot water"
+      },
+      "energy_th_total": {
+        "name": "Thermal energy total"
+      },
+      "energy_th_heating": {
+        "name": "Thermal energy heating"
+      },
+      "energy_th_dhw": {
+        "name": "Thermal energy hot water"
+      },
+      "hours_hp": {
+        "name": "Compressor operating hours"
+      },
+      "hours_heating": {
+        "name": "Heating operating hours"
+      },
+      "hours_dhw": {
+        "name": "Hot water operating hours"
+      },
+      "cfg_heating_mode": {
+        "name": "Setting heating mode"
+      },
+      "cfg_heating_setpoint": {
+        "name": "Setting heating setpoint"
+      },
+      "cfg_heating_level": {
+        "name": "Setting heating level"
+      },
+      "cfg_dhw_mode": {
+        "name": "Setting hot water mode"
+      },
+      "cfg_dhw_setpoint": {
+        "name": "Setting hot water setpoint"
+      },
+      "cfg_dhw_offset": {
+        "name": "Setting hot water offset"
+      },
+      "cfg_dhw_level": {
+        "name": "Setting hot water level"
+      },
+      "cfg_mk1_mode": {
+        "name": "Setting mixing circuit 1 mode"
+      },
+      "cfg_mk1_setpoint": {
+        "name": "Setting mixing circuit 1 setpoint"
+      },
+      "cfg_mk1_offset": {
+        "name": "Setting mixing circuit 1 offset"
+      },
+      "cfg_mk1_level": {
+        "name": "Setting mixing circuit 1 level"
+      },
+      "cfg_power_limit_mode": {
+        "name": "Setting power limit mode"
+      },
+      "cfg_power_limit": {
+        "name": "Setting power limit"
+      },
+      "cfg_overall_mode": {
+        "name": "Setting overall heating mode"
+      },
+      "cfg_overall_offset": {
+        "name": "Setting overall heating offset"
+      },
+      "cfg_overall_level": {
+        "name": "Setting overall heating level"
+      },
+      "cfg_circulation": {
+        "name": "Setting circulation pump start"
+      },
+      "fw_platform": {
+        "name": "Firmware platform"
+      },
+      "fw_major": {
+        "name": "Firmware major version"
+      },
+      "fw_minor": {
+        "name": "Firmware minor version"
+      },
+      "raw": {
+        "name": "Diagnostic raw value {address}"
+      }
+    },
+    "binary_sensor": {
+      "cap_heating": {
+        "name": "Capability heating"
+      },
+      "cap_hot_water": {
+        "name": "Capability hot water"
+      },
+      "cap_cooling": {
+        "name": "Capability cooling"
+      },
+      "cap_pool": {
+        "name": "Capability pool"
+      },
+      "cap_room_controller": {
+        "name": "Capability room controller"
+      },
+      "cap_mk1_heating": {
+        "name": "Capability mixing circuit 1 heating"
+      },
+      "cap_mk1_cooling": {
+        "name": "Capability mixing circuit 1 cooling"
+      },
+      "cap_mk2_heating": {
+        "name": "Capability mixing circuit 2 heating"
+      },
+      "cap_mk2_cooling": {
+        "name": "Capability mixing circuit 2 cooling"
+      },
+      "cap_mk3_heating": {
+        "name": "Capability mixing circuit 3 heating"
+      },
+      "cap_mk3_cooling": {
+        "name": "Capability mixing circuit 3 cooling"
+      },
+      "online": {
+        "name": "Connection"
+      }
+    },
+    "switch": {
+      "heating_block": {
+        "name": "Block heating"
+      },
+      "dhw_block": {
+        "name": "Block hot water"
+      },
+      "cooling_block": {
+        "name": "Block cooling"
+      },
+      "pool_block": {
+        "name": "Block pool"
+      },
+      "extra_dhw": {
+        "name": "Extra hot water"
+      }
+    },
+    "number": {
+      "cfg_heating_offset": {
+        "name": "Heating curve offset"
+      }
+    }
+  }
+}

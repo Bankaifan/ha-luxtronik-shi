@@ -1,0 +1,244 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Luxtronik SHI (Modbus/TCP)",
+        "description": "Verbindung zur Smart-Home-Schnittstelle deiner alpha innotec / Luxtronik Wärmepumpe. Modbus/TCP muss in der Regelung aktiviert sein.",
+        "data": {
+          "name": "Name",
+          "host": "Host",
+          "port": "Port",
+          "slave": "Geräte-ID (Slave)"
+        }
+      },
+      "reconfigure": {
+        "title": "Verbindung ändern",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "slave": "Geräte-ID (Slave)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Keine Verbindung zur Wärmepumpe. Prüfe IP-Adresse, Port und ob Modbus/TCP aktiviert ist.",
+      "not_supported": "Das Gerät antwortet, sieht aber nicht nach einer Luxtronik SHI aus."
+    },
+    "abort": {
+      "already_configured": "Diese Wärmepumpe ist bereits eingerichtet.",
+      "reconfigure_successful": "Die Verbindungsdaten wurden aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Sekunden)"
+        },
+        "data_description": {
+          "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "return": {
+        "name": "Rücklauftemperatur"
+      },
+      "return_target": {
+        "name": "Rücklauf-Soll"
+      },
+      "flow": {
+        "name": "Vorlauftemperatur"
+      },
+      "outside": {
+        "name": "Außentemperatur"
+      },
+      "dhw": {
+        "name": "Warmwasser Temperatur"
+      },
+      "dhw_target": {
+        "name": "Warmwasser Soll"
+      },
+      "dhw_min": {
+        "name": "Warmwasser Minimum"
+      },
+      "dhw_max": {
+        "name": "Warmwasser Maximum"
+      },
+      "error_number": {
+        "name": "Fehlernummer"
+      },
+      "compressor_thermal_power": {
+        "name": "Heizleistung thermisch"
+      },
+      "electric_power": {
+        "name": "Stromaufnahme"
+      },
+      "heat_generator_state": {
+        "name": "Zustand Wärmeerzeuger"
+      },
+      "operating_mode": {
+        "name": "Betriebsart"
+      },
+      "heating_status": {
+        "name": "Status Heizen"
+      },
+      "hot_water_status": {
+        "name": "Status Warmwasser"
+      },
+      "energy_el_total": {
+        "name": "Strom gesamt"
+      },
+      "energy_el_heating": {
+        "name": "Strom Heizen"
+      },
+      "energy_el_dhw": {
+        "name": "Strom Warmwasser"
+      },
+      "energy_th_total": {
+        "name": "Wärme gesamt"
+      },
+      "energy_th_heating": {
+        "name": "Wärme Heizen"
+      },
+      "energy_th_dhw": {
+        "name": "Wärme Warmwasser"
+      },
+      "hours_hp": {
+        "name": "Betriebsstunden Verdichter"
+      },
+      "hours_heating": {
+        "name": "Betriebsstunden Heizen"
+      },
+      "hours_dhw": {
+        "name": "Betriebsstunden Warmwasser"
+      },
+      "cfg_heating_mode": {
+        "name": "Einstellung Heizen Betriebsart"
+      },
+      "cfg_heating_setpoint": {
+        "name": "Einstellung Heizen Sollwert"
+      },
+      "cfg_heating_level": {
+        "name": "Einstellung Heizen Stufe"
+      },
+      "cfg_dhw_mode": {
+        "name": "Einstellung Warmwasser Betriebsart"
+      },
+      "cfg_dhw_setpoint": {
+        "name": "Einstellung Warmwasser Sollwert"
+      },
+      "cfg_dhw_offset": {
+        "name": "Einstellung Warmwasser Anhebung"
+      },
+      "cfg_dhw_level": {
+        "name": "Einstellung Warmwasser Stufe"
+      },
+      "cfg_mk1_mode": {
+        "name": "Einstellung Mischkreis 1 Betriebsart"
+      },
+      "cfg_mk1_setpoint": {
+        "name": "Einstellung Mischkreis 1 Sollwert"
+      },
+      "cfg_mk1_offset": {
+        "name": "Einstellung Mischkreis 1 Anhebung"
+      },
+      "cfg_mk1_level": {
+        "name": "Einstellung Mischkreis 1 Stufe"
+      },
+      "cfg_power_limit_mode": {
+        "name": "Einstellung Leistungsbegrenzung Modus"
+      },
+      "cfg_power_limit": {
+        "name": "Einstellung Leistungsbegrenzung Wert"
+      },
+      "cfg_overall_mode": {
+        "name": "Einstellung Gesamt-Heizung Betriebsart"
+      },
+      "cfg_overall_offset": {
+        "name": "Einstellung Gesamt-Heizung Anhebung"
+      },
+      "cfg_overall_level": {
+        "name": "Einstellung Gesamt-Heizung Stufe"
+      },
+      "cfg_circulation": {
+        "name": "Einstellung Zirkulationspumpe Start"
+      },
+      "fw_platform": {
+        "name": "Firmware Plattform"
+      },
+      "fw_major": {
+        "name": "Firmware Version Haupt"
+      },
+      "fw_minor": {
+        "name": "Firmware Version Neben"
+      },
+      "raw": {
+        "name": "Diagnose Rohwert {address}"
+      }
+    },
+    "binary_sensor": {
+      "cap_heating": {
+        "name": "Ausstattung Heizen vorhanden"
+      },
+      "cap_hot_water": {
+        "name": "Ausstattung Warmwasser vorhanden"
+      },
+      "cap_cooling": {
+        "name": "Ausstattung Kühlen vorhanden"
+      },
+      "cap_pool": {
+        "name": "Ausstattung Pool vorhanden"
+      },
+      "cap_room_controller": {
+        "name": "Ausstattung Raumregler vorhanden"
+      },
+      "cap_mk1_heating": {
+        "name": "Ausstattung Mischkreis 1 Heizen vorhanden"
+      },
+      "cap_mk1_cooling": {
+        "name": "Ausstattung Mischkreis 1 Kühlen vorhanden"
+      },
+      "cap_mk2_heating": {
+        "name": "Ausstattung Mischkreis 2 Heizen vorhanden"
+      },
+      "cap_mk2_cooling": {
+        "name": "Ausstattung Mischkreis 2 Kühlen vorhanden"
+      },
+      "cap_mk3_heating": {
+        "name": "Ausstattung Mischkreis 3 Heizen vorhanden"
+      },
+      "cap_mk3_cooling": {
+        "name": "Ausstattung Mischkreis 3 Kühlen vorhanden"
+      },
+      "online": {
+        "name": "Verbindung"
+      }
+    },
+    "switch": {
+      "heating_block": {
+        "name": "Heizung sperren"
+      },
+      "dhw_block": {
+        "name": "Warmwasser sperren"
+      },
+      "cooling_block": {
+        "name": "Kühlung sperren"
+      },
+      "pool_block": {
+        "name": "Pool sperren"
+      },
+      "extra_dhw": {
+        "name": "Extra-Warmwasser"
+      }
+    },
+    "number": {
+      "cfg_heating_offset": {
+        "name": "Heizkurven-Anhebung"
+      }
+    }
+  }
+}
