@@ -41,16 +41,42 @@ Voraussetzung: In der Regelung ist Modbus/TCP aktiviert (Smart-Home-Schnittstell
 
 ## Umstieg von einer bestehenden YAML-`modbus:`-Konfiguration
 
-Die Registerliste dieser Integration entspricht einer typischen Eigenkonfiguration; die internen Schlüssel sind absichtlich
-so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`).
+Die Integration ersetzt die YAML-Konfiguration (`modbus:`-Hub plus Template-Entitäten) vollständig. Die internen Schlüssel sind
+absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). So lief der Umstieg an der Referenzanlage
+(LWDV 91-1/3, Heat Pump Optimizer im Modus „control") ohne Umbau der Konsumenten:
 
-1. **YAML-Hub erst deaktivieren** (`modbus:`-Block auskommentieren, Konfiguration neu laden/Neustart). Manche SHI-Firmwares
-   erlauben nur wenige gleichzeitige TCP-Verbindungen.
+1. **YAML-Hub zuerst entfernen** (`modbus:`-Block und die zugehörigen Template-Entitäten aus der `configuration.yaml`, Neustart).
+   Manche SHI-Firmwares erlauben nur wenige gleichzeitige TCP-Verbindungen, außerdem soll nur ein Zugriffsweg schreiben.
 2. Integration hinzufügen (siehe oben).
-3. Entity-IDs auf die alten Namen umbenennen (Einstellungen → Entitäten), damit Automationen, Dashboards und
-   Energie-Dashboard weiterlaufen. Die alten Namen sind z. B. `sensor.lwdv_shi_flow`, `switch.lwdv_shi_dhw_block`.
-   Der Heizkurven-Offset heißt jetzt `number.<name>_heizkurven_anhebung` (vorher nur lesbar als `sensor.lwdv_shi_cfg_heating_offset`).
-4. Langzeitstatistiken der Zähler bleiben erhalten, wenn die neue Entität dieselbe Entity-ID bekommt.
+3. **Verwaiste Registry-Einträge der alten YAML-Entitäten löschen** (Status „wiederhergestellt/nicht verfügbar"), sonst ist die
+   alte Entity-ID belegt und das Umbenennen schlägt fehl.
+4. Die neuen Entitäten (`warmepumpe_*`) auf die alten IDs umbenennen (Einstellungen → Entitäten), z. B. `sensor.lwdv_shi_flow`,
+   `sensor.lwdv_shi_return`, `switch.lwdv_shi_heating_block`, `switch.lwdv_shi_dhw_block`. Die Heizkurven-Anhebung ist jetzt
+   schreibbar (`number.<name>_heizkurven_anhebung`, vorher nur lesbar als `sensor.einstellung_heizen_anhebung_heating_offset`).
+5. **Konsumenten prüfen:** Das Umbenennen aktualisiert keine Referenzen in Dashboards, Automationen und Templates. Prüfen
+   (z. B. mit der Entitätssuche) und Verweise auf entfallene Sensoren anpassen.
+6. **Betriebsart ist jetzt Text** (`off`, `heating`, `dhw`, `defrost`, …). Die alte YAML-Entität war numerisch (Luxtronik: 1 = Warmwasser,
+   5 = keine Anforderung). Templates, die auf Zahlen prüfen, müssen auf Text umgestellt werden.
+7. Langzeitstatistiken bleiben erhalten, wenn die neue Entität dieselbe Entity-ID und dieselbe Einheit bekommt.
+   Statistiken entfallener Entitäten (z. B. `einstellung_*`, `diagnose_rohwert_*`) bleiben verwaist in der Datenbank.
+
+### Zusammenspiel mit der nativen Luxtronik-Integration (Port 8889)
+
+Beide Integrationen können nebeneinander laufen, sollten aber klar getrennt werden:
+
+* **luxtronik_shi (diese Integration):** der einzige Weg, der **schreibt** (Sperren, Sollwerte, Betriebsarten, Zirkulationspumpe)
+  und die Werte, die ein Planer wie der Heat Pump Optimizer braucht.
+* **Native Luxtronik-Integration (Entitäten `luxtronik_<seriennummer>_*`):** nur **Diagnose** (zusätzliche Messwerte,
+  Parameter, Fehlerspeicher). Ihre Schreib-Entitäten (select, climate, switch, number) werden deaktiviert, damit nicht zwei
+  Integrationen dieselbe Regelung beschreiben. Diagnose-Entitäten werden einzeln bei Bedarf aktiviert.
+* Einstellungen, die nur das native Protokoll bietet (z. B. die Thermische Desinfektion/Legionellenschutz), werden nicht von
+  dieser Integration geändert. Das bleibt eine bewusste Entscheidung des Betreibers.
+
+### `tools/gen_yaml.py`
+
+Das Skript erzeugt aus der Registerliste die gleichwertige YAML-Konfiguration (`modbus:`-Hub plus Templates). Es ist ein
+**Legacy-Werkzeug** für alle, die bewusst bei YAML bleiben wollen. Es wird nicht mehr produktiv eingesetzt und nicht gegen
+neue Registerlisten-Änderungen getestet. Der empfohlene Weg ist die Integration.
 
 ## Hinweise und Grenzen
 

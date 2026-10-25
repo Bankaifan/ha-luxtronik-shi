@@ -1,6 +1,7 @@
 """Generate the equivalent plain Home Assistant YAML (modbus: hub + template entities) from the register map.
 
-For people who prefer YAML over the integration. Usage:  python tools/gen_yaml.py HOST > modbus.yaml
+LEGACY: not used in production any more and not tested against newer register changes.
+For people who deliberately prefer YAML over the integration (recommended: use the integration). Usage:  python tools/gen_yaml.py HOST > modbus.yaml
 """
 
 import json
