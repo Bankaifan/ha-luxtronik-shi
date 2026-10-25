@@ -25,11 +25,21 @@ async def async_setup_entry(
     entities.extend(
         LuxtronikFlag(coordinator, reg) for reg in ALL_REGISTERS if reg.platform == "binary_sensor"
     )
+    entities.extend(LuxtronikStatusBit(coordinator, bit) for bit in STATUS_BITS)
     async_add_entities(entities)
 
 
+# Bit mask of the input register "heat_generator_state" (10000).
+STATUS_BITS: tuple[tuple[str, int, str, str], ...] = (
+    ("compressor_1", 0, "Verdichter 1 läuft", "Compressor 1 running"),
+    ("compressor_2", 1, "Verdichter 2 läuft", "Compressor 2 running"),
+    ("aux_heater_1", 2, "Zusatzheizung 1 (ZWE) aktiv", "Auxiliary heater 1 active"),
+    ("aux_heater_2", 3, "Zusatzheizung 2 (ZWE) aktiv", "Auxiliary heater 2 active"),
+)
+
+
 class LuxtronikFlag(LuxtronikEntity, BinarySensorEntity):
-    """A discrete input of the heat pump."""
+    """A discrete input (or a 0/1 input register) of the heat pump."""
 
     def __init__(self, coordinator: LuxtronikCoordinator, reg: Register) -> None:
         super().__init__(coordinator, reg)
@@ -37,7 +47,31 @@ class LuxtronikFlag(LuxtronikEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Return the flag."""
-        return self._value
+        value = self._value
+        return None if value is None else bool(value)
+
+
+class LuxtronikStatusBit(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEntity):
+    """One bit of the heat generator status mask."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: LuxtronikCoordinator, bit: tuple[str, int, str, str]) -> None:
+        super().__init__(coordinator)
+        self._key, self._bit = bit[0], bit[1]
+        self._attr_translation_key = self._key
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._key}"
+        self._attr_device_info = coordinator.device_info
+        if self._key.startswith("compressor"):
+            self._attr_device_class = BinarySensorDeviceClass.RUNNING
+        else:
+            self._attr_device_class = BinarySensorDeviceClass.HEAT
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether the bit is set."""
+        mask = (self.coordinator.data or {}).get("heat_generator_state")
+        return None if mask is None else bool(mask & (1 << self._bit))
 
 
 class LuxtronikOnline(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEntity):

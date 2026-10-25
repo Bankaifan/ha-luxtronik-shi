@@ -6,7 +6,24 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "custom_components" / "luxtronik_shi"))
+# STATUS_BITS lives next to the binary sensor platform; read it without importing Home Assistant.
+import ast  # noqa: E402
+
 import registers  # noqa: E402  (plain import, no HA needed)
+
+_tree = ast.parse(
+    (ROOT / "custom_components" / "luxtronik_shi" / "binary_sensor.py").read_text(encoding="utf-8")
+)
+_bits = next(
+    ast.literal_eval(node.value)
+    for node in _tree.body
+    if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "STATUS_BITS"
+)
+
+
+class binary_sensor:  # noqa: N801 - tiny namespace for the loop below
+    STATUS_BITS = _bits
+
 
 STATIC = {
     "en": {
@@ -79,8 +96,57 @@ STATIC = {
     },
 }
 
+STATES = {
+    "en": {
+        "off": "Off",
+        "setpoint": "Setpoint",
+        "offset": "Offset",
+        "level": "Level",
+        "evu_lock": "Utility lockout",
+        "reduced": "Reduced",
+        "normal": "Normal",
+        "boost": "Boost",
+        "none": "No limit",
+        "soft": "Soft limit",
+        "hard": "Hard limit",
+        "heating": "Heating",
+        "hot_water": "Hot water",
+        "pool": "Pool",
+        "defrost": "Defrost",
+        "external_source": "External source",
+        "cooling": "Cooling",
+        "unknown": "Unknown",
+        "series": "Series buffer",
+        "separation": "Separation buffer",
+        "multi": "Multi-function buffer",
+    },
+    "de": {
+        "off": "Aus",
+        "setpoint": "Sollwert",
+        "offset": "Anhebung",
+        "level": "Stufe",
+        "evu_lock": "EVU-Sperre",
+        "reduced": "Absenkung",
+        "normal": "Normal",
+        "boost": "Boost",
+        "none": "Keine Begrenzung",
+        "soft": "Weiche Begrenzung",
+        "hard": "Harte Begrenzung",
+        "heating": "Heizen",
+        "hot_water": "Warmwasser",
+        "pool": "Schwimmbad",
+        "defrost": "Abtauen",
+        "external_source": "Externe Quelle",
+        "cooling": "Kühlen",
+        "unknown": "Unbekannt",
+        "series": "Reihenpuffer",
+        "separation": "Trennpuffer",
+        "multi": "Multifunktionspuffer",
+    },
+}
+
 for lang in ("en", "de"):
-    entity: dict[str, dict] = {"sensor": {}, "binary_sensor": {}, "switch": {}, "number": {}}
+    entity: dict[str, dict] = {"sensor": {}, "binary_sensor": {}, "switch": {}, "number": {}, "select": {}}
     for reg in registers.ALL_REGISTERS:
         name = reg.name_en if lang == "en" else reg.name_de
         if reg.key.startswith("raw_"):
@@ -88,7 +154,12 @@ for lang in ("en", "de"):
                 "name": "Diagnostic raw value {address}" if lang == "en" else "Diagnose Rohwert {address}"
             }
             continue
-        entity[reg.platform][reg.key] = {"name": name}
+        entry = {"name": name}
+        if reg.options and reg.platform in ("sensor", "select"):
+            entry["state"] = {opt: STATES[lang][opt] for opt in reg.options}
+        entity[reg.platform][reg.key] = entry
+    for key, _bit, de, en in binary_sensor.STATUS_BITS:
+        entity["binary_sensor"][key] = {"name": en if lang == "en" else de}
     entity["binary_sensor"]["online"] = {"name": "Connection" if lang == "en" else "Verbindung"}
     data = {**STATIC[lang], "entity": entity}
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"

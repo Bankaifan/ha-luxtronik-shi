@@ -10,11 +10,16 @@ Andere Luxtronik-Anlagen mit SHI sollten funktionieren, sind aber nicht getestet
 
 | Bereich | Entitäten |
 |---|---|
-| Temperaturen | Vorlauf, Rücklauf, Rücklauf-Soll, Außen, Warmwasser (Ist, Soll, Min, Max) |
-| Leistung & Energie | elektrische und thermische Leistung, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser), Betriebsstunden |
-| Status | Fehlernummer, Zustand Wärmeerzeuger, Betriebsart, Status Heizen/Warmwasser, Verbindung |
-| **Schreiben** | **Heizkurven-Anhebung** (Number, −5 … +5 K, Schritt 0,5 K), Schalter *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren*, *Extra-Warmwasser* |
-| Diagnose | aktuelle Einstellungen (Betriebsarten, Sollwerte, Stufen, Leistungsbegrenzung), Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
+| Temperaturen | Vorlauf, Rücklauf, Rücklauf-Soll/-Begrenzung/-Minimum, Rücklauf extern, Außen, Raum (nur mit Raumeinheit), Grenztemperaturen Heizen/Warmwasser, Warmwasser (Ist, Soll, Min, Max), Mischkreise 1–3 (Vorlauf, Soll, Min, Max) |
+| Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser), Betriebsstunden |
+| Status | Betriebsart als Klartext (Heizen, Warmwasser, Pool, EVU-Sperre, Abtauen, Aus, externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv**, Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool, Verbindung |
+| **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−5 … +5 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreis 1 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Leistungsbegrenzung (0–30 kW) |
+| **Schreiben: Auswahl** | Betriebsart (Aus / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreis 1, Gesamt-Heizung; Stufe (EVU-Sperre / Absenkung / Normal / Boost); Leistungsbegrenzung (keine / weich / hart) |
+| **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren*, **Zirkulationspumpe**, *Extra-Warmwasser* |
+| Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
+
+Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
+dieselben Register wie die Smart-Home-Schnittstelle selbst; die Wärmepumpe erzwingt dabei ihre eigenen Grenzen.
 
 Wichtige Eigenschaften:
 
@@ -49,10 +54,16 @@ so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`).
 
 ## Hinweise und Grenzen
 
-* Die Zahlenwerte für **Betriebsart, Zustand, Status** werden roh angezeigt; eine verlässliche Zuordnung der Werte zu
-  Klartext ist nicht dokumentiert und wird daher nicht geraten. Beiträge willkommen.
-* Der **Warmwasser-Sollwert** (Register 10006) wird nur gelesen. Bei „Automatik" (Warmwasser-Betriebsart 0) ignoriert die
-  Wärmepumpe ihn; das tatsächliche Ziel steht im Sensor *Warmwasser Soll*.
+* **Rücklauf / Rücklauf-Soll:** Die veröffentlichte Registerliste nennt 10100 „RL-Soll" und 10101 „RL-Ist". Gemessen an einer
+  echten Anlage ist es umgekehrt (10100 folgt der Wassertemperatur, 10101 springt beim Heizen auf den Sollwert). Die
+  Entitäten folgen der Messung.
+* Die *Stufe*-Werte (EVU-Sperre / Absenkung / Normal / Boost) sind aus der Community-Dokumentation übernommen (vermutlich
+  SG-Ready) und nicht an jeder Firmware bestätigt. Zirkulationspumpe und Extra-Warmwasser gibt es erst ab Firmware 3.92.0.
+* **Mischkreis-Ventil:** Das SHI liefert nur Temperaturen und Betriebsart/Sollwerte der Mischkreise, keine Ventilstellung und
+  keine Umschaltung „Ventil immer offen". Das wird in der Regelung am Gerät (Installateur-Ebene) eingestellt.
+* **Heizungsumwälzpumpen** (HUP/Heizkreispumpe) sind über das SHI nicht steuerbar, nur die Zirkulationspumpe des Warmwassers.
+  Darüber hinaus bietet das native Luxtronik-Protokoll (Port 8889, z. B. die Integration von BenPru) deutlich mehr Parameter.
+* Bei Warmwasser-Betriebsart 0 („Aus") ignoriert die Wärmepumpe den Sollwert; das tatsächliche Ziel steht im Sensor *Warmwasser Soll*.
 * Schreibzugriffe wirken direkt auf die Wärmepumpe. Wer Heizungs-/Warmwassersperre oder Offset automatisiert, sollte
   das mit Bedacht tun.
 

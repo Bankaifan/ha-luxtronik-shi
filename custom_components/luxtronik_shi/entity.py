@@ -26,6 +26,8 @@ class LuxtronikEntity(CoordinatorEntity[LuxtronikCoordinator]):
             self._attr_translation_key = reg.key
         if reg.diagnostic:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        elif reg.config:
+            self._attr_entity_category = EntityCategory.CONFIG
         self._attr_entity_registry_enabled_default = reg.enabled_default
 
     @property

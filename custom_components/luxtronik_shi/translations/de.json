@@ -50,8 +50,23 @@
       "return_target": {
         "name": "Rücklauf-Soll"
       },
+      "return_external": {
+        "name": "Rücklauf extern"
+      },
+      "return_limit": {
+        "name": "Rücklauf Begrenzung"
+      },
+      "return_min_target": {
+        "name": "Rücklauf-Soll Minimum"
+      },
       "flow": {
         "name": "Vorlauftemperatur"
+      },
+      "room": {
+        "name": "Raumtemperatur (Raumeinheit)"
+      },
+      "heating_limit": {
+        "name": "Grenztemperatur Heizen"
       },
       "outside": {
         "name": "Außentemperatur"
@@ -68,8 +83,62 @@
       "dhw_max": {
         "name": "Warmwasser Maximum"
       },
+      "dhw_limit": {
+        "name": "Grenztemperatur Warmwasser"
+      },
+      "mk1_flow": {
+        "name": "Mischkreis 1 Vorlauf"
+      },
+      "mk1_flow_target": {
+        "name": "Mischkreis 1 Vorlauf-Soll"
+      },
+      "mk1_flow_min": {
+        "name": "Mischkreis 1 Vorlauf Minimum"
+      },
+      "mk1_flow_max": {
+        "name": "Mischkreis 1 Vorlauf Maximum"
+      },
+      "mk2_flow": {
+        "name": "Mischkreis 2 Vorlauf"
+      },
+      "mk2_flow_target": {
+        "name": "Mischkreis 2 Vorlauf-Soll"
+      },
+      "mk2_flow_min": {
+        "name": "Mischkreis 2 Vorlauf Minimum"
+      },
+      "mk2_flow_max": {
+        "name": "Mischkreis 2 Vorlauf Maximum"
+      },
+      "mk3_flow": {
+        "name": "Mischkreis 3 Vorlauf"
+      },
+      "mk3_flow_target": {
+        "name": "Mischkreis 3 Vorlauf-Soll"
+      },
+      "mk3_flow_min": {
+        "name": "Mischkreis 3 Vorlauf Minimum"
+      },
+      "mk3_flow_max": {
+        "name": "Mischkreis 3 Vorlauf Maximum"
+      },
       "error_number": {
         "name": "Fehlernummer"
+      },
+      "buffer_type": {
+        "name": "Puffertyp",
+        "state": {
+          "unknown": "Unbekannt",
+          "series": "Reihenpuffer",
+          "separation": "Trennpuffer",
+          "multi": "Multifunktionspuffer"
+        }
+      },
+      "switching_lock_minutes": {
+        "name": "Schaltspielsperre"
+      },
+      "min_runtime_minutes": {
+        "name": "Mindestlaufzeit Wärmepumpe"
       },
       "compressor_thermal_power": {
         "name": "Heizleistung thermisch"
@@ -77,17 +146,36 @@
       "electric_power": {
         "name": "Stromaufnahme"
       },
+      "electric_power_min": {
+        "name": "Stromaufnahme Minimum"
+      },
       "heat_generator_state": {
         "name": "Zustand Wärmeerzeuger"
       },
       "operating_mode": {
-        "name": "Betriebsart"
+        "name": "Betriebsart",
+        "state": {
+          "heating": "Heizen",
+          "hot_water": "Warmwasser",
+          "pool": "Schwimmbad",
+          "evu_lock": "EVU-Sperre",
+          "defrost": "Abtauen",
+          "off": "Aus",
+          "external_source": "Externe Quelle",
+          "cooling": "Kühlen"
+        }
       },
       "heating_status": {
         "name": "Status Heizen"
       },
       "hot_water_status": {
         "name": "Status Warmwasser"
+      },
+      "cooling_status": {
+        "name": "Status Kühlung"
+      },
+      "pool_status": {
+        "name": "Status Schwimmbad"
       },
       "energy_el_total": {
         "name": "Strom gesamt"
@@ -116,57 +204,6 @@
       "hours_dhw": {
         "name": "Betriebsstunden Warmwasser"
       },
-      "cfg_heating_mode": {
-        "name": "Einstellung Heizen Betriebsart"
-      },
-      "cfg_heating_setpoint": {
-        "name": "Einstellung Heizen Sollwert"
-      },
-      "cfg_heating_level": {
-        "name": "Einstellung Heizen Stufe"
-      },
-      "cfg_dhw_mode": {
-        "name": "Einstellung Warmwasser Betriebsart"
-      },
-      "cfg_dhw_setpoint": {
-        "name": "Einstellung Warmwasser Sollwert"
-      },
-      "cfg_dhw_offset": {
-        "name": "Einstellung Warmwasser Anhebung"
-      },
-      "cfg_dhw_level": {
-        "name": "Einstellung Warmwasser Stufe"
-      },
-      "cfg_mk1_mode": {
-        "name": "Einstellung Mischkreis 1 Betriebsart"
-      },
-      "cfg_mk1_setpoint": {
-        "name": "Einstellung Mischkreis 1 Sollwert"
-      },
-      "cfg_mk1_offset": {
-        "name": "Einstellung Mischkreis 1 Anhebung"
-      },
-      "cfg_mk1_level": {
-        "name": "Einstellung Mischkreis 1 Stufe"
-      },
-      "cfg_power_limit_mode": {
-        "name": "Einstellung Leistungsbegrenzung Modus"
-      },
-      "cfg_power_limit": {
-        "name": "Einstellung Leistungsbegrenzung Wert"
-      },
-      "cfg_overall_mode": {
-        "name": "Einstellung Gesamt-Heizung Betriebsart"
-      },
-      "cfg_overall_offset": {
-        "name": "Einstellung Gesamt-Heizung Anhebung"
-      },
-      "cfg_overall_level": {
-        "name": "Einstellung Gesamt-Heizung Stufe"
-      },
-      "cfg_circulation": {
-        "name": "Einstellung Zirkulationspumpe Start"
-      },
       "fw_platform": {
         "name": "Firmware Plattform"
       },
@@ -181,6 +218,15 @@
       }
     },
     "binary_sensor": {
+      "cooling_configured": {
+        "name": "Kühlung konfiguriert"
+      },
+      "pool_configured": {
+        "name": "Schwimmbad konfiguriert"
+      },
+      "cooling_release": {
+        "name": "Kühlung freigegeben"
+      },
       "cap_heating": {
         "name": "Ausstattung Heizen vorhanden"
       },
@@ -214,6 +260,18 @@
       "cap_mk3_cooling": {
         "name": "Ausstattung Mischkreis 3 Kühlen vorhanden"
       },
+      "compressor_1": {
+        "name": "Verdichter 1 läuft"
+      },
+      "compressor_2": {
+        "name": "Verdichter 2 läuft"
+      },
+      "aux_heater_1": {
+        "name": "Zusatzheizung 1 (ZWE) aktiv"
+      },
+      "aux_heater_2": {
+        "name": "Zusatzheizung 2 (ZWE) aktiv"
+      },
       "online": {
         "name": "Verbindung"
       }
@@ -231,13 +289,134 @@
       "pool_block": {
         "name": "Pool sperren"
       },
+      "circulation": {
+        "name": "Zirkulationspumpe"
+      },
       "extra_dhw": {
         "name": "Extra-Warmwasser"
       }
     },
     "number": {
+      "cfg_heating_setpoint": {
+        "name": "Heizen Sollwert"
+      },
       "cfg_heating_offset": {
         "name": "Heizkurven-Anhebung"
+      },
+      "cfg_dhw_setpoint": {
+        "name": "Warmwasser Sollwert"
+      },
+      "cfg_dhw_offset": {
+        "name": "Warmwasser Anhebung"
+      },
+      "cfg_mk1_setpoint": {
+        "name": "Mischkreis 1 Heizen Sollwert"
+      },
+      "cfg_mk1_offset": {
+        "name": "Mischkreis 1 Heizen Anhebung"
+      },
+      "cfg_mk1_cool_setpoint": {
+        "name": "Mischkreis 1 Kühlen Sollwert"
+      },
+      "cfg_mk1_cool_offset": {
+        "name": "Mischkreis 1 Kühlen Anhebung"
+      },
+      "cfg_power_limit": {
+        "name": "Leistungsbegrenzung Wert"
+      },
+      "cfg_overall_offset": {
+        "name": "Gesamt-Heizung Anhebung"
+      }
+    },
+    "select": {
+      "cfg_heating_mode": {
+        "name": "Heizen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_heating_level": {
+        "name": "Heizen Stufe",
+        "state": {
+          "evu_lock": "EVU-Sperre",
+          "reduced": "Absenkung",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_dhw_mode": {
+        "name": "Warmwasser Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_dhw_level": {
+        "name": "Warmwasser Stufe",
+        "state": {
+          "evu_lock": "EVU-Sperre",
+          "reduced": "Absenkung",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_mk1_mode": {
+        "name": "Mischkreis 1 Heizen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_mk1_level": {
+        "name": "Mischkreis 1 Heizen Stufe",
+        "state": {
+          "evu_lock": "EVU-Sperre",
+          "reduced": "Absenkung",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_mk1_cool_mode": {
+        "name": "Mischkreis 1 Kühlen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_power_limit_mode": {
+        "name": "Leistungsbegrenzung Modus",
+        "state": {
+          "none": "Keine Begrenzung",
+          "soft": "Weiche Begrenzung",
+          "hard": "Harte Begrenzung"
+        }
+      },
+      "cfg_overall_mode": {
+        "name": "Gesamt-Heizung Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_overall_level": {
+        "name": "Gesamt-Heizung Stufe",
+        "state": {
+          "evu_lock": "EVU-Sperre",
+          "reduced": "Absenkung",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
       }
     }
   }

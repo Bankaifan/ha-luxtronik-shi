@@ -87,8 +87,18 @@ async def test_values(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert state("sensor", "energy_el_total") == "6553.8"
     assert state("sensor", "hours_hp") == "1234"
     assert state("sensor", "error_number") == "0"
-    assert state("sensor", "cfg_heating_setpoint") == "22.0"
+    assert state("number", "cfg_heating_setpoint") == "22.0"
     assert state("number", "cfg_heating_offset") == "0.0"
+    assert state("number", "cfg_dhw_setpoint") == "40.0"
+    assert state("select", "cfg_heating_mode") == "off"
+    assert state("sensor", "operating_mode") == "hot_water"
+    assert state("sensor", "mk1_flow") == "30.0"
+    assert state("sensor", "heating_limit") == "22.8"
+    assert state("sensor", "buffer_type") == "separation"
+    assert state("binary_sensor", "cooling_release") == "on"
+    assert state("binary_sensor", "compressor_1") == "off"  # status mask 4 = ZWE1 only
+    assert state("binary_sensor", "aux_heater_1") == "on"
+    assert state("switch", "circulation") == "off"
     assert state("binary_sensor", "cap_heating") == "on"
     assert state("binary_sensor", "cap_cooling") == "off"
     assert state("binary_sensor", "online") == "on"
@@ -96,7 +106,7 @@ async def test_values(hass: HomeAssistant, shi: FakeSHI) -> None:
 
     # raw diagnostic values are registered but disabled by default
     registry = er.async_get(hass)
-    raw = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10102"))
+    raw = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10109"))
     assert raw.disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
 
@@ -134,6 +144,7 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
     """A register the device does not have must not break its neighbours."""
     del shi.input[10124]  # lies inside the block 10100..10124
     del shi.input[10113]
+    del shi.input[10107]
     entry = await _setup(hass, shi)
     assert entry.state is ConfigEntryState.LOADED
 
@@ -142,7 +153,8 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
     # the missing raw values are just unknown, the block was read register by register
     data = entry.runtime_data.data
     assert data["raw_10113"] is None
-    assert data["raw_10124"] is None
+    assert data["dhw_limit"] is None
+    assert data["heating_limit"] is None
     assert data["raw_10112"] == 7
     assert any(block.split for block in entry.runtime_data._blocks)
 
@@ -187,3 +199,42 @@ async def test_reconfigure(hass: HomeAssistant, shi: FakeSHI) -> None:
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
+
+
+async def test_number_and_select_write(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+
+    number = _entity_id(hass, entry, "number", "cfg_dhw_setpoint")
+    await hass.services.async_call("number", "set_value", {"entity_id": number, "value": 52.5}, blocking=True)
+    assert shi.holding_value(10006) == 525
+    assert hass.states.get(number).state == "52.5"
+
+    offset = _entity_id(hass, entry, "number", "cfg_mk1_offset")
+    await hass.services.async_call("number", "set_value", {"entity_id": offset, "value": -2}, blocking=True)
+    assert shi.holding_value(10012) == 65516
+    assert hass.states.get(offset).state == "-2.0"
+
+    limit = _entity_id(hass, entry, "number", "cfg_power_limit")
+    await hass.services.async_call("number", "set_value", {"entity_id": limit, "value": 2.5}, blocking=True)
+    assert shi.holding_value(10041) == 25
+
+    select = _entity_id(hass, entry, "select", "cfg_power_limit_mode")
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": select, "option": "soft"}, blocking=True
+    )
+    assert shi.holding_value(10040) == 1
+    assert hass.states.get(select).state == "soft"
+
+    mode = _entity_id(hass, entry, "select", "cfg_dhw_mode")
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": mode, "option": "setpoint"}, blocking=True
+    )
+    assert shi.holding_value(10005) == 1
+
+
+async def test_circulation_switch(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    entity_id = _entity_id(hass, entry, "switch", "circulation")
+    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    assert shi.holding_value(10070) == 1
+    assert hass.states.get(entity_id).state == "on"

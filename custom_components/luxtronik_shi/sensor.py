@@ -34,8 +34,15 @@ class LuxtronikSensor(LuxtronikEntity, SensorEntity):
             self._attr_state_class = SensorStateClass(reg.state_class)
         if reg.precision is not None:
             self._attr_suggested_display_precision = reg.precision
+        if reg.options:
+            self._attr_device_class = SensorDeviceClass.ENUM
+            self._attr_options = list(reg.options)
 
     @property
     def native_value(self) -> float | int | None:
-        """Return the current value."""
-        return self._value
+        """Return the current value (enumerations as their option key)."""
+        value = self._value
+        options = self._reg.options
+        if options is None or value is None:
+            return value
+        return options[value] if 0 <= value < len(options) else None

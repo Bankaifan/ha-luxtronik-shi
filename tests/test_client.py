@@ -15,7 +15,7 @@ async def test_read_write(shi):
     client = LuxtronikModbusClient("127.0.0.1", shi.port, 1, timeout=2)
     try:
         assert await client.read("input", 10100, 1) == [285]
-        assert await client.read("input", 10100, 6) == [285, 300, 1, 2, 3, 351]
+        assert await client.read("input", 10100, 6) == [285, 300, 50, 380, 150, 351]
         assert await client.read("discrete", 10000, 2) == [True, True]
         await client.write_register(10002, 65531)
         assert shi.holding_value(10002) == 65531

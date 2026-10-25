@@ -10,7 +10,7 @@ from .const import CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL
 from .coordinator import LuxtronikCoordinator
 from .modbus_client import LuxtronikModbusClient
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.SELECT]
 
 type LuxtronikConfigEntry = ConfigEntry[LuxtronikCoordinator]
 
