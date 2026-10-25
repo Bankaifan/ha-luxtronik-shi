@@ -187,7 +187,8 @@ def template() -> str:
         out.append(f"    unique_id: {HUB}_{reg.key}_set")
         out.append(f"    state: \"{{{{ {mapping}.get(states('{sensor}') | int(-1)) }}}}\"")
         out.append(f"    availability: \"{{{{ has_value('{sensor}') }}}}\"")
-        out.append(f"    options: {json.dumps(options)}")
+        opts = "[" + ", ".join(f"'{o}'" for o in options) + "]"
+        out.append(f'    options: "{{{{ {opts} }}}}"')
         out.append("    select_option:")
         out.append("    - action: modbus.write_register")
         out.append(
