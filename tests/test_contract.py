@@ -45,7 +45,7 @@ def test_no_contract_key_removed_or_moved():
         for key in keys
         if key not in current.get(platform, set())
     ]
-    assert not broken, f"Entity-Vertrag verletzt (Key entfernt, umbenannt oder Plattform gewechselt): {broken}"
+    assert not broken, f"Entity contract broken (key removed, renamed or moved to another platform): {broken}"
 
 
 def test_new_keys_are_registered_in_contract():
@@ -56,4 +56,4 @@ def test_new_keys_are_registered_in_contract():
         for key in keys
         if key not in CONTRACT.get(platform, [])
     ]
-    assert not missing, f"Neue Keys in tests/fixtures/entity_contract.json eintragen (tools/gen_contract.py): {missing}"
+    assert not missing, f"Add new keys to tests/fixtures/entity_contract.json (tools/gen_contract.py): {missing}"

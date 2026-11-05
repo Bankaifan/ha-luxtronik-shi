@@ -267,7 +267,7 @@ async def test_unique_id_scheme(hass: HomeAssistant, shi: FakeSHI) -> None:
     for reg_entry in entries:
         assert reg_entry.unique_id.startswith(prefix), reg_entry.unique_id
         key = reg_entry.unique_id.removeprefix(prefix)
-        assert key in contract[reg_entry.domain], f"{reg_entry.domain}.{key} nicht im Vertrag"
+        assert key in contract[reg_entry.domain], f"{reg_entry.domain}.{key} not in contract"
 
 
 async def test_equipment_off_and_on_keeps_entity_ids(hass: HomeAssistant, shi: FakeSHI) -> None:

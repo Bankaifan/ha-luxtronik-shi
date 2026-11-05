@@ -13,19 +13,19 @@ version = json.loads((ROOT / "custom_components" / "luxtronik_shi" / "manifest.j
 errors = []
 
 if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-    errors.append(f"Manifest-Version '{version}' ist kein X.Y.Z")
+    errors.append(f"Manifest version '{version}' is not X.Y.Z")
 
 changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 if not re.search(rf"^## \[{re.escape(version)}\]", changelog, re.MULTILINE):
-    errors.append(f"CHANGELOG.md hat keinen Abschnitt '## [{version}]'")
+    errors.append(f"CHANGELOG.md has no section '## [{version}]'")
 
 ref = sys.argv[1] if len(sys.argv) > 1 else ""
 if ref.startswith("refs/tags/"):
     tag = ref.removeprefix("refs/tags/")
     if tag != f"v{version}":
-        errors.append(f"Tag '{tag}' passt nicht zur Manifest-Version v{version}")
-    if re.search(rf"^## \[{re.escape(version)}\].*unveröffentlicht", changelog, re.MULTILINE):
-        errors.append(f"CHANGELOG: Version {version} ist noch als 'unveröffentlicht' markiert")
+        errors.append(f"Tag '{tag}' does not match manifest version v{version}")
+    if re.search(rf"^## \[{re.escape(version)}\].*(unreleased|unveröffentlicht)", changelog, re.MULTILINE | re.IGNORECASE):
+        errors.append(f"CHANGELOG: version {version} is still marked as unreleased")
 
 if errors:
     print("\n".join(errors))

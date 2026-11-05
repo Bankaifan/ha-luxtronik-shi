@@ -36,4 +36,4 @@ for platform, keys in current.items():
     contract[platform] = sorted(known | keys)
 
 FIXTURE.write_text(json.dumps(dict(sorted(contract.items())), indent=2) + "\n", encoding="utf-8")
-print("hinzugefügt:", ", ".join(added) if added else "nichts")
+print("added:", ", ".join(added) if added else "nothing")
