@@ -148,6 +148,9 @@ Die Tests laufen gegen einen kleinen simulierten Modbus/TCP-Server (`tests/fake_
 vorhandene Register beantwortet. Die Übersetzungen werden aus der Registerliste erzeugt:
 `python tools/gen_translations.py`.
 
+Releases entstehen automatisch: Landet eine Versionserhöhung auf `main`, setzt ein GitHub-Actions-Workflow den Tag
+und veröffentlicht das Release mit dem passenden CHANGELOG-Abschnitt als Text.
+
 Langfristiges Ziel: eine Bibliothek auf PyPI auslagern und die Integration im Home-Assistant-Core einreichen.
 
 ## Haftung

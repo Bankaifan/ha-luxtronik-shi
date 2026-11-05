@@ -26,10 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: python tools/check_version.py "${{ github.ref }}"
+      # A pull request that bumps the version releases it on merge: the CHANGELOG section must be dated.
+      - name: Release readiness
+        run: |
+          version="$(python tools/check_version.py --version)"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "v$version already released, no version bump in this change."
+          else
+            echo "v$version will be released on merge."
+            python tools/check_version.py --release
+          fi
 
   tests:
     runs-on: ubuntu-latest

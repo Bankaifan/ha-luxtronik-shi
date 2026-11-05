@@ -146,6 +146,8 @@ Tests run against a small simulated Modbus/TCP server (`tests/fake_shi.py`) that
 existing registers. Translations are generated from the register map: `python tools/gen_translations.py`.
 Entity keys are a contract (`tests/test_contract.py`); see [CLAUDE.md](CLAUDE.md) for the working rules and
 [CHANGELOG.md](CHANGELOG.md) for versioning.
+Releases are created automatically: when a version bump reaches `main`, a GitHub Actions workflow tags it and
+publishes the release with the CHANGELOG section as notes.
 
 Long-term goal: move the protocol code into a library on PyPI and submit the integration to Home Assistant Core.
 
