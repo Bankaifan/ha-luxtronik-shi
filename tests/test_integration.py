@@ -238,3 +238,20 @@ async def test_circulation_switch(hass: HomeAssistant, shi: FakeSHI) -> None:
     await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
     assert shi.holding_value(10070) == 1
     assert hass.states.get(entity_id).state == "on"
+
+
+async def test_unique_id_scheme(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Every entity uses <entry_id>_<key>; changing that scheme would change all entity IDs."""
+    import json
+    import pathlib
+
+    entry = await _setup(hass, shi)
+    contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
+    registry = er.async_get(hass)
+    entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+    assert entries
+    prefix = f"{entry.entry_id}_"
+    for reg_entry in entries:
+        assert reg_entry.unique_id.startswith(prefix), reg_entry.unique_id
+        key = reg_entry.unique_id.removeprefix(prefix)
+        assert key in contract[reg_entry.domain], f"{reg_entry.domain}.{key} nicht im Vertrag"
