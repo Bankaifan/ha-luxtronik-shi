@@ -201,11 +201,19 @@ ISSUES = {
             "title": "{name}: Smart Home Interface not reachable",
             "description": "The heat pump at {host} has not answered for more than {minutes} minutes. Entities are unavailable and nothing can be written. Check power, network and that Modbus/TCP is still enabled in the controller. This issue disappears by itself as soon as the heat pump answers again.",
         },
+        "values_changed_after_outage": {
+            "title": "{name}: Values changed after connection outage",
+            "description": "The Smart Home Interface was unreachable. Since it answers again, these values differ from those before the outage (old -> new):\n\n{changes}\n\nThe integration does not write anything back. Check the values and set them again yourself if needed. This issue disappears when the values match those from before the outage again, or when you dismiss it.",
+        },
     },
     "de": {
         "shi_unreachable": {
             "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
             "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet.",
+        },
+        "values_changed_after_outage": {
+            "title": "{name}: Werte nach Verbindungsausfall geändert",
+            "description": "Die Smart-Home-Schnittstelle war nicht erreichbar. Seit sie wieder antwortet, unterscheiden sich diese Werte von denen vor dem Ausfall (alt -> neu):\n\n{changes}\n\nDie Integration schreibt nichts zurück. Prüfe die Werte und stelle sie bei Bedarf selbst wieder ein. Dieser Hinweis verschwindet, sobald die Werte wieder denen vor dem Ausfall entsprechen, oder wenn du ihn schließt.",
         },
     },
 }
