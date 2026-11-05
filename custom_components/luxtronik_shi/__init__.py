@@ -10,7 +10,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL
 from .coordinator import LuxtronikCoordinator
 from .modbus_client import LuxtronikModbusClient
-from .registers import CLIMATE_KEYS, active_registers
+from .registers import CLIMATE_KEYS, WATER_HEATER_KEYS, active_registers
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -19,6 +19,7 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.CLIMATE,
+    Platform.WATER_HEATER,
 ]
 
 type LuxtronikConfigEntry = ConfigEntry[LuxtronikCoordinator]
@@ -42,6 +43,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
     known = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
     has_climate = any(e.domain == Platform.CLIMATE and e.unique_id.endswith(CLIMATE_KEYS[0]) for e in known)
     coordinator.climate_enabled_default = not known or has_climate
+    # Same rule for the water heater entity (added later than the climate entity).
+    has_water_heater = any(
+        e.domain == Platform.WATER_HEATER and e.unique_id.endswith(WATER_HEATER_KEYS[0]) for e in known
+    )
+    coordinator.water_heater_enabled_default = not known or has_water_heater
 
     entry.runtime_data = coordinator
     coordinator.async_setup_devices()

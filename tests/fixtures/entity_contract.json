@@ -137,5 +137,8 @@
     "extra_dhw",
     "heating_block",
     "pool_block"
+  ],
+  "water_heater": [
+    "water_heater_dhw"
   ]
 }

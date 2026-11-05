@@ -28,6 +28,14 @@ disabled by default (enable it in the entity settings).
 > Planners such as the Heat Pump Optimizer write the same registers (heating mode and setpoint). Do not use the climate
 > entity and such a planner at the same time, or they overwrite each other.
 
+A **water heater entity** in the *Hot water* device combines the existing hot water mode (off / setpoint / offset /
+level, as in the mode select) and hot water setpoint (10–65 °C) with the hot water temperature as current value. It
+writes the same registers as the hot water mode select and setpoint number. Like the climate entity it is enabled by
+default on new installations and disabled by default for entries created before it existed.
+
+> The Heat Pump Optimizer does not control hot water through this entity. A planner should not write the same registers
+> (hot water mode and setpoint) at the same time as this entity, or they overwrite each other.
+
 Settings (numbers and selects) are in the *Configuration* section of the device page. Writes use the same registers as
 the Smart Home Interface itself; the heat pump enforces its own limits.
 

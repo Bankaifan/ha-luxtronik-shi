@@ -56,6 +56,15 @@ die vor ihrer Einführung angelegt wurden, ist sie standardmäßig deaktiviert (
 > Planer wie der Heat Pump Optimizer schreiben dieselben Register (Betriebsart und Sollwert der Heizung). Climate-Entität
 > und ein solcher Planer nicht gleichzeitig verwenden, sonst überschreiben sie sich gegenseitig.
 
+Eine **Water-Heater-Entität** im Gerät *Warmwasser* fasst die vorhandene Betriebsart (Aus / Sollwert / Anhebung / Stufe,
+wie in der Auswahl) und den Warmwasser-Sollwert (10–65 °C) zusammen und zeigt die Warmwassertemperatur als Istwert. Sie
+schreibt dieselben Register wie die Auswahl „Betriebsart" und die Zahl „Sollwert" des Warmwassers. Wie die Climate-Entität
+ist sie bei neuen Installationen standardmäßig aktiviert und bei Einträgen, die vor ihrer Einführung angelegt wurden,
+standardmäßig deaktiviert.
+
+> Der Heat Pump Optimizer steuert das Warmwasser nicht über diese Entität. Ein Planer sollte nicht gleichzeitig dieselben
+> Register (Betriebsart und Sollwert des Warmwassers) schreiben, sonst überschreiben sie sich gegenseitig.
+
 Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
 dieselben Register wie die Smart-Home-Schnittstelle selbst; die Wärmepumpe erzwingt dabei ihre eigenen Grenzen.
 

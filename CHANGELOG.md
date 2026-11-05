@@ -12,6 +12,14 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Added
+- Water heater entity for domestic hot water (issue #20), in the *Hot water* device. Target temperature writes the
+  existing hot water setpoint register (10006, 10 ... 65 °C in 0.5 K steps, out-of-range values are rejected before
+  anything is written); the operation modes are the options of the existing hot water mode register (10005: `off` /
+  `setpoint` / `offset` / `level`). The current temperature is the hot water temperature (10120). Every write is read
+  back, like for the number and select entities. New key `water_heater_dhw`; no new registers. Enabled by default on
+  new installations, disabled by default for entries that already had entities before this change (enable it in the
+  entity settings). The Heat Pump Optimizer does not control hot water through this entity; do not let a planner and
+  this entity write the same registers at the same time.
 - Climate entity for the heating circuit (issue #19), in the *Heating* device. Target temperature writes the existing
   heating setpoint register (10001, 10 ... 70 °C in 0.5 K steps, out-of-range values are rejected before anything is
   written); *Off* / *Heat* write the existing heating mode register (10000: `off` / `setpoint`). The current

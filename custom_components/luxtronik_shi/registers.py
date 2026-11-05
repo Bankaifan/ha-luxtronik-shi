@@ -727,6 +727,10 @@ BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}
 CLIMATE_HEATING_KEY = "climate_heating"
 CLIMATE_KEYS: tuple[str, ...] = (CLIMATE_HEATING_KEY,)
 
+# Entities of the water_heater platform: a view on ``cfg_dhw_mode``, ``cfg_dhw_setpoint`` and ``dhw``.
+WATER_HEATER_DHW_KEY = "water_heater_dhw"
+WATER_HEATER_KEYS: tuple[str, ...] = (WATER_HEATER_DHW_KEY,)
+
 
 # ---------------------------------------------------------------------- devices
 # Entities are grouped into sub-devices like the menus of the Luxtronik controller. The main device

@@ -93,6 +93,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._sw_version: str | None = None
         # Set by async_setup_entry: whether new climate entities are enabled by default.
         self.climate_enabled_default = True
+        # Same for the water heater entity.
+        self.water_heater_enabled_default = True
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:
