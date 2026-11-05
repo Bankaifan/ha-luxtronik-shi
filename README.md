@@ -189,6 +189,12 @@ condition ends.
 * With hot water mode 0 ("off") the heat pump ignores the setpoint; the actual target is in the *hot water target*
   sensor.
 * Writes act directly on the heat pump. Automate blocks and offsets with care.
+* **Values can fall back after a controller restart.** The SHI holding registers are volatile (see *Sources*). After a
+  power cut or a controller restart, values written through this integration (for example the heating or hot water
+  block) can return to the controller default, e.g. `off`. The integration does **not** detect or correct this: the
+  entity shows the value the controller reports, and it is not written back automatically. The same happens if
+  another writer (a planner or someone using the controller) changes a value. Check the block and mode entities after
+  a power outage, or have your automation or planner write them again.
 
 ## Development
 

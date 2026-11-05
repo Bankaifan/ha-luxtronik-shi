@@ -11,6 +11,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Documentation
+- Notes: values written through the integration can fall back to the controller default after a controller restart
+  or power cut (volatile SHI holding registers). The integration does not detect or correct this (issue #9).
+
 ## [0.7.0] – 2026-11-05
 
 ### Added
