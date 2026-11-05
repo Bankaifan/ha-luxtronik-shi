@@ -11,6 +11,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Added
+- GitHub issue forms for bug reports and supported model reports (English), under `.github/ISSUE_TEMPLATE/`.
+  Blank issues are disabled.
+
 ### Changed
 - CI runs the tests against the minimum Home Assistant version declared in `hacs.json` (2025.8.0) in addition to the
   newest ones. The minimum passes, so it stays at 2025.8.0.
