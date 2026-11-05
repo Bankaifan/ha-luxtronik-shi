@@ -560,6 +560,10 @@
     }
   },
   "issues": {
+    "firmware_old": {
+      "title": "{name}: Firmware der Wärmepumpe ist veraltet",
+      "description": "Die Wärmepumpe meldet Firmware {version}. Zirkulationspumpe und Zusatz-Warmwasser brauchen Firmware {minimum} oder neuer, diese Entitäten haben daher keine Werte. Alles andere funktioniert. Aktualisiere die Firmware der Wärmepumpe, dann verschwindet diese Warnung."
+    },
     "shi_unreachable": {
       "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
       "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet."

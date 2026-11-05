@@ -77,7 +77,7 @@ INPUT = {
     10329: 40,
     10400: 3,
     10401: 3,
-    10402: 1,
+    10402: 92,
     10404: 0,
     10405: 1234,
     10406: 0,
@@ -178,6 +178,11 @@ class FakeSHI:
                 await asyncio.wait_for(self._server.wait_closed(), 2)
             except TimeoutError:
                 pass
+
+    def set_firmware(self, major: int, minor: int) -> None:
+        """Set the firmware version the simulator reports (registers 10401/10402)."""
+        self.input[10401] = major
+        self.input[10402] = minor
 
     def holding_value(self, address: int) -> int:
         """Current raw value of a holding register in the simulator."""
