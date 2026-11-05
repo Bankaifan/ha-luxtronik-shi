@@ -166,12 +166,11 @@ neue Registerlisten-Änderungen getestet. Der empfohlene Weg ist die Integration
 
 ## Reparaturhinweise
 
-Die Integration meldet diese Hinweise unter *Einstellungen > System > Reparaturen*. Jeder verschwindet von selbst,
+Die Integration meldet diesen Hinweis unter *Einstellungen > System > Reparaturen*. Er verschwindet von selbst,
 sobald seine Ursache weg ist.
 
 | Hinweis | Schweregrad | Wird ausgelöst, wenn |
 |---|---|---|
-| Firmware der Wärmepumpe ist veraltet | Warnung | Firmware älter als 3.92.0: Zirkulationspumpe und Zusatz-Warmwasser haben keine Werte. |
 | Smart-Home-Schnittstelle nicht erreichbar | Fehler | Alle Abfragen sind 10 Minuten in Folge fehlgeschlagen. |
 
 ## Hinweise und Grenzen

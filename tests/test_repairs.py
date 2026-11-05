@@ -1,4 +1,4 @@
-"""Repair issues: old firmware and unreachable SHI (issue #24)."""
+"""Repair issue: unreachable SHI (issue #24)."""
 
 from __future__ import annotations
 
@@ -65,55 +65,6 @@ def _issue(hass: HomeAssistant, entry: MockConfigEntry, key: str):
     return ir.async_get(hass).async_get_issue(DOMAIN, f"{key}_{entry.entry_id}")
 
 
-async def test_old_firmware_raises_warning(hass: HomeAssistant, shi: FakeSHI) -> None:
-    # the simulator reports firmware 3.1 by default
-    entry = await _setup(hass, shi)
-    issue = _issue(hass, entry, "firmware_old")
-    assert issue is not None
-    assert issue.severity is ir.IssueSeverity.WARNING
-    assert issue.translation_key == "firmware_old"
-    assert issue.translation_placeholders["version"] == "3.1"
-    assert issue.translation_placeholders["minimum"] == "3.92.0"
-    assert not issue.is_fixable
-
-
-async def test_no_firmware_issue_for_current_firmware(hass: HomeAssistant, shi: FakeSHI) -> None:
-    shi.input[10402] = 92
-    entry = await _setup(hass, shi)
-    assert _issue(hass, entry, "firmware_old") is None
-
-
-async def test_firmware_issue_disappears_after_update(hass: HomeAssistant, shi: FakeSHI, clock: Clock) -> None:
-    entry = await _setup(hass, shi)
-    assert _issue(hass, entry, "firmware_old") is not None
-    shi.input[10402] = 92
-    coordinator = entry.runtime_data
-    coordinator._tick = 120  # firmware is only polled every 120th cycle
-    await coordinator.async_refresh()
-    assert _issue(hass, entry, "firmware_old") is None
-
-
-async def test_issue_ids_contain_entry_id_and_entries_do_not_clash(hass: HomeAssistant, shi: FakeSHI) -> None:
-    other = FakeSHI()
-    await other.start()
-    try:
-        other.input[10402] = 92
-        first = await _setup(hass, shi)
-        second = MockConfigEntry(
-            domain=DOMAIN,
-            title="WP2",
-            unique_id=f"127.0.0.1:{other.port}:1",
-            data={"host": "127.0.0.1", "port": other.port, "slave": 1},
-        )
-        second.add_to_hass(hass)
-        assert await hass.config_entries.async_setup(second.entry_id)
-        await hass.async_block_till_done()
-        assert _issue(hass, first, "firmware_old") is not None
-        assert _issue(hass, second, "firmware_old") is None
-    finally:
-        await other.stop()
-
-
 async def test_unreachable_issue_after_threshold_and_removed_on_recovery(
     hass: HomeAssistant, shi: FakeSHI, clock: Clock
 ) -> None:
@@ -160,9 +111,14 @@ async def test_short_outage_resets_the_clock(hass: HomeAssistant, shi: FakeSHI, 
     assert _issue(hass, entry, "shi_unreachable") is None
 
 
-async def test_issues_removed_when_entry_is_unloaded(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_issue_removed_when_entry_is_unloaded(hass: HomeAssistant, shi: FakeSHI, clock: Clock) -> None:
     entry = await _setup(hass, shi)
-    assert _issue(hass, entry, "firmware_old") is not None
+    coordinator = entry.runtime_data
+    Outage(coordinator).down()
+    await coordinator.async_refresh()
+    clock.tick(timedelta(seconds=UNREACHABLE_AFTER + 60))
+    await coordinator.async_refresh()
+    assert _issue(hass, entry, "shi_unreachable") is not None
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-    assert _issue(hass, entry, "firmware_old") is None
+    assert _issue(hass, entry, "shi_unreachable") is None

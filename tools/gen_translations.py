@@ -197,20 +197,12 @@ STATES = {
 
 ISSUES = {
     "en": {
-        "firmware_old": {
-            "title": "{name}: heat pump firmware is outdated",
-            "description": "The heat pump reports firmware {version}. The circulation pump and extra hot water registers need firmware {minimum} or later, so these entities have no values. Everything else works. Update the heat pump firmware to remove this warning.",
-        },
         "shi_unreachable": {
             "title": "{name}: Smart Home Interface not reachable",
             "description": "The heat pump at {host} has not answered for more than {minutes} minutes. Entities are unavailable and nothing can be written. Check power, network and that Modbus/TCP is still enabled in the controller. This issue disappears by itself as soon as the heat pump answers again.",
         },
     },
     "de": {
-        "firmware_old": {
-            "title": "{name}: Firmware der Wärmepumpe ist veraltet",
-            "description": "Die Wärmepumpe meldet Firmware {version}. Zirkulationspumpe und Zusatz-Warmwasser brauchen Firmware {minimum} oder neuer, diese Entitäten haben daher keine Werte. Alles andere funktioniert. Aktualisiere die Firmware der Wärmepumpe, dann verschwindet diese Warnung.",
-        },
         "shi_unreachable": {
             "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
             "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet.",

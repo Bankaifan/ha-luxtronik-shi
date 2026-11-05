@@ -164,12 +164,11 @@ register map changes. The recommended way is the integration.
 
 ## Repair issues
 
-The integration raises these issues under *Settings > System > Repairs*. Each one disappears by itself when its
+The integration raises this issue under *Settings > System > Repairs*. It disappears by itself when its
 condition ends.
 
 | Issue | Severity | Raised when |
 |---|---|---|
-| Heat pump firmware is outdated | warning | Firmware is older than 3.92.0: circulation pump and extra hot water have no values. |
 | Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
 
 ## Notes and limitations

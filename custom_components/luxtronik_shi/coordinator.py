@@ -19,10 +19,8 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
-    ISSUE_FIRMWARE_OLD,
     ISSUE_UNREACHABLE,
     MANUFACTURER,
-    MIN_FIRMWARE,
     MODEL,
     UNREACHABLE_AFTER,
 )
@@ -206,7 +204,6 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         platform, major, minor = (self._values.get(k) for k in ("fw_platform", "fw_major", "fw_minor"))
         if None in (platform, major, minor) or self._main_device_id is None:
             return
-        self._update_firmware_issue(int(major), int(minor))
         version = f"{major}.{minor} (Plattform {platform})"
         if version != self._sw_version:
             self._sw_version = version
@@ -215,26 +212,6 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------ repair issues
     def _issue_id(self, key: str) -> str:
         return f"{key}_{self.config_entry.entry_id}"
-
-    def _update_firmware_issue(self, major: int, minor: int) -> None:
-        """Raise a warning for firmware older than 3.92.0, delete it when the condition ends."""
-        issue_id = self._issue_id(ISSUE_FIRMWARE_OLD)
-        if (major, minor) >= MIN_FIRMWARE:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-            return
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key=ISSUE_FIRMWARE_OLD,
-            translation_placeholders={
-                "name": self.config_entry.title,
-                "version": f"{major}.{minor}",
-                "minimum": ".".join(str(part) for part in MIN_FIRMWARE) + ".0",
-            },
-        )
 
     def _update_unreachable_issue(self, *, failed: bool) -> None:
         """Raise an error after UNREACHABLE_AFTER seconds of failed polls, delete it on the next success."""
@@ -263,9 +240,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     def async_delete_issues(self) -> None:
-        """Remove both repair issues of this entry (on unload)."""
-        for key in (ISSUE_FIRMWARE_OLD, ISSUE_UNREACHABLE):
-            ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(key))
+        """Remove the repair issues of this entry (on unload)."""
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_UNREACHABLE))
 
     # ------------------------------------------------------------------ writing
     async def async_write(self, reg: Register, raw: int) -> None:
