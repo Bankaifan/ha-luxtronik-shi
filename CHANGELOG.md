@@ -9,13 +9,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
 * Changes that could alter an entity ID (key renamed/removed, platform changed, unique ID scheme changed) are
   **breaking changes**. They are marked in bold here and need a migration path.
 
-## [Unreleased]
+## [2026-11-05]
 
 ### Changed
 - README in English; German version moved to `README.de.md`. CHANGELOG and `CLAUDE.md` in English.
 - README: warning not to delete and re-add the integration (entity IDs would be lost), see #7.
 
-## [0.3.0] – unreleased
+## [0.3.0] – 2026-11-05
 
 ### Added
 - **Installation equipment** in the setup dialog and in the options: mixing circuits 1–3, cooling, pool,
