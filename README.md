@@ -143,6 +143,7 @@ register map changes. The recommended way is the integration.
 * Not contained in python-luxtronik and therefore only backed by observation: the equipment registers (discrete
   inputs 10000–10011), firmware major/minor version (10401/10402) and the interpretation of 10404/10406/10408 as
   operating hours.
+* Complete table of all registers (type, address, data type, scale, unit, range): [docs/registers.md](docs/registers.md).
 
 ## Notes and limitations
 

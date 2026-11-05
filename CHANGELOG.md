@@ -14,6 +14,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ### Added
 - GitHub issue forms for bug reports and supported model reports (English), under `.github/ISSUE_TEMPLATE/`.
   Blank issues are disabled.
+- Register reference `docs/registers.md` (issues #27, #3): a table of all registers with address, type, data type,
+  scale, unit, range and status. Generated from the register map by `tools/gen_register_docs.py`; a test fails when the
+  file is out of date. The status column reads from the register map and shows `open` until the map records sources.
 
 ### Changed
 - CI runs the tests against the minimum Home Assistant version declared in `hacs.json` (2025.8.0) in addition to the

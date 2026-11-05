@@ -144,6 +144,7 @@ neue Registerlisten-Änderungen getestet. Der empfohlene Weg ist die Integration
 * Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
   (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402) und die Deutung von
   10404/10406/10408 als Betriebsstunden.
+* Vollständige Tabelle aller Register (Typ, Adresse, Datentyp, Skalierung, Einheit, Bereich): [docs/registers.md](docs/registers.md).
 
 ## Hinweise und Grenzen
 
