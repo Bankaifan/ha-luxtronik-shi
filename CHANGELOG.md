@@ -11,6 +11,25 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.5.0] – 2026-11-05
+
+### Action required
+- Entities move from the single heat pump device to sub-devices (*Heating*, *Hot water*, *Cooling*, *Pool*).
+  **Entity IDs do not change**, automations, scripts and templates that use entity IDs keep working.
+  Check automations that use *device* triggers, conditions or actions on the heat pump device for heating or
+  hot water entities, and re-select the new sub-device there.
+- Display names inside the sub-devices are shorter (e.g. *Sollwert* on device *Heizung*). Dashboards that show
+  the default name change accordingly.
+
+### Added
+- Sub-devices like the Luxtronik controller menus: heat pump (main), heating, hot water, and cooling/pool when
+  selected in the equipment (#8). Created through the device registry and linked to the main device.
+- CI job `tests-latest-ha` runs the tests against the newest Home Assistant test harness (Python 3.14).
+- CI: `validate.yml` restricts the `GITHUB_TOKEN` to read access (CodeQL finding); only the HACS job may comment on PRs.
+
+### Changed
+- Firmware version is written to the device registry instead of mutating the shared `DeviceInfo`.
+
 ## [0.4.0] – 2026-11-05
 
 ### Action required
@@ -97,7 +116,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.0...v0.3.1

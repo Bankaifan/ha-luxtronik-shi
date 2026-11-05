@@ -22,11 +22,19 @@ Andere Luxtronik-Anlagen mit SHI sollten funktionieren, sind aber nicht getestet
 
 ### Gliederung in Home Assistant
 
-Die Entitätsnamen beginnen mit ihrem Bereich, so steht auf der Geräteseite zusammen, was zusammengehört:
-`Temperatur:` · `Heizen:` · `Warmwasser:` · `Mischkreis 1–3:` · `Kühlen:` · `Pool:` · `Leistungsbegrenzung:` ·
-`Gesamt-Heizung:` · `Status:` · `Leistung:` · `Energie:` · `Betriebsstunden:` · `Anlage:` · `Firmware:` ·
-`Ausstattung:` · `Rohwert:`. Innerhalb der Geräteseite trennt Home Assistant außerdem nach *Steuerelemente*,
-*Sensoren*, *Konfiguration* und *Diagnose*.
+Wie in den Menüs der Luxtronik-Regelung sind die Entitäten auf Geräte verteilt:
+
+| Gerät | Inhalt |
+|---|---|
+| **<Name>** (Wärmepumpe) | Temperaturen (Vorlauf, Rücklauf, Außen, Wärmequelle), Status und Betriebsart, Verdichter/Zusatzheizung, Leistung, Gesamtenergie und Verdichterstunden, Leistungsbegrenzung, Anlagenwerte, Firmware, Ausstattung, Rohwerte |
+| **<Name> Heizung** | Betriebsart, Sollwert, Heizkurven-Anhebung, Stufe, Gesamt-Heizung, Sperre, Mischkreise 1–3, Energie und Stunden Heizen |
+| **<Name> Warmwasser** | Temperaturen, Betriebsart, Sollwert, Anhebung, Stufe, Sperre, Zirkulationspumpe, Extra-Warmwasser, Energie und Stunden Warmwasser |
+| **<Name> Kühlung** / **<Name> Pool** | nur wenn Kühlung bzw. Pool in der Ausstattung gewählt ist |
+
+Die Unter-Geräte hängen am Gerät der Wärmepumpe. Innerhalb eines Unter-Geräts sind die Namen kurz (*Sollwert*,
+*Sperren*, *Mischkreis 1: Sollwert*); Home Assistant zeigt sie zusammen mit dem Gerätenamen an, z. B.
+„Wärmepumpe Heizung Sollwert“. Das Verschieben zwischen Geräten ändert keine Entity-ID. Auf jeder Geräteseite
+trennt Home Assistant zusätzlich nach *Steuerelemente*, *Sensoren*, *Konfiguration* und *Diagnose*.
 
 ### Ausstattung der Anlage
 

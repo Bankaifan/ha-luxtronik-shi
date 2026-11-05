@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -10,12 +11,13 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, MANUFACTURER, MODEL
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
-from .registers import ALL_REGISTERS, Register, decode
+from .registers import ALL_REGISTERS, AREAS, Register, area_of, decode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,13 +86,51 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.registers = registers
         self._blocks = plan_blocks(registers)
         self._missing: set[str] = set()
-        self.device_info = DeviceInfo(
+        # Entities only link to devices by identifier; the devices themselves are created in
+        # async_setup_devices() through the device registry.
+        self.device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
+        self._main_device_id: str | None = None
+        self._sw_version: str | None = None
+
+    # ------------------------------------------------------------------ devices
+    def device_info_for(self, key: str) -> DeviceInfo:
+        """Device an entity key belongs to (main device or one of the sub-devices)."""
+        area = area_of(key)
+        if area is None:
+            return self.device_info
+        return DeviceInfo(identifiers={(DOMAIN, f"{self.config_entry.entry_id}_{area}")})
+
+    def async_setup_devices(self) -> None:
+        """Create the main device and the sub-devices that have at least one entity.
+
+        Works with and without the ``via_device_id`` parameter of newer Home Assistant versions.
+        """
+        entry = self.config_entry
+        registry = dr.async_get(self.hass)
+        main = registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
             manufacturer=MANUFACTURER,
             model=MODEL,
-            configuration_url=None,
         )
+        self._main_device_id = main.id
+        via_kwarg = "via_device_id" in inspect.signature(registry.async_get_or_create).parameters
+        used = {area_of(reg.key) for reg in self.registers}
+        for area in AREAS:
+            if area not in used:
+                continue
+            link = {"via_device_id": main.id} if via_kwarg else {"via_device": (DOMAIN, entry.entry_id)}
+            registry.async_get_or_create(
+                config_entry_id=entry.entry_id,
+                identifiers={(DOMAIN, f"{entry.entry_id}_{area}")},
+                manufacturer=MANUFACTURER,
+                model=MODEL,
+                translation_key=area,
+                translation_placeholders={"name": entry.title},
+                **link,
+            )
+        self._update_firmware()
 
     # ------------------------------------------------------------------ reading
     async def _async_update_data(self) -> dict[str, Any]:
@@ -147,8 +187,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _update_firmware(self) -> None:
         platform, major, minor = (self._values.get(k) for k in ("fw_platform", "fw_major", "fw_minor"))
-        if None not in (platform, major, minor):
-            self.device_info["sw_version"] = f"{major}.{minor} (Plattform {platform})"
+        if None in (platform, major, minor) or self._main_device_id is None:
+            return
+        version = f"{major}.{minor} (Plattform {platform})"
+        if version != self._sw_version:
+            self._sw_version = version
+            dr.async_get(self.hass).async_update_device(self._main_device_id, sw_version=version)
 
     # ------------------------------------------------------------------ writing
     async def async_write(self, reg: Register, raw: int) -> None:

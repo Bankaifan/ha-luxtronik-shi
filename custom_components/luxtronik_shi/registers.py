@@ -172,13 +172,13 @@ REGISTERS: tuple[Register, ...] = (
         every=2,
         enabled_default=False,
     ),
-    _temp_in("heating_limit", 10107, "Heizen: Grenztemperatur", "Heating: limit temperature", every=10),
+    _temp_in("heating_limit", 10107, "Grenztemperatur", "Limit temperature", every=10),
     _s("outside", 10108, "Temperatur: Außen", "Temperature: outside", dtype="int16", scale=0.1, **_TEMP),
-    _s("dhw", 10120, "Warmwasser: Temperatur", "Hot water: temperature", dtype="int16", scale=0.1, **_TEMP),
-    _s("dhw_target", 10121, "Warmwasser: Soll", "Hot water: target", scale=0.1, every=2, **_TEMP),
-    _temp_in("dhw_min", 10122, "Warmwasser: Minimum", "Hot water: minimum", every=10),
-    _temp_in("dhw_max", 10123, "Warmwasser: Maximum", "Hot water: maximum", every=10),
-    _temp_in("dhw_limit", 10124, "Warmwasser: Grenztemperatur", "Hot water: limit temperature", every=10),
+    _s("dhw", 10120, "Temperatur", "Temperature", dtype="int16", scale=0.1, **_TEMP),
+    _s("dhw_target", 10121, "Soll", "Target", scale=0.1, every=2, **_TEMP),
+    _temp_in("dhw_min", 10122, "Minimum", "Minimum", every=10),
+    _temp_in("dhw_max", 10123, "Maximum", "Maximum", every=10),
+    _temp_in("dhw_limit", 10124, "Grenztemperatur", "Limit temperature", every=10),
     # mixing circuits (flow actual / target / minimum / maximum)
     _temp_in("mk1_flow", 10140, "Mischkreis 1: Vorlauf", "Mixing circuit 1: flow", every=1),
     _temp_in(
@@ -333,28 +333,28 @@ REGISTERS: tuple[Register, ...] = (
         "heat_generator_state", 10000, "Status: Wärmeerzeuger (Bitmaske)", "Status: heat generator (bit mask)"
     ),
     _s("operating_mode", 10002, "Status: Betriebsart", "Status: operating mode", options=_OPERATING_MODES),
-    _s("heating_status", 10003, "Status: Heizen", "Status: heating"),
-    _s("hot_water_status", 10004, "Status: Warmwasser", "Status: hot water"),
-    _s("cooling_status", 10006, "Status: Kühlen", "Status: cooling", diagnostic=True, every=2),
-    _s("pool_status", 10007, "Status: Pool", "Status: pool", diagnostic=True, every=2),
+    _s("heating_status", 10003, "Status", "Status"),
+    _s("hot_water_status", 10004, "Status", "Status"),
+    _s("cooling_status", 10006, "Status", "Status", diagnostic=True, every=2),
+    _s("pool_status", 10007, "Status", "Status", diagnostic=True, every=2),
     # ----------------------------------------------------------------- counters
     _s("energy_el_total", 10310, "Energie: Strom gesamt", "Energy: electric total", **_ENERGY),
-    _s("energy_el_heating", 10312, "Energie: Strom Heizen", "Energy: electric heating", **_ENERGY),
-    _s("energy_el_dhw", 10314, "Energie: Strom Warmwasser", "Energy: electric hot water", **_ENERGY),
+    _s("energy_el_heating", 10312, "Energie: Strom", "Energy: electric", **_ENERGY),
+    _s("energy_el_dhw", 10314, "Energie: Strom", "Energy: electric", **_ENERGY),
     _s("energy_th_total", 10320, "Energie: Wärme gesamt", "Energy: thermal total", **_ENERGY),
-    _s("energy_th_heating", 10322, "Energie: Wärme Heizen", "Energy: thermal heating", **_ENERGY),
-    _s("energy_th_dhw", 10324, "Energie: Wärme Warmwasser", "Energy: thermal hot water", **_ENERGY),
+    _s("energy_th_heating", 10322, "Energie: Wärme", "Energy: thermal", **_ENERGY),
+    _s("energy_th_dhw", 10324, "Energie: Wärme", "Energy: thermal", **_ENERGY),
     _s("hours_hp", 10404, "Betriebsstunden: Verdichter", "Operating hours: compressor", **_HOURS),
-    _s("hours_heating", 10406, "Betriebsstunden: Heizen", "Operating hours: heating", **_HOURS),
-    _s("hours_dhw", 10408, "Betriebsstunden: Warmwasser", "Operating hours: hot water", **_HOURS),
+    _s("hours_heating", 10406, "Betriebsstunden", "Operating hours", **_HOURS),
+    _s("hours_dhw", 10408, "Betriebsstunden", "Operating hours", **_HOURS),
     # ------------------------------------- settings (holding): numbers and selects
     # heating
-    _select("cfg_heating_mode", 10000, "Heizen: Betriebsart", "Heating: mode", _MODES),
+    _select("cfg_heating_mode", 10000, "Betriebsart", "Mode", _MODES),
     _number(
         "cfg_heating_setpoint",
         10001,
-        "Heizen: Sollwert",
-        "Heating: setpoint",
+        "Sollwert",
+        "Setpoint",
         lo=10,
         hi=70,
         step=0.5,
@@ -363,8 +363,8 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_heating_offset",
         10002,
-        "Heizen: Heizkurven-Anhebung",
-        "Heating: curve offset",
+        "Heizkurven-Anhebung",
+        "Curve offset",
         lo=-5,
         hi=5,
         step=0.5,
@@ -373,14 +373,14 @@ REGISTERS: tuple[Register, ...] = (
         config=False,
         every=1,
     ),
-    _select("cfg_heating_level", 10003, "Heizen: Stufe", "Heating: level", _LEVELS),
+    _select("cfg_heating_level", 10003, "Stufe", "Level", _LEVELS),
     # hot water
-    _select("cfg_dhw_mode", 10005, "Warmwasser: Betriebsart", "Hot water: mode", _MODES),
+    _select("cfg_dhw_mode", 10005, "Betriebsart", "Mode", _MODES),
     _number(
         "cfg_dhw_setpoint",
         10006,
-        "Warmwasser: Sollwert",
-        "Hot water: setpoint",
+        "Sollwert",
+        "Setpoint",
         lo=10,
         hi=65,
         step=0.5,
@@ -389,24 +389,22 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_dhw_offset",
         10007,
-        "Warmwasser: Anhebung",
-        "Hot water: offset",
+        "Anhebung",
+        "Offset",
         lo=-10,
         hi=10,
         step=0.5,
         unit="K",
         signed=True,
     ),
-    _select("cfg_dhw_level", 10008, "Warmwasser: Stufe", "Hot water: level", _LEVELS),
+    _select("cfg_dhw_level", 10008, "Stufe", "Level", _LEVELS),
     # mixing circuit 1 heating / cooling
-    _select(
-        "cfg_mk1_mode", 10010, "Mischkreis 1: Heizen Betriebsart", "Mixing circuit 1: heating mode", _MODES
-    ),
+    _select("cfg_mk1_mode", 10010, "Mischkreis 1: Betriebsart", "Mixing circuit 1: mode", _MODES),
     _number(
         "cfg_mk1_setpoint",
         10011,
-        "Mischkreis 1: Heizen Sollwert",
-        "Mixing circuit 1: heating setpoint",
+        "Mischkreis 1: Sollwert",
+        "Mixing circuit 1: setpoint",
         lo=10,
         hi=70,
         step=0.5,
@@ -415,28 +413,28 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_mk1_offset",
         10012,
-        "Mischkreis 1: Heizen Anhebung",
-        "Mixing circuit 1: heating offset",
+        "Mischkreis 1: Anhebung",
+        "Mixing circuit 1: offset",
         lo=-10,
         hi=10,
         step=0.5,
         unit="K",
         signed=True,
     ),
-    _select("cfg_mk1_level", 10013, "Mischkreis 1: Heizen Stufe", "Mixing circuit 1: heating level", _LEVELS),
+    _select("cfg_mk1_level", 10013, "Mischkreis 1: Stufe", "Mixing circuit 1: level", _LEVELS),
     _select(
         "cfg_mk1_cool_mode",
         10015,
-        "Mischkreis 1: Kühlen Betriebsart",
-        "Mixing circuit 1: cooling mode",
+        "Mischkreis 1: Betriebsart",
+        "Mixing circuit 1: mode",
         _MODES,
         enabled_default=False,
     ),
     _number(
         "cfg_mk1_cool_setpoint",
         10016,
-        "Mischkreis 1: Kühlen Sollwert",
-        "Mixing circuit 1: cooling setpoint",
+        "Mischkreis 1: Sollwert",
+        "Mixing circuit 1: setpoint",
         lo=5,
         hi=40,
         step=0.5,
@@ -446,8 +444,8 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_mk1_cool_offset",
         10017,
-        "Mischkreis 1: Kühlen Anhebung",
-        "Mixing circuit 1: cooling offset",
+        "Mischkreis 1: Anhebung",
+        "Mixing circuit 1: offset",
         lo=-10,
         hi=10,
         step=0.5,
@@ -474,37 +472,37 @@ REGISTERS: tuple[Register, ...] = (
         unit="kW",
     ),
     # overall heating (firmware 3.92.0 or later)
-    _select("cfg_overall_mode", 10065, "Gesamt-Heizung: Betriebsart", "Overall heating: mode", _MODES),
+    _select("cfg_overall_mode", 10065, "Gesamt: Betriebsart", "Overall: mode", _MODES),
     _number(
         "cfg_overall_offset",
         10066,
-        "Gesamt-Heizung: Anhebung",
-        "Overall heating: offset",
+        "Gesamt: Anhebung",
+        "Overall: offset",
         lo=-10,
         hi=10,
         step=0.5,
         unit="K",
         signed=True,
     ),
-    _select("cfg_overall_level", 10067, "Gesamt-Heizung: Stufe", "Overall heating: level", _LEVELS),
+    _select("cfg_overall_level", 10067, "Gesamt: Stufe", "Overall: level", _LEVELS),
     # ------------------------------------------------------------------ firmware
     _s("fw_platform", 10400, "Firmware: Plattform", "Firmware: platform", diagnostic=True, every=120),
     _s("fw_major", 10401, "Firmware: Version Haupt", "Firmware: major version", diagnostic=True, every=120),
     _s("fw_minor", 10402, "Firmware: Version Neben", "Firmware: minor version", diagnostic=True, every=120),
     # ------------------------------------------------- switches (blocks, holding)
-    _h("heating_block", 10050, "Heizen: sperren", "Heating: block", platform="switch"),
-    _h("dhw_block", 10051, "Warmwasser: sperren", "Hot water: block", platform="switch"),
-    _h("cooling_block", 10052, "Kühlen: sperren", "Cooling: block", platform="switch"),
-    _h("pool_block", 10053, "Pool: sperren", "Pool: block", platform="switch"),
+    _h("heating_block", 10050, "Sperren", "Block", platform="switch"),
+    _h("dhw_block", 10051, "Sperren", "Block", platform="switch"),
+    _h("cooling_block", 10052, "Sperren", "Block", platform="switch"),
+    _h("pool_block", 10053, "Sperren", "Block", platform="switch"),
     # circulation pump and extra hot water (firmware 3.92.0 or later)
     _h(
         "circulation",
         10070,
-        "Warmwasser: Zirkulationspumpe",
-        "Hot water: circulation pump",
+        "Zirkulationspumpe",
+        "Circulation pump",
         platform="switch",
     ),
-    _h("extra_dhw", 10071, "Warmwasser: Extra", "Hot water: extra", platform="switch"),
+    _h("extra_dhw", 10071, "Extra", "Extra", platform="switch"),
     # --------------------------------------- formerly raw values, meaning from python-luxtronik
     # Keys stay "raw_<address>" because they are part of the entity contract.
     _temp_in("raw_10109", 10109, "Temperatur: Außen Mittelwert", "Temperature: outside average", every=4),
@@ -528,12 +526,12 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
     base = 10000 + 10 * n
     de, en, k = f"Mischkreis {n}", f"Mixing circuit {n}", f"cfg_mk{n}"
     return (
-        _select(f"{k}_mode", base, f"{de}: Heizen Betriebsart", f"{en}: heating mode", _MODES),
+        _select(f"{k}_mode", base, f"{de}: Betriebsart", f"{en}: mode", _MODES),
         _number(
             f"{k}_setpoint",
             base + 1,
-            f"{de}: Heizen Sollwert",
-            f"{en}: heating setpoint",
+            f"{de}: Sollwert",
+            f"{en}: setpoint",
             lo=20,
             hi=65,
             step=0.5,
@@ -542,21 +540,21 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
         _number(
             f"{k}_offset",
             base + 2,
-            f"{de}: Heizen Anhebung",
-            f"{en}: heating offset",
+            f"{de}: Anhebung",
+            f"{en}: offset",
             lo=-5,
             hi=5,
             step=0.5,
             unit="K",
             signed=True,
         ),
-        _select(f"{k}_level", base + 3, f"{de}: Heizen Stufe", f"{en}: heating level", _LEVELS),
-        _select(f"{k}_cool_mode", base + 5, f"{de}: Kühlen Betriebsart", f"{en}: cooling mode", _MODES),
+        _select(f"{k}_level", base + 3, f"{de}: Stufe", f"{en}: level", _LEVELS),
+        _select(f"{k}_cool_mode", base + 5, f"{de}: Betriebsart", f"{en}: mode", _MODES),
         _number(
             f"{k}_cool_setpoint",
             base + 6,
-            f"{de}: Kühlen Sollwert",
-            f"{en}: cooling setpoint",
+            f"{de}: Sollwert",
+            f"{en}: setpoint",
             lo=5,
             hi=25,
             step=0.5,
@@ -565,8 +563,8 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
         _number(
             f"{k}_cool_offset",
             base + 7,
-            f"{de}: Kühlen Anhebung",
-            f"{en}: cooling offset",
+            f"{de}: Anhebung",
+            f"{en}: offset",
             lo=-5,
             hi=5,
             step=0.5,
@@ -588,10 +586,10 @@ ADDED_IN_0_4: tuple[Register, ...] = (
         "Temperature: heat source outlet",
         every=2,
     ),
-    _s("energy_el_cooling", 10316, "Energie: Strom Kühlen", "Energy: electric cooling", **_ENERGY),
-    _s("energy_el_pool", 10318, "Energie: Strom Pool", "Energy: electric pool", **_ENERGY),
-    _s("energy_th_cooling", 10326, "Energie: Wärme Kühlen", "Energy: thermal cooling", **_ENERGY),
-    _s("energy_th_pool", 10328, "Energie: Wärme Pool", "Energy: thermal pool", **_ENERGY),
+    _s("energy_el_cooling", 10316, "Energie: Strom", "Energy: electric", **_ENERGY),
+    _s("energy_el_pool", 10318, "Energie: Strom", "Energy: electric", **_ENERGY),
+    _s("energy_th_cooling", 10326, "Energie: Wärme", "Energy: thermal", **_ENERGY),
+    _s("energy_th_pool", 10328, "Energie: Wärme", "Energy: thermal", **_ENERGY),
 )
 REGISTERS = REGISTERS + ADDED_IN_0_4
 
@@ -723,3 +721,43 @@ def active_registers(features: list[str] | tuple[str, ...] | set[str] | None) ->
 
 
 BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}
+
+
+# ---------------------------------------------------------------------- devices
+# Entities are grouped into sub-devices like the menus of the Luxtronik controller. The main device
+# ("heat pump") keeps everything that is not listed here. Moving an entity between devices never changes
+# its entity ID.
+AREAS: tuple[str, ...] = ("heating", "hot_water", "cooling", "pool")
+
+# The "configured"/"released" flags stay on the main device: they tell whether cooling or a pool exists at all.
+_COOLING_KEYS = frozenset({"cooling_block", "cooling_status", "energy_el_cooling", "energy_th_cooling"})
+_POOL_KEYS = frozenset({"pool_block", "pool_status", "energy_el_pool", "energy_th_pool"})
+_HOT_WATER_KEYS = frozenset(
+    {"circulation", "extra_dhw", "hot_water_status", "energy_el_dhw", "energy_th_dhw", "hours_dhw"}
+)
+_HEATING_KEYS = frozenset(
+    {
+        "heating_limit",
+        "heating_block",
+        "heating_status",
+        "room",
+        "energy_el_heating",
+        "energy_th_heating",
+        "hours_heating",
+    }
+)
+
+
+def area_of(key: str) -> str | None:
+    """Sub-device of an entity key, ``None`` for the main heat pump device."""
+    if key in _COOLING_KEYS or (key.startswith("cfg_mk") and "_cool_" in key):
+        return "cooling"
+    if key in _POOL_KEYS:
+        return "pool"
+    if key in _HOT_WATER_KEYS or key.startswith(("dhw", "cfg_dhw")):
+        return "hot_water"
+    if key in _HEATING_KEYS or key.startswith(
+        ("cfg_heating", "cfg_overall", "cfg_mk", "mk1_", "mk2_", "mk3_")
+    ):
+        return "heating"
+    return None

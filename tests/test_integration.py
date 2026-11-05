@@ -374,3 +374,70 @@ async def test_cooling_and_pool_energy(hass: HomeAssistant, shi: FakeSHI) -> Non
     assert data["energy_el_pool"] == 2.0
     assert data["energy_th_cooling"] == 3.0
     assert data["energy_th_pool"] == 4.0
+
+
+async def test_sub_devices(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Entities are grouped into heat pump / heating / hot water (cooling and pool only if selected)."""
+    from homeassistant.helpers import device_registry as dr
+
+    entry = await _setup_with(hass, shi, ["mk1"])
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+
+    def device(suffix: str = ""):
+        ident = (DOMAIN, f"{entry.entry_id}{suffix}")
+        if hasattr(devices, "async_get_device_by_identifier"):  # HA 2026.8+
+            return devices.async_get_device_by_identifier(ident, entry.entry_id)
+        return devices.async_get_device(identifiers={ident})
+
+    main, heating, hot_water = device(), device("_heating"), device("_hot_water")
+    assert main and heating and hot_water
+    assert device("_cooling") is None
+    assert device("_pool") is None
+    assert heating.via_device_id == main.id and hot_water.via_device_id == main.id
+    assert heating.name == "WP Heating"
+    assert hot_water.name == "WP Hot water"
+    assert main.sw_version == "3.1 (Plattform 3)"
+
+    def device_of(platform: str, key: str) -> str:
+        return entities.async_get(_entity_id(hass, entry, platform, key)).device_id
+
+    assert device_of("sensor", "flow") == main.id
+    assert device_of("binary_sensor", "aux_heater_1") == main.id
+    assert device_of("number", "cfg_heating_setpoint") == heating.id
+    assert device_of("number", "cfg_mk1_setpoint") == heating.id
+    assert device_of("switch", "heating_block") == heating.id
+    assert device_of("sensor", "dhw") == hot_water.id
+    assert device_of("switch", "circulation") == hot_water.id
+    assert device_of("switch", "dhw_block") == hot_water.id
+
+
+async def test_existing_entity_ids_survive_device_move(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Renamed entity IDs (as on the reference installation) stay when entities move to sub-devices."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="WP",
+        unique_id=f"127.0.0.1:{shi.port}:1",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1},
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    for platform, key, entity_id in (
+        ("number", "cfg_heating_setpoint", "number.lwdv_heizen_sollwert_heating_setpoint"),
+        ("switch", "heating_block", "switch.lwdv_shi_heating_block"),
+        ("sensor", "dhw", "sensor.lwdv_shi_dhw"),
+        ("sensor", "flow", "sensor.lwdv_shi_flow"),
+    ):
+        registry.async_get_or_create(
+            platform, DOMAIN, f"{entry.entry_id}_{key}", config_entry=entry, suggested_object_id=entity_id.split(".")[1]
+        )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    for entity_id in (
+        "number.lwdv_heizen_sollwert_heating_setpoint",
+        "switch.lwdv_shi_heating_block",
+        "sensor.lwdv_shi_dhw",
+        "sensor.lwdv_shi_flow",
+    ):
+        state = hass.states.get(entity_id)
+        assert state is not None and state.state not in ("unavailable", "unknown"), entity_id

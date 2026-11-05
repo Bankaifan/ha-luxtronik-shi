@@ -18,7 +18,7 @@ class LuxtronikEntity(CoordinatorEntity[LuxtronikCoordinator]):
         super().__init__(coordinator)
         self._reg = reg
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{reg.key}"
-        self._attr_device_info = coordinator.device_info
+        self._attr_device_info = coordinator.device_info_for(reg.key)
         if reg.key in RAW_KEYS:
             self._attr_translation_key = "raw"
             self._attr_translation_placeholders = {"address": str(reg.address)}

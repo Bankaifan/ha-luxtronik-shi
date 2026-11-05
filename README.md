@@ -25,11 +25,19 @@ the Smart Home Interface itself; the heat pump enforces its own limits.
 
 ### Structure in Home Assistant
 
-Entity names start with their area, so related entities are listed together on the device page:
-`Temperature:` · `Heating:` · `Hot water:` · `Mixing circuit 1–3:` · `Cooling:` · `Pool:` · `Power limit:` ·
-`Overall heating:` · `Status:` · `Power:` · `Energy:` · `Operating hours:` · `System:` · `Firmware:` ·
-`Equipment:` · `Raw value:`. On top of that Home Assistant separates *Controls*, *Sensors*, *Configuration* and
-*Diagnostic*.
+Like the menus of the Luxtronik controller, the entities are split into devices:
+
+| Device | Content |
+|---|---|
+| **<name>** (heat pump) | temperatures (flow, return, outside, heat source), status and operating mode, compressor/auxiliary heater, power, total energy and compressor hours, power limit, system values, firmware, equipment flags, raw values |
+| **<name> Heating** | mode, setpoint, heating curve offset, level, overall heating, block, mixing circuits 1–3, heating energy and hours |
+| **<name> Hot water** | temperatures, mode, setpoint, offset, level, block, circulation pump, extra hot water, hot water energy and hours |
+| **<name> Cooling** / **<name> Pool** | only when cooling or a pool is selected in the equipment |
+
+The sub-devices are linked to the heat pump device. Within a sub-device the names are short (*Setpoint*,
+*Block*, *Mixing circuit 1: setpoint*); Home Assistant shows them together with the device name, e.g.
+"Heat pump Heating Setpoint". Moving entities between devices never changes their entity IDs. On each device page
+Home Assistant also separates *Controls*, *Sensors*, *Configuration* and *Diagnostic*.
 
 ### Installation equipment
 
