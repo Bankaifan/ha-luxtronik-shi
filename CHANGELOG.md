@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.8.0] – 2026-11-06
+
 ### Added
 - Repair issue *Heat pump firmware is outdated* (warning, issue #24): raised when the firmware read from
   10401/10402 is below 3.92.0, because the circulation pump and extra hot water entities need 3.92.0 or later and
@@ -187,7 +189,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.4.0...v0.5.0
