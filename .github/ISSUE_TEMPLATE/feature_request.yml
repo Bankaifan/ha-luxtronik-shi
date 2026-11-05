@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a new entity, option or behaviour.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the use case first. Writes to the heat pump need a clear value range and a source for the register
+        (python-luxtronik, a measurement on a real installation, or marked as open).
+  - type: textarea
+    id: use_case
+    attributes:
+      label: What do you want to achieve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Entities, options or behaviour you would expect.
+  - type: textarea
+    id: register_source
+    attributes:
+      label: Register source (if the feature needs a register)
+      description: Address, data type, range and where you got it (python-luxtronik, measurement, or unknown).
