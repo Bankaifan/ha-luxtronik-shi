@@ -722,6 +722,11 @@ def active_registers(features: list[str] | tuple[str, ...] | set[str] | None) ->
 
 BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}
 
+# Entities of the climate platform. They are not registers of their own: they combine existing registers
+# (``cfg_heating_mode``, ``cfg_heating_setpoint``, ``flow``). Their keys are part of the entity contract.
+CLIMATE_HEATING_KEY = "climate_heating"
+CLIMATE_KEYS: tuple[str, ...] = (CLIMATE_HEATING_KEY,)
+
 
 # ---------------------------------------------------------------------- devices
 # Entities are grouped into sub-devices like the menus of the Luxtronik controller. The main device

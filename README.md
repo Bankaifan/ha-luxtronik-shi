@@ -20,6 +20,14 @@ Other Luxtronik controllers with SHI should work but are untested.
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool*, **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
 
+A **climate entity** for the heating circuit combines the existing heating mode (off / heat) and heating setpoint
+(10–70 °C) with the flow temperature as current value. It writes the same registers as the heating mode select and the
+heating setpoint number. It is enabled by default on new installations; for entries created before it existed it is
+disabled by default (enable it in the entity settings).
+
+> Planners such as the Heat Pump Optimizer write the same registers (heating mode and setpoint). Do not use the climate
+> entity and such a planner at the same time, or they overwrite each other.
+
 Settings (numbers and selects) are in the *Configuration* section of the device page. Writes use the same registers as
 the Smart Home Interface itself; the heat pump enforces its own limits.
 

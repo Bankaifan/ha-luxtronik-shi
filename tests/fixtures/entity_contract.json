@@ -20,6 +20,9 @@
     "online",
     "pool_configured"
   ],
+  "climate": [
+    "climate_heating"
+  ],
   "number": [
     "cfg_dhw_offset",
     "cfg_dhw_setpoint",

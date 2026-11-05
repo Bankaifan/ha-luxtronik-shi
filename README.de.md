@@ -48,6 +48,14 @@ Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung 
 > Wer einen Planer wie den Heat Pump Optimizer nutzt: Teile, deren Entitäten der Planer liest oder
 > schreibt (z. B. Mischkreis 1), nicht abwählen.
 
+Eine **Climate-Entität** für den Heizkreis fasst die vorhandene Betriebsart (Aus / Heizen) und den Heizungs-Sollwert
+(10–70 °C) zusammen und zeigt die Vorlauftemperatur als Istwert. Sie schreibt dieselben Register wie die Auswahl
+„Betriebsart" und die Zahl „Sollwert" der Heizung. Bei neuen Installationen ist sie standardmäßig aktiviert; bei Einträgen,
+die vor ihrer Einführung angelegt wurden, ist sie standardmäßig deaktiviert (in den Entitäts-Einstellungen aktivierbar).
+
+> Planer wie der Heat Pump Optimizer schreiben dieselben Register (Betriebsart und Sollwert der Heizung). Climate-Entität
+> und ein solcher Planer nicht gleichzeitig verwenden, sonst überschreiben sie sich gegenseitig.
+
 Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
 dieselben Register wie die Smart-Home-Schnittstelle selbst; die Wärmepumpe erzwingt dabei ihre eigenen Grenzen.
 

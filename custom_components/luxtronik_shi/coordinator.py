@@ -91,6 +91,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
         self._main_device_id: str | None = None
         self._sw_version: str | None = None
+        # Set by async_setup_entry: whether new climate entities are enabled by default.
+        self.climate_enabled_default = True
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:

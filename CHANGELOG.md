@@ -12,6 +12,14 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Added
+- Climate entity for the heating circuit (issue #19), in the *Heating* device. Target temperature writes the existing
+  heating setpoint register (10001, 10 ... 70 °C in 0.5 K steps, out-of-range values are rejected before anything is
+  written); *Off* / *Heat* write the existing heating mode register (10000: `off` / `setpoint`). The current
+  temperature is the flow temperature. Every write is read back, like for the number and select entities. Other
+  controller modes (offset, level) show as *Heat* and are listed in the `controller_mode` attribute. New key
+  `climate_heating`; no new registers. Enabled by default on new installations, disabled by default for entries that
+  already had entities before this change (enable it in the entity settings). Planners such as the Heat Pump Optimizer
+  write the same registers: do not use both at once.
 - Diagnostics download (issue #21) for bug reports: integration and Home Assistant version, selected equipment,
   capability flags, firmware and the last polled register values (raw and decoded) grouped by block. Host, MAC
   address and unique ID are redacted. It uses the data of the last poll, no extra Modbus reads.
