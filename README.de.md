@@ -77,6 +77,12 @@ Die Integration ist (noch) nicht im Standard-Katalog und wird deshalb per Link h
 
 **Danach in beiden Fällen:**
 
+Home Assistant kann **die Wärmepumpe automatisch finden** (DHCP), wenn beide im selben Netzsegment liegen
+(DHCP-Verkehr wird nicht zwischen VLANs geroutet) und die Wärmepumpe ihre Adresse erneuert. Sie erscheint dann unter *Einstellungen → Geräte &
+Dienste → Entdeckt*. Angeboten werden nur Geräte, deren Smart-Home-Schnittstelle auf Modbus/TCP-Port 502 antwortet;
+bei anderem Port oder anderer Geräte-ID die Wärmepumpe von Hand hinzufügen. Ändert sich die IP-Adresse einer
+bereits eingerichteten Wärmepumpe, übernimmt die Erkennung die neue Adresse.
+
 1. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „Luxtronik SHI (Modbus)"**.
 2. Name, IP-Adresse der Wärmepumpe, Port (502) und Geräte-ID (1) eintragen.
 3. Ausstattung bestätigen (siehe oben).
@@ -133,6 +139,8 @@ neue Registerlisten-Änderungen getestet. Der empfohlene Weg ist die Integration
   Laut dieser Quelle sind die SHI-Holding-Register **flüchtig** und werden beim Neustart der Regelung
   zurückgesetzt – anders als die dauerhaften Einstellungen der Regelung.
 * Messungen an der Referenzanlage (LWDV 91-1/3, Firmware 3.92.3), siehe unten.
+* Die DHCP-Erkennungsmerkmale (MAC-Präfixe, Hostname `wp-novelan`) stammen aus
+  [BenPru/luxtronik](https://github.com/BenPru/luxtronik) (MIT).
 * Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
   (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402) und die Deutung von
   10404/10406/10408 als Betriebsstunden.
