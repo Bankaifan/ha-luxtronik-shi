@@ -1,7 +1,8 @@
 name: Release
 
-# Creates tag vX.Y.Z and a GitHub release automatically when a version bump reaches main.
+# Creates tag vX.Y.Z (or vX.Y.Z-beta.N) and a GitHub release automatically when a version bump reaches main.
 # The version is taken from manifest.json, the release notes from the matching CHANGELOG section.
+# Versions containing '-beta.' are published as GitHub pre-releases (HACS offers them only with "Show beta versions").
 # Nothing happens if the tag already exists, so ordinary merges without a version bump are ignored.
 
 on:
@@ -46,4 +47,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           python tools/check_version.py --notes > notes.md
-          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md
+          flags=()
+          if [ "$(python tools/check_version.py --prerelease)" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md "${flags[@]}"

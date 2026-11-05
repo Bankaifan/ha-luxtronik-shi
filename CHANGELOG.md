@@ -11,6 +11,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Added
+- Beta release channel: versions of the form `X.Y.Z-beta.N` are published as GitHub pre-releases, which HACS offers
+  only to users who enable "Show beta versions". Stable releases are unchanged.
+
 ### Documentation
 - Notes: values written through the integration can fall back to the controller default after a controller restart
   or power cut (volatile SHI holding registers). The integration does not detect or correct this (issue #9).
