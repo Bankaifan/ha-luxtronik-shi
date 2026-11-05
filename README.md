@@ -162,6 +162,16 @@ register map changes. The recommended way is the integration.
   operating hours.
 * Complete table of all registers (type, address, data type, scale, unit, range): [docs/registers.md](docs/registers.md).
 
+## Repair issues
+
+The integration raises these issues under *Settings > System > Repairs*. Each one disappears by itself when its
+condition ends.
+
+| Issue | Severity | Raised when |
+|---|---|---|
+| Heat pump firmware is outdated | warning | Firmware is older than 3.92.0: circulation pump and extra hot water have no values. |
+| Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
+
 ## Notes and limitations
 
 * **Return / return target:** the published register list names 10100 "return target" and 10101 "return actual".
