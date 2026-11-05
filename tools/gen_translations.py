@@ -96,6 +96,11 @@ STATIC = {
     },
 }
 
+DEVICE_NAMES = {
+    "en": {"heating": "{name} Heating", "hot_water": "{name} Hot water", "cooling": "{name} Cooling", "pool": "{name} Pool"},
+    "de": {"heating": "{name} Heizung", "hot_water": "{name} Warmwasser", "cooling": "{name} Kühlung", "pool": "{name} Pool"},
+}
+
 FEATURE_LABELS = {
     "en": {
         "mk1": "Mixing circuit 1",
@@ -199,6 +204,7 @@ for lang in ("en", "de"):
     data["options"]["step"]["init"]["data"].update(labels)
     data["options"]["step"]["init"]["description"] = EQUIPMENT_TEXT[lang]["options"]
     data["entity"] = entity
+    data["device"] = {area: {"name": name} for area, name in DEVICE_NAMES[lang].items()}
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("wrote", out)

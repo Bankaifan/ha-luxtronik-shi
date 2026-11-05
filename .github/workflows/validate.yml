@@ -52,3 +52,15 @@ jobs:
       - run: pip install -r requirements_test.txt pytest-timeout ruff
       - run: ruff check .
       - run: pytest --timeout=60
+
+  # Same tests against the newest Home Assistant test harness (newer Python), to catch API changes early.
+  tests-latest-ha:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install --upgrade pytest-homeassistant-custom-component "pymodbus>=3.9,<4" pytest-timeout
+      - run: python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
+      - run: pytest --timeout=120
