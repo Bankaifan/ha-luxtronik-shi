@@ -19,6 +19,13 @@
           "slave": "Unit ID (slave)"
         }
       },
+      "discovery_confirm": {
+        "title": "Heat pump found",
+        "description": "A Luxtronik heat pump with an active Smart Home Interface was found at {host}. Set it up?",
+        "data": {
+          "name": "Name"
+        }
+      },
       "equipment": {
         "title": "Installation equipment",
         "description": "Pre-filled from what the heat pump reports. Parts that are switched off are not polled and get no entities. Can be changed later in the options.",
@@ -32,12 +39,14 @@
         }
       }
     },
+    "flow_title": "Luxtronik SHI ({host})",
     "error": {
       "cannot_connect": "No connection to the heat pump. Check IP address, port and that Modbus/TCP is enabled.",
       "not_supported": "The device answered, but does not look like a Luxtronik SHI."
     },
     "abort": {
       "already_configured": "This heat pump is already configured.",
+      "not_supported": "The device does not answer as a Luxtronik Smart Home Interface.",
       "reconfigure_successful": "The connection data was updated."
     }
   },

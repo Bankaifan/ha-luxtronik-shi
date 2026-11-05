@@ -76,6 +76,12 @@ The integration is not in the default catalog (yet), so it is added by link.
 
 **Then, in both cases:**
 
+Home Assistant can **discover the heat pump automatically** (DHCP) if both are in the same network segment
+(DHCP traffic is not routed between VLANs) and the heat pump renews its lease: it then appears under *Settings → Devices &
+services → Discovered*. Discovery only offers devices whose Smart Home Interface answers on Modbus/TCP port 502;
+if your heat pump uses another port or unit ID, add it by hand. Discovery also follows IP address changes of a
+heat pump that is already set up.
+
 1. **Settings → Devices & services → Add integration → "Luxtronik SHI (Modbus)"**.
 2. Enter name, IP address of the heat pump, port (502) and unit ID (1).
 3. Confirm the installation equipment (see above).
@@ -132,6 +138,8 @@ register map changes. The recommended way is the integration.
   According to this source the SHI holding registers are **volatile** and are reset when the controller restarts –
   unlike the controller's persistent settings.
 * Measurements on the reference installation (LWDV 91-1/3, firmware 3.92.3), see below.
+* DHCP discovery matchers (MAC prefixes, hostname `wp-novelan`) are taken from
+  [BenPru/luxtronik](https://github.com/BenPru/luxtronik) (MIT).
 * Not contained in python-luxtronik and therefore only backed by observation: the equipment registers (discrete
   inputs 10000–10011), firmware major/minor version (10401/10402) and the interpretation of 10404/10406/10408 as
   operating hours.

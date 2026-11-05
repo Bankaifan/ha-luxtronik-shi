@@ -11,6 +11,16 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.6.0] – 2026-11-05
+
+### Added
+- **Automatic discovery via DHCP.** Heat pumps with a Luxtronik MAC prefix or the hostname `wp-novelan` are offered
+  under *Discovered* – but only if the Smart Home Interface answers on Modbus/TCP (port 502, unit ID 1); other
+  devices are ignored silently. Setup then asks for a name and the equipment. Matchers taken from
+  BenPru/luxtronik (MIT).
+- Discovery keeps existing entries up to date: a known heat pump (matched by MAC) with a new IP address gets the new
+  address and is reloaded; an entry created by hand learns its MAC address the first time it is discovered.
+
 ## [0.5.0] – 2026-11-05
 
 ### Action required
@@ -116,7 +126,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.1...v0.3.2

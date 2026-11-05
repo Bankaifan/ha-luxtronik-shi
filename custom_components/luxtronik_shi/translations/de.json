@@ -19,6 +19,13 @@
           "slave": "Geräte-ID (Slave)"
         }
       },
+      "discovery_confirm": {
+        "title": "Wärmepumpe gefunden",
+        "description": "Unter {host} wurde eine Luxtronik-Wärmepumpe mit aktiver Smart-Home-Schnittstelle gefunden. Einrichten?",
+        "data": {
+          "name": "Name"
+        }
+      },
       "equipment": {
         "title": "Ausstattung der Anlage",
         "description": "Vorausgefüllt mit dem, was die Wärmepumpe meldet. Abgewählte Teile werden nicht abgefragt und bekommen keine Entitäten. Später in den Optionen änderbar.",
@@ -32,12 +39,14 @@
         }
       }
     },
+    "flow_title": "Luxtronik SHI ({host})",
     "error": {
       "cannot_connect": "Keine Verbindung zur Wärmepumpe. Prüfe IP-Adresse, Port und ob Modbus/TCP aktiviert ist.",
       "not_supported": "Das Gerät antwortet, sieht aber nicht nach einer Luxtronik SHI aus."
     },
     "abort": {
       "already_configured": "Diese Wärmepumpe ist bereits eingerichtet.",
+      "not_supported": "Das Gerät antwortet nicht als Luxtronik Smart-Home-Schnittstelle.",
       "reconfigure_successful": "Die Verbindungsdaten wurden aktualisiert."
     }
   },

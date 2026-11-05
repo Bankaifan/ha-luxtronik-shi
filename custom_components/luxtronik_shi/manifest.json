@@ -1,13 +1,42 @@
 {
   "domain": "luxtronik_shi",
   "name": "Luxtronik SHI (Modbus)",
-  "categories": ["climate.heat_pumps_air_conditioning"],
-  "codeowners": ["@Bankaifan"],
+  "categories": [
+    "climate.heat_pumps_air_conditioning"
+  ],
+  "codeowners": [
+    "@Bankaifan"
+  ],
   "config_flow": true,
+  "dhcp": [
+    {
+      "macaddress": "000E8C*"
+    },
+    {
+      "macaddress": "001999*"
+    },
+    {
+      "macaddress": "000982*"
+    },
+    {
+      "macaddress": "04D16E*"
+    },
+    {
+      "macaddress": "40ECF8*"
+    },
+    {
+      "macaddress": "EC40F8*"
+    },
+    {
+      "hostname": "wp-novelan"
+    }
+  ],
   "documentation": "https://github.com/Bankaifan/ha-luxtronik-shi",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Bankaifan/ha-luxtronik-shi/issues",
-  "requirements": ["pymodbus>=3.9.0"],
-  "version": "0.5.0"
+  "requirements": [
+    "pymodbus>=3.9.0"
+  ],
+  "version": "0.6.0"
 }

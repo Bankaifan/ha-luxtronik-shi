@@ -11,8 +11,10 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlowWithReload,
 )
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
     CONF_FEATURES,
@@ -32,6 +34,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Return temperature - exists on every SHI and is cheap to read.
 _PROBE_ADDRESS = 10100
+
+# Port and unit ID tried for a heat pump found via DHCP (module level so tests can point it at the simulator).
+DISCOVERY_PORT = DEFAULT_PORT
+DISCOVERY_SLAVE = DEFAULT_SLAVE
 
 _SCAN_INTERVAL = vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL))
 
@@ -130,6 +136,50 @@ class LuxtronikConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=_user_schema(user_input or {}),
             errors=errors,
+        )
+
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
+        """A device with a Luxtronik MAC prefix or hostname appeared on the network.
+
+        Only offered if its Smart Home Interface answers on Modbus/TCP. Known heat pumps are matched by MAC
+        address (new IP addresses are taken over) or by IP address (the MAC is stored for next time).
+        """
+        host = discovery_info.ip
+        mac = format_mac(discovery_info.macaddress)
+        for entry in self._async_current_entries(include_ignore=False):
+            if entry.data.get(CONF_MAC) == mac:
+                if entry.data.get(CONF_HOST) != host:
+                    _LOGGER.info("Wärmepumpe %s hat eine neue IP-Adresse: %s", mac, host)
+                    self.hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_HOST: host})
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                return self.async_abort(reason="already_configured")
+            if entry.data.get(CONF_HOST) == host:
+                if CONF_MAC not in entry.data:
+                    self.hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_MAC: mac})
+                return self.async_abort(reason="already_configured")
+
+        await self.async_set_unique_id(f"{host}:{DISCOVERY_PORT}:{DISCOVERY_SLAVE}")
+        self._abort_if_unique_id_configured()
+        if await _async_probe(host, DISCOVERY_PORT, DISCOVERY_SLAVE) is not None:
+            # Not a Luxtronik with Modbus/TCP enabled (or not reachable): stay silent.
+            return self.async_abort(reason="not_supported")
+        self._data = {CONF_HOST: host, CONF_PORT: DISCOVERY_PORT, CONF_SLAVE: DISCOVERY_SLAVE, CONF_MAC: mac}
+        self.context["title_placeholders"] = {"host": host}
+        return await self.async_step_discovery_confirm()
+
+    async def async_step_discovery_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm a discovered heat pump and give it a name."""
+        if user_input is not None:
+            self._title = user_input[CONF_NAME]
+            host, port, slave = (self._data[k] for k in (CONF_HOST, CONF_PORT, CONF_SLAVE))
+            self._detected = await _async_read_equipment(host, port, slave)
+            return await self.async_step_equipment()
+        return self.async_show_form(
+            step_id="discovery_confirm",
+            data_schema=vol.Schema({vol.Required(CONF_NAME, default="Wärmepumpe"): str}),
+            description_placeholders={"host": self._data[CONF_HOST]},
         )
 
     async def async_step_equipment(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

@@ -38,13 +38,20 @@ STATIC = {
                     "title": "Change connection",
                     "data": {"host": "Host", "port": "Port", "slave": "Unit ID (slave)"},
                 },
+                "discovery_confirm": {
+                    "title": "Heat pump found",
+                    "description": "A Luxtronik heat pump with an active Smart Home Interface was found at {host}. Set it up?",
+                    "data": {"name": "Name"},
+                },
             },
+            "flow_title": "Luxtronik SHI ({host})",
             "error": {
                 "cannot_connect": "No connection to the heat pump. Check IP address, port and that Modbus/TCP is enabled.",
                 "not_supported": "The device answered, but does not look like a Luxtronik SHI.",
             },
             "abort": {
                 "already_configured": "This heat pump is already configured.",
+                "not_supported": "The device does not answer as a Luxtronik Smart Home Interface.",
                 "reconfigure_successful": "The connection data was updated.",
             },
         },
@@ -72,13 +79,20 @@ STATIC = {
                     "title": "Verbindung ändern",
                     "data": {"host": "Host", "port": "Port", "slave": "Geräte-ID (Slave)"},
                 },
+                "discovery_confirm": {
+                    "title": "Wärmepumpe gefunden",
+                    "description": "Unter {host} wurde eine Luxtronik-Wärmepumpe mit aktiver Smart-Home-Schnittstelle gefunden. Einrichten?",
+                    "data": {"name": "Name"},
+                },
             },
+            "flow_title": "Luxtronik SHI ({host})",
             "error": {
                 "cannot_connect": "Keine Verbindung zur Wärmepumpe. Prüfe IP-Adresse, Port und ob Modbus/TCP aktiviert ist.",
                 "not_supported": "Das Gerät antwortet, sieht aber nicht nach einer Luxtronik SHI aus.",
             },
             "abort": {
                 "already_configured": "Diese Wärmepumpe ist bereits eingerichtet.",
+                "not_supported": "Das Gerät antwortet nicht als Luxtronik Smart-Home-Schnittstelle.",
                 "reconfigure_successful": "Die Verbindungsdaten wurden aktualisiert.",
             },
         },
