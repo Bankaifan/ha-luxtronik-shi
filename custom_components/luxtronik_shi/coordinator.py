@@ -20,8 +20,10 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DOMAIN,
     ISSUE_UNREACHABLE,
+    ISSUE_VALUES_CHANGED,
     MANUFACTURER,
     MODEL,
+    OUTAGE_WATCH_KEYS,
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
@@ -100,6 +102,15 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._main_device_id: str | None = None
         self._sw_version: str | None = None
         self._first_failure: datetime | None = None  # start of the current run of failed polls
+        # Outage notice: watched control values of the last successful poll. Deliberately in memory only, so
+        # it is lost on a Home Assistant restart (a change during an outage over a restart is not noticed).
+        self._snapshot: dict[str, Any] = {}
+        # Pre-outage values while the "values changed" issue is active (the snapshot is frozen meanwhile).
+        self._baseline: dict[str, Any] | None = None
+        self._reported: dict[str, tuple[Any, Any]] = {}
+        # Polls after an outage that still compare against the snapshot: settings are read every few polls
+        # (``every``), so the changed value may only arrive with a later poll of the first full cycle.
+        self._compare_left = 0
         # Set by async_setup_entry: whether new climate entities are enabled by default.
         self.climate_enabled_default = True
         # Same for the water heater entity.
@@ -155,7 +166,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._update_unreachable_issue(failed=True)
             raise UpdateFailed(f"Keine Verbindung zur Wärmepumpe: {err}") from err
         self._tick += 1
+        recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
+        self._check_outage_changes(recovered=recovered)
         self._update_firmware()
         return dict(self._values)
 
@@ -239,9 +252,83 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             },
         )
 
+    def _watched_values(self) -> dict[str, Any]:
+        """Current values of the watched keys that exist for the configured equipment."""
+        enabled = {reg.key for reg in self.registers}
+        return {
+            key: self._values[key]
+            for key in OUTAGE_WATCH_KEYS
+            if key in enabled and self._values.get(key) is not None
+        }
+
+    def _format_value(self, key: str, value: Any) -> str:
+        if key.endswith("_block"):
+            return "blocked" if value == 1 else "released"
+        reg = next((r for r in self.registers if r.key == key), None)
+        if reg is not None and reg.options and isinstance(value, int) and 0 <= value < len(reg.options):
+            return reg.options[value]
+        return str(value)
+
+    @staticmethod
+    def _diff(before: dict[str, Any], now: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
+        return {k: (before[k], now[k]) for k in before if k in now and before[k] != now[k]}
+
+    def _check_outage_changes(self, *, recovered: bool) -> None:
+        """Notice only: report control values that changed while the SHI was unreachable.
+
+        Nothing is ever written back. While the issue is active the pre-outage values stay frozen as the
+        reference; the issue is removed when the values match them again or when the user dismisses it.
+        No extra Modbus reads: the values come from the normal poll.
+        """
+        issue_id = self._issue_id(ISSUE_VALUES_CHANGED)
+        now = self._watched_values()
+        if self._baseline is not None:
+            issue = ir.async_get(self.hass).async_get_issue(DOMAIN, issue_id)
+            diff = self._diff(self._baseline, now)
+            if issue is None or issue.dismissed_version is not None:
+                self._baseline = None  # dismissed (or removed): resume normal snapshots
+            elif not diff:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+                self._baseline = None
+            else:
+                if diff != self._reported:
+                    self._raise_values_changed(diff)
+                return
+        elif recovered or self._compare_left > 0:
+            if recovered:
+                watched = [reg.every for reg in self.registers if reg.key in OUTAGE_WATCH_KEYS]
+                self._compare_left = max(watched, default=1)
+            self._compare_left -= 1
+            diff = self._diff(self._snapshot, now)
+            if diff:
+                self._baseline = dict(self._snapshot)
+                self._compare_left = 0
+                self._raise_values_changed(diff)
+                return
+            if self._compare_left > 0:
+                return  # keep the snapshot frozen until the first full read cycle is through
+        self._snapshot = now
+
+    def _raise_values_changed(self, diff: dict[str, tuple[Any, Any]]) -> None:
+        self._reported = diff
+        changes = "\n".join(
+            f"- {OUTAGE_WATCH_KEYS[key]}: {self._format_value(key, old)} -> {self._format_value(key, new)}"
+            for key, (old, new) in diff.items()
+        )
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._issue_id(ISSUE_VALUES_CHANGED),
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_VALUES_CHANGED,
+            translation_placeholders={"name": self.config_entry.title, "changes": changes},
+        )
+
     def async_delete_issues(self) -> None:
         """Remove the repair issues of this entry (on unload)."""
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_UNREACHABLE))
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_VALUES_CHANGED))
 
     # ------------------------------------------------------------------ writing
     async def async_write(self, reg: Register, raw: int) -> None:

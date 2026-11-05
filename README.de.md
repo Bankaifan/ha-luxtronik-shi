@@ -172,6 +172,18 @@ sobald seine Ursache weg ist.
 | Hinweis | Schweregrad | Wird ausgelöst, wenn |
 |---|---|---|
 | Smart-Home-Schnittstelle nicht erreichbar | Fehler | Alle Abfragen sind 10 Minuten in Folge fehlgeschlagen. |
+| Werte nach Verbindungsausfall geändert | Warnung | Nach einem Ausfall weichen Heizungssperre, Warmwassersperre, Heizungs-Betriebsart oder Warmwasser-Betriebsart vom zuletzt vor dem Ausfall gelesenen Wert ab. |
+
+### Werte nach einem Ausfall geändert
+
+War die Regelung nicht erreichbar (z. B. Neustart oder Stromausfall, die SHI-Holding-Register sind flüchtig) und
+meldet sich mit anderen Werten für Heizungssperre, Warmwassersperre, Heizungs- oder Warmwasser-Betriebsart zurück,
+zeigt eine Warnung die alten und neuen Werte. **Das ist nur ein Hinweis: Die Integration schreibt nie etwas
+zurück.** Verglichen wird mit der normalen Abfrage, es gibt keine zusätzlichen Modbus-Lesezugriffe. Der Hinweis
+verschwindet, wenn die Werte wieder denen vor dem Ausfall entsprechen, oder wenn du ihn schließt; sonst bleibt er.
+
+Einschränkung: Die Werte vor dem Ausfall liegen nur im Arbeitsspeicher. Nach einem Neustart von Home Assistant sind
+sie weg; eine Änderung während eines Ausfalls, der einen Neustart überdauert, wird nicht bemerkt.
 
 ## Hinweise und Grenzen
 

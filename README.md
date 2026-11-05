@@ -170,6 +170,18 @@ condition ends.
 | Issue | Severity | Raised when |
 |---|---|---|
 | Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
+| Values changed after connection outage | warning | After an outage, the heating block, hot water block, heating mode or hot water mode differs from the last value read before the outage. |
+
+### Values changed after an outage
+
+If the controller was unreachable (e.g. restart or power cut, the SHI holding registers are volatile) and comes back
+with different values for the heating block, hot water block, heating mode or hot water mode, a warning lists the
+old and new values. **This is a notice only: the integration never writes anything back.** The comparison uses the
+normal poll, no extra Modbus reads. The issue disappears when the values match the pre-outage values again or when
+you dismiss it; otherwise it stays.
+
+Limitation: the values from before the outage are kept in memory only. After a Home Assistant restart they are
+gone, so a change during an outage that spans a restart is not noticed.
 
 ## Notes and limitations
 
