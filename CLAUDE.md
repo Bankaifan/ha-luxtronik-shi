@@ -45,6 +45,12 @@ Heat Pump Optimizer (HPO). Stability comes before features.
 
 * Work on a branch and open a pull request; never push to `main` (protected). No force push.
   The owner reviews and merges.
+* `main` requires a **linear history**; PRs are merged with *Squash and merge*. Therefore:
+  - branch every PR directly from the current `main`, **no stacked PRs**;
+  - **no merge commits** in a branch (never `git merge main` into it);
+  - if a branch falls behind and conflicts, do not rebase/force-push: create a fresh branch from `main`,
+    re-apply the changes (e.g. `git cherry-pick`), open a new PR and close the old one with a link.
+  - Squash uses the PR title as commit subject: keep PR titles meaningful and in English.
 * Commit author: `git config user.name "Daniel"` and
   `git config user.email "476059+Bankaifan@users.noreply.github.com"`. Every commit message ends with the
   trailer `Co-authored-by: Claude <noreply@anthropic.com>`.
