@@ -12,6 +12,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Added
+- Diagnostics download (issue #21) for bug reports: integration and Home Assistant version, selected equipment,
+  capability flags, firmware and the last polled register values (raw and decoded) grouped by block. Host, MAC
+  address and unique ID are redacted. It uses the data of the last poll, no extra Modbus reads.
 - GitHub issue forms for bug reports and supported model reports (English), under `.github/ISSUE_TEMPLATE/`.
   Blank issues are disabled.
 - Register reference `docs/registers.md` (issues #27, #3): a table of all registers with address, type, data type,
