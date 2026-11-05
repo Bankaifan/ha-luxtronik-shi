@@ -10,7 +10,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import LuxtronikConfigEntry
 from .entity import LuxtronikEntity
-from .registers import ALL_REGISTERS
 
 
 async def async_setup_entry(
@@ -20,7 +19,9 @@ async def async_setup_entry(
 ) -> None:
     """Create the switches."""
     coordinator = entry.runtime_data
-    async_add_entities(LuxtronikSwitch(coordinator, reg) for reg in ALL_REGISTERS if reg.platform == "switch")
+    async_add_entities(
+        LuxtronikSwitch(coordinator, reg) for reg in coordinator.registers if reg.platform == "switch"
+    )
 
 
 class LuxtronikSwitch(LuxtronikEntity, SwitchEntity):

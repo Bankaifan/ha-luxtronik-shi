@@ -18,6 +18,18 @@
           "port": "Port",
           "slave": "Unit ID (slave)"
         }
+      },
+      "equipment": {
+        "title": "Installation equipment",
+        "description": "Pre-filled from what the heat pump reports. Parts that are switched off are not polled and get no entities. Can be changed later in the options.",
+        "data": {
+          "mk1": "Mixing circuit 1",
+          "mk2": "Mixing circuit 2",
+          "mk3": "Mixing circuit 3",
+          "cooling": "Cooling",
+          "pool": "Pool / swimming pool",
+          "room_unit": "Room unit (room temperature)"
+        }
       }
     },
     "error": {
@@ -34,99 +46,106 @@
       "init": {
         "title": "Options",
         "data": {
-          "scan_interval": "Update interval (seconds)"
+          "scan_interval": "Update interval (seconds)",
+          "mk1": "Mixing circuit 1",
+          "mk2": "Mixing circuit 2",
+          "mk3": "Mixing circuit 3",
+          "cooling": "Cooling",
+          "pool": "Pool / swimming pool",
+          "room_unit": "Room unit (room temperature)"
         },
         "data_description": {
           "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically."
-        }
+        },
+        "description": "Parts of the installation that are switched off are not polled and get no entities. Their entity IDs stay reserved and come back when the part is switched on again."
       }
     }
   },
   "entity": {
     "sensor": {
       "return": {
-        "name": "Return temperature"
+        "name": "Temperature: return"
       },
       "return_target": {
-        "name": "Return target temperature"
+        "name": "Temperature: return target"
       },
       "return_external": {
-        "name": "External return temperature"
+        "name": "Temperature: return external"
       },
       "return_limit": {
-        "name": "Return limit"
+        "name": "Temperature: return limit"
       },
       "return_min_target": {
-        "name": "Return target minimum"
+        "name": "Temperature: return target minimum"
       },
       "flow": {
-        "name": "Flow temperature"
+        "name": "Temperature: flow"
       },
       "room": {
-        "name": "Room temperature (room unit)"
+        "name": "Temperature: room (room unit)"
       },
       "heating_limit": {
-        "name": "Heating limit temperature"
+        "name": "Heating: limit temperature"
       },
       "outside": {
-        "name": "Outside temperature"
+        "name": "Temperature: outside"
       },
       "dhw": {
-        "name": "Hot water temperature"
+        "name": "Hot water: temperature"
       },
       "dhw_target": {
-        "name": "Hot water target temperature"
+        "name": "Hot water: target"
       },
       "dhw_min": {
-        "name": "Hot water minimum"
+        "name": "Hot water: minimum"
       },
       "dhw_max": {
-        "name": "Hot water maximum"
+        "name": "Hot water: maximum"
       },
       "dhw_limit": {
-        "name": "Hot water limit temperature"
+        "name": "Hot water: limit temperature"
       },
       "mk1_flow": {
-        "name": "Mixing circuit 1 flow"
+        "name": "Mixing circuit 1: flow"
       },
       "mk1_flow_target": {
-        "name": "Mixing circuit 1 flow target"
+        "name": "Mixing circuit 1: flow target"
       },
       "mk1_flow_min": {
-        "name": "Mixing circuit 1 flow minimum"
+        "name": "Mixing circuit 1: flow minimum"
       },
       "mk1_flow_max": {
-        "name": "Mixing circuit 1 flow maximum"
+        "name": "Mixing circuit 1: flow maximum"
       },
       "mk2_flow": {
-        "name": "Mixing circuit 2 flow"
+        "name": "Mixing circuit 2: flow"
       },
       "mk2_flow_target": {
-        "name": "Mixing circuit 2 flow target"
+        "name": "Mixing circuit 2: flow target"
       },
       "mk2_flow_min": {
-        "name": "Mixing circuit 2 flow minimum"
+        "name": "Mixing circuit 2: flow minimum"
       },
       "mk2_flow_max": {
-        "name": "Mixing circuit 2 flow maximum"
+        "name": "Mixing circuit 2: flow maximum"
       },
       "mk3_flow": {
-        "name": "Mixing circuit 3 flow"
+        "name": "Mixing circuit 3: flow"
       },
       "mk3_flow_target": {
-        "name": "Mixing circuit 3 flow target"
+        "name": "Mixing circuit 3: flow target"
       },
       "mk3_flow_min": {
-        "name": "Mixing circuit 3 flow minimum"
+        "name": "Mixing circuit 3: flow minimum"
       },
       "mk3_flow_max": {
-        "name": "Mixing circuit 3 flow maximum"
+        "name": "Mixing circuit 3: flow maximum"
       },
       "error_number": {
-        "name": "Error number"
+        "name": "Status: error number"
       },
       "buffer_type": {
-        "name": "Buffer tank type",
+        "name": "System: buffer tank type",
         "state": {
           "unknown": "Unknown",
           "series": "Series buffer",
@@ -135,25 +154,25 @@
         }
       },
       "switching_lock_minutes": {
-        "name": "Switching lock time"
+        "name": "System: switching lock time"
       },
       "min_runtime_minutes": {
-        "name": "Heat pump minimum runtime"
+        "name": "System: minimum runtime"
       },
       "compressor_thermal_power": {
-        "name": "Thermal power"
+        "name": "Power: thermal"
       },
       "electric_power": {
-        "name": "Electric power"
+        "name": "Power: electric"
       },
       "electric_power_min": {
-        "name": "Electric power minimum"
+        "name": "Power: electric minimum"
       },
       "heat_generator_state": {
-        "name": "Heat generator state"
+        "name": "Status: heat generator (bit mask)"
       },
       "operating_mode": {
-        "name": "Operating mode",
+        "name": "Status: operating mode",
         "state": {
           "heating": "Heating",
           "hot_water": "Hot water",
@@ -166,171 +185,171 @@
         }
       },
       "heating_status": {
-        "name": "Heating status"
+        "name": "Status: heating"
       },
       "hot_water_status": {
-        "name": "Hot water status"
+        "name": "Status: hot water"
       },
       "cooling_status": {
-        "name": "Cooling status"
+        "name": "Status: cooling"
       },
       "pool_status": {
-        "name": "Pool status"
+        "name": "Status: pool"
       },
       "energy_el_total": {
-        "name": "Electric energy total"
+        "name": "Energy: electric total"
       },
       "energy_el_heating": {
-        "name": "Electric energy heating"
+        "name": "Energy: electric heating"
       },
       "energy_el_dhw": {
-        "name": "Electric energy hot water"
+        "name": "Energy: electric hot water"
       },
       "energy_th_total": {
-        "name": "Thermal energy total"
+        "name": "Energy: thermal total"
       },
       "energy_th_heating": {
-        "name": "Thermal energy heating"
+        "name": "Energy: thermal heating"
       },
       "energy_th_dhw": {
-        "name": "Thermal energy hot water"
+        "name": "Energy: thermal hot water"
       },
       "hours_hp": {
-        "name": "Compressor operating hours"
+        "name": "Operating hours: compressor"
       },
       "hours_heating": {
-        "name": "Heating operating hours"
+        "name": "Operating hours: heating"
       },
       "hours_dhw": {
-        "name": "Hot water operating hours"
+        "name": "Operating hours: hot water"
       },
       "fw_platform": {
-        "name": "Firmware platform"
+        "name": "Firmware: platform"
       },
       "fw_major": {
-        "name": "Firmware major version"
+        "name": "Firmware: major version"
       },
       "fw_minor": {
-        "name": "Firmware minor version"
+        "name": "Firmware: minor version"
       },
       "raw": {
-        "name": "Diagnostic raw value {address}"
+        "name": "Raw value: {address}"
       }
     },
     "binary_sensor": {
       "cooling_configured": {
-        "name": "Cooling configured"
+        "name": "Cooling: configured"
       },
       "pool_configured": {
-        "name": "Pool configured"
+        "name": "Pool: configured"
       },
       "cooling_release": {
-        "name": "Cooling released"
+        "name": "Cooling: released"
       },
       "cap_heating": {
-        "name": "Capability heating"
+        "name": "Equipment: heating"
       },
       "cap_hot_water": {
-        "name": "Capability hot water"
+        "name": "Equipment: hot water"
       },
       "cap_cooling": {
-        "name": "Capability cooling"
+        "name": "Equipment: cooling"
       },
       "cap_pool": {
-        "name": "Capability pool"
+        "name": "Equipment: pool"
       },
       "cap_room_controller": {
-        "name": "Capability room controller"
+        "name": "Equipment: room controller"
       },
       "cap_mk1_heating": {
-        "name": "Capability mixing circuit 1 heating"
+        "name": "Equipment: mixing circuit 1 heating"
       },
       "cap_mk1_cooling": {
-        "name": "Capability mixing circuit 1 cooling"
+        "name": "Equipment: mixing circuit 1 cooling"
       },
       "cap_mk2_heating": {
-        "name": "Capability mixing circuit 2 heating"
+        "name": "Equipment: mixing circuit 2 heating"
       },
       "cap_mk2_cooling": {
-        "name": "Capability mixing circuit 2 cooling"
+        "name": "Equipment: mixing circuit 2 cooling"
       },
       "cap_mk3_heating": {
-        "name": "Capability mixing circuit 3 heating"
+        "name": "Equipment: mixing circuit 3 heating"
       },
       "cap_mk3_cooling": {
-        "name": "Capability mixing circuit 3 cooling"
+        "name": "Equipment: mixing circuit 3 cooling"
       },
       "compressor_1": {
-        "name": "Compressor 1 running"
+        "name": "Status: compressor 1 running"
       },
       "compressor_2": {
-        "name": "Compressor 2 running"
+        "name": "Status: compressor 2 running"
       },
       "aux_heater_1": {
-        "name": "Auxiliary heater 1 active"
+        "name": "Status: auxiliary heater 1 active"
       },
       "aux_heater_2": {
-        "name": "Auxiliary heater 2 active"
+        "name": "Status: auxiliary heater 2 active"
       },
       "online": {
-        "name": "Connection"
+        "name": "Status: connection"
       }
     },
     "switch": {
       "heating_block": {
-        "name": "Block heating"
+        "name": "Heating: block"
       },
       "dhw_block": {
-        "name": "Block hot water"
+        "name": "Hot water: block"
       },
       "cooling_block": {
-        "name": "Block cooling"
+        "name": "Cooling: block"
       },
       "pool_block": {
-        "name": "Block pool"
+        "name": "Pool: block"
       },
       "circulation": {
-        "name": "Circulation pump"
+        "name": "Hot water: circulation pump"
       },
       "extra_dhw": {
-        "name": "Extra hot water"
+        "name": "Hot water: extra"
       }
     },
     "number": {
       "cfg_heating_setpoint": {
-        "name": "Heating setpoint"
+        "name": "Heating: setpoint"
       },
       "cfg_heating_offset": {
-        "name": "Heating curve offset"
+        "name": "Heating: curve offset"
       },
       "cfg_dhw_setpoint": {
-        "name": "Hot water setpoint"
+        "name": "Hot water: setpoint"
       },
       "cfg_dhw_offset": {
-        "name": "Hot water offset"
+        "name": "Hot water: offset"
       },
       "cfg_mk1_setpoint": {
-        "name": "Mixing circuit 1 heating setpoint"
+        "name": "Mixing circuit 1: heating setpoint"
       },
       "cfg_mk1_offset": {
-        "name": "Mixing circuit 1 heating offset"
+        "name": "Mixing circuit 1: heating offset"
       },
       "cfg_mk1_cool_setpoint": {
-        "name": "Mixing circuit 1 cooling setpoint"
+        "name": "Mixing circuit 1: cooling setpoint"
       },
       "cfg_mk1_cool_offset": {
-        "name": "Mixing circuit 1 cooling offset"
+        "name": "Mixing circuit 1: cooling offset"
       },
       "cfg_power_limit": {
-        "name": "Power limit"
+        "name": "Power limit: value"
       },
       "cfg_overall_offset": {
-        "name": "Overall heating offset"
+        "name": "Overall heating: offset"
       }
     },
     "select": {
       "cfg_heating_mode": {
-        "name": "Heating mode",
+        "name": "Heating: mode",
         "state": {
           "off": "Off",
           "setpoint": "Setpoint",
@@ -339,7 +358,7 @@
         }
       },
       "cfg_heating_level": {
-        "name": "Heating level",
+        "name": "Heating: level",
         "state": {
           "evu_lock": "Utility lockout",
           "reduced": "Reduced",
@@ -348,7 +367,7 @@
         }
       },
       "cfg_dhw_mode": {
-        "name": "Hot water mode",
+        "name": "Hot water: mode",
         "state": {
           "off": "Off",
           "setpoint": "Setpoint",
@@ -357,7 +376,7 @@
         }
       },
       "cfg_dhw_level": {
-        "name": "Hot water level",
+        "name": "Hot water: level",
         "state": {
           "evu_lock": "Utility lockout",
           "reduced": "Reduced",
@@ -366,7 +385,7 @@
         }
       },
       "cfg_mk1_mode": {
-        "name": "Mixing circuit 1 heating mode",
+        "name": "Mixing circuit 1: heating mode",
         "state": {
           "off": "Off",
           "setpoint": "Setpoint",
@@ -375,7 +394,7 @@
         }
       },
       "cfg_mk1_level": {
-        "name": "Mixing circuit 1 heating level",
+        "name": "Mixing circuit 1: heating level",
         "state": {
           "evu_lock": "Utility lockout",
           "reduced": "Reduced",
@@ -384,7 +403,7 @@
         }
       },
       "cfg_mk1_cool_mode": {
-        "name": "Mixing circuit 1 cooling mode",
+        "name": "Mixing circuit 1: cooling mode",
         "state": {
           "off": "Off",
           "setpoint": "Setpoint",
@@ -393,7 +412,7 @@
         }
       },
       "cfg_power_limit_mode": {
-        "name": "Power limit mode",
+        "name": "Power limit: mode",
         "state": {
           "none": "No limit",
           "soft": "Soft limit",
@@ -401,7 +420,7 @@
         }
       },
       "cfg_overall_mode": {
-        "name": "Overall heating mode",
+        "name": "Overall heating: mode",
         "state": {
           "off": "Off",
           "setpoint": "Setpoint",
@@ -410,7 +429,7 @@
         }
       },
       "cfg_overall_level": {
-        "name": "Overall heating level",
+        "name": "Overall heating: level",
         "state": {
           "evu_lock": "Utility lockout",
           "reduced": "Reduced",

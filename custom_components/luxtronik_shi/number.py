@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import ALL_REGISTERS, Register, encode_int16
+from .registers import Register, encode_int16
 
 
 async def async_setup_entry(
@@ -19,7 +19,9 @@ async def async_setup_entry(
 ) -> None:
     """Create the number entities."""
     coordinator = entry.runtime_data
-    async_add_entities(LuxtronikNumber(coordinator, reg) for reg in ALL_REGISTERS if reg.platform == "number")
+    async_add_entities(
+        LuxtronikNumber(coordinator, reg) for reg in coordinator.registers if reg.platform == "number"
+    )
 
 
 class LuxtronikNumber(LuxtronikEntity, NumberEntity):

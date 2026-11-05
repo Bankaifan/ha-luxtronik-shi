@@ -96,6 +96,37 @@ STATIC = {
     },
 }
 
+FEATURE_LABELS = {
+    "en": {
+        "mk1": "Mixing circuit 1",
+        "mk2": "Mixing circuit 2",
+        "mk3": "Mixing circuit 3",
+        "cooling": "Cooling",
+        "pool": "Pool / swimming pool",
+        "room_unit": "Room unit (room temperature)",
+    },
+    "de": {
+        "mk1": "Mischkreis 1",
+        "mk2": "Mischkreis 2",
+        "mk3": "Mischkreis 3",
+        "cooling": "Kühlung",
+        "pool": "Pool / Schwimmbad",
+        "room_unit": "Raumeinheit (Raumtemperatur)",
+    },
+}
+EQUIPMENT_TEXT = {
+    "en": {
+        "title": "Installation equipment",
+        "description": "Pre-filled from what the heat pump reports. Parts that are switched off are not polled and get no entities. Can be changed later in the options.",
+        "options": "Parts of the installation that are switched off are not polled and get no entities. Their entity IDs stay reserved and come back when the part is switched on again.",
+    },
+    "de": {
+        "title": "Ausstattung der Anlage",
+        "description": "Vorausgefüllt mit dem, was die Wärmepumpe meldet. Abgewählte Teile werden nicht abgefragt und bekommen keine Entitäten. Später in den Optionen änderbar.",
+        "options": "Abgewählte Teile der Anlage werden nicht abgefragt und bekommen keine Entitäten. Ihre Entity-IDs bleiben reserviert und kommen beim Wiedereinschalten zurück.",
+    },
+}
+
 STATES = {
     "en": {
         "off": "Off",
@@ -151,7 +182,7 @@ for lang in ("en", "de"):
         name = reg.name_en if lang == "en" else reg.name_de
         if reg.key.startswith("raw_"):
             entity["sensor"]["raw"] = {
-                "name": "Diagnostic raw value {address}" if lang == "en" else "Diagnose Rohwert {address}"
+                "name": "Raw value: {address}" if lang == "en" else "Rohwert: {address}"
             }
             continue
         entry = {"name": name}
@@ -160,8 +191,14 @@ for lang in ("en", "de"):
         entity[reg.platform][reg.key] = entry
     for key, _bit, de, en in binary_sensor.STATUS_BITS:
         entity["binary_sensor"][key] = {"name": en if lang == "en" else de}
-    entity["binary_sensor"]["online"] = {"name": "Connection" if lang == "en" else "Verbindung"}
-    data = {**STATIC[lang], "entity": entity}
+    entity["binary_sensor"]["online"] = {"name": "Status: connection" if lang == "en" else "Status: Verbindung"}
+    data = json.loads(json.dumps(STATIC[lang]))
+    labels = FEATURE_LABELS[lang]
+    text = EQUIPMENT_TEXT[lang]
+    data["config"]["step"]["equipment"] = {"title": text["title"], "description": text["description"], "data": dict(labels)}
+    data["options"]["step"]["init"]["data"].update(labels)
+    data["options"]["step"]["init"]["description"] = EQUIPMENT_TEXT[lang]["options"]
+    data["entity"] = entity
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("wrote", out)

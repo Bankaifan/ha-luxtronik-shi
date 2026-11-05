@@ -11,7 +11,7 @@ which makes a migration of existing automations and dashboards easy.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 RegKind = Literal["input", "holding", "discrete"]
@@ -150,90 +150,90 @@ REGISTERS: tuple[Register, ...] = (
     # NOTE: the published register lists name 10100 "RL-Soll" and 10101 "RL-Ist". Measured on a real
     # installation it is the other way round (10100 follows the water temperature, 10101 is the
     # target that jumps while the pump heats), so the names below follow the measurements.
-    _s("return", 10100, "Rücklauftemperatur", "Return temperature", scale=0.1, **_TEMP),
-    _s("return_target", 10101, "Rücklauf-Soll", "Return target temperature", scale=0.1, **_TEMP),
-    _temp_in("return_external", 10102, "Rücklauf extern", "External return temperature", every=2),
-    _temp_in("return_limit", 10103, "Rücklauf Begrenzung", "Return limit", every=10),
-    _temp_in("return_min_target", 10104, "Rücklauf-Soll Minimum", "Return target minimum", every=10),
-    _s("flow", 10105, "Vorlauftemperatur", "Flow temperature", scale=0.1, **_TEMP),
+    _s("return", 10100, "Temperatur: Rücklauf", "Temperature: return", scale=0.1, **_TEMP),
+    _s("return_target", 10101, "Temperatur: Rücklauf-Soll", "Temperature: return target", scale=0.1, **_TEMP),
+    _temp_in("return_external", 10102, "Temperatur: Rücklauf extern", "Temperature: return external", every=2),
+    _temp_in("return_limit", 10103, "Temperatur: Rücklauf-Begrenzung", "Temperature: return limit", every=10),
+    _temp_in("return_min_target", 10104, "Temperatur: Rücklauf-Soll Minimum", "Temperature: return target minimum", every=10),
+    _s("flow", 10105, "Temperatur: Vorlauf", "Temperature: flow", scale=0.1, **_TEMP),
     _temp_in(
         "room",
         10106,
-        "Raumtemperatur (Raumeinheit)",
-        "Room temperature (room unit)",
+        "Temperatur: Raum (Raumeinheit)",
+        "Temperature: room (room unit)",
         every=2,
         enabled_default=False,
     ),
-    _temp_in("heating_limit", 10107, "Grenztemperatur Heizen", "Heating limit temperature", every=10),
-    _s("outside", 10108, "Außentemperatur", "Outside temperature", dtype="int16", scale=0.1, **_TEMP),
-    _s("dhw", 10120, "Warmwasser Temperatur", "Hot water temperature", dtype="int16", scale=0.1, **_TEMP),
-    _s("dhw_target", 10121, "Warmwasser Soll", "Hot water target temperature", scale=0.1, every=2, **_TEMP),
-    _temp_in("dhw_min", 10122, "Warmwasser Minimum", "Hot water minimum", every=10),
-    _temp_in("dhw_max", 10123, "Warmwasser Maximum", "Hot water maximum", every=10),
-    _temp_in("dhw_limit", 10124, "Grenztemperatur Warmwasser", "Hot water limit temperature", every=10),
+    _temp_in("heating_limit", 10107, "Heizen: Grenztemperatur", "Heating: limit temperature", every=10),
+    _s("outside", 10108, "Temperatur: Außen", "Temperature: outside", dtype="int16", scale=0.1, **_TEMP),
+    _s("dhw", 10120, "Warmwasser: Temperatur", "Hot water: temperature", dtype="int16", scale=0.1, **_TEMP),
+    _s("dhw_target", 10121, "Warmwasser: Soll", "Hot water: target", scale=0.1, every=2, **_TEMP),
+    _temp_in("dhw_min", 10122, "Warmwasser: Minimum", "Hot water: minimum", every=10),
+    _temp_in("dhw_max", 10123, "Warmwasser: Maximum", "Hot water: maximum", every=10),
+    _temp_in("dhw_limit", 10124, "Warmwasser: Grenztemperatur", "Hot water: limit temperature", every=10),
     # mixing circuits (flow actual / target / minimum / maximum)
-    _temp_in("mk1_flow", 10140, "Mischkreis 1 Vorlauf", "Mixing circuit 1 flow", every=1),
-    _temp_in("mk1_flow_target", 10141, "Mischkreis 1 Vorlauf-Soll", "Mixing circuit 1 flow target", every=1),
+    _temp_in("mk1_flow", 10140, "Mischkreis 1: Vorlauf", "Mixing circuit 1: flow", every=1),
+    _temp_in("mk1_flow_target", 10141, "Mischkreis 1: Vorlauf-Soll", "Mixing circuit 1: flow target", every=1),
     _temp_in(
-        "mk1_flow_min", 10142, "Mischkreis 1 Vorlauf Minimum", "Mixing circuit 1 flow minimum", every=10
+        "mk1_flow_min", 10142, "Mischkreis 1: Vorlauf Minimum", "Mixing circuit 1: flow minimum", every=10
     ),
     _temp_in(
-        "mk1_flow_max", 10143, "Mischkreis 1 Vorlauf Maximum", "Mixing circuit 1 flow maximum", every=10
+        "mk1_flow_max", 10143, "Mischkreis 1: Vorlauf Maximum", "Mixing circuit 1: flow maximum", every=10
     ),
-    _temp_in("mk2_flow", 10150, "Mischkreis 2 Vorlauf", "Mixing circuit 2 flow", enabled_default=False),
+    _temp_in("mk2_flow", 10150, "Mischkreis 2: Vorlauf", "Mixing circuit 2: flow", enabled_default=False),
     _temp_in(
         "mk2_flow_target",
         10151,
-        "Mischkreis 2 Vorlauf-Soll",
-        "Mixing circuit 2 flow target",
+        "Mischkreis 2: Vorlauf-Soll",
+        "Mixing circuit 2: flow target",
         enabled_default=False,
     ),
     _temp_in(
         "mk2_flow_min",
         10152,
-        "Mischkreis 2 Vorlauf Minimum",
-        "Mixing circuit 2 flow minimum",
+        "Mischkreis 2: Vorlauf Minimum",
+        "Mixing circuit 2: flow minimum",
         every=10,
         enabled_default=False,
     ),
     _temp_in(
         "mk2_flow_max",
         10153,
-        "Mischkreis 2 Vorlauf Maximum",
-        "Mixing circuit 2 flow maximum",
+        "Mischkreis 2: Vorlauf Maximum",
+        "Mixing circuit 2: flow maximum",
         every=10,
         enabled_default=False,
     ),
-    _temp_in("mk3_flow", 10160, "Mischkreis 3 Vorlauf", "Mixing circuit 3 flow", enabled_default=False),
+    _temp_in("mk3_flow", 10160, "Mischkreis 3: Vorlauf", "Mixing circuit 3: flow", enabled_default=False),
     _temp_in(
         "mk3_flow_target",
         10161,
-        "Mischkreis 3 Vorlauf-Soll",
-        "Mixing circuit 3 flow target",
+        "Mischkreis 3: Vorlauf-Soll",
+        "Mixing circuit 3: flow target",
         enabled_default=False,
     ),
     _temp_in(
         "mk3_flow_min",
         10162,
-        "Mischkreis 3 Vorlauf Minimum",
-        "Mixing circuit 3 flow minimum",
+        "Mischkreis 3: Vorlauf Minimum",
+        "Mixing circuit 3: flow minimum",
         every=10,
         enabled_default=False,
     ),
     _temp_in(
         "mk3_flow_max",
         10163,
-        "Mischkreis 3 Vorlauf Maximum",
-        "Mixing circuit 3 flow maximum",
+        "Mischkreis 3: Vorlauf Maximum",
+        "Mixing circuit 3: flow maximum",
         every=10,
         enabled_default=False,
     ),
-    _s("error_number", 10201, "Fehlernummer", "Error number"),
+    _s("error_number", 10201, "Status: Fehlernummer", "Status: error number"),
     _s(
         "buffer_type",
         10202,
-        "Puffertyp",
-        "Buffer tank type",
+        "Anlage: Puffertyp",
+        "System: buffer tank type",
         options=_BUFFER_TYPES,
         diagnostic=True,
         every=120,
@@ -241,8 +241,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "switching_lock_minutes",
         10203,
-        "Schaltspielsperre",
-        "Switching lock time",
+        "Anlage: Schaltspielsperre",
+        "System: switching lock time",
         unit="min",
         diagnostic=True,
         every=30,
@@ -250,8 +250,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "min_runtime_minutes",
         10204,
-        "Mindestlaufzeit Wärmepumpe",
-        "Heat pump minimum runtime",
+        "Anlage: Mindestlaufzeit",
+        "System: minimum runtime",
         unit="min",
         diagnostic=True,
         every=30,
@@ -259,8 +259,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "cooling_configured",
         10205,
-        "Kühlung konfiguriert",
-        "Cooling configured",
+        "Kühlen: konfiguriert",
+        "Cooling: configured",
         platform="binary_sensor",
         diagnostic=True,
         every=30,
@@ -268,8 +268,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "pool_configured",
         10206,
-        "Schwimmbad konfiguriert",
-        "Pool configured",
+        "Pool: konfiguriert",
+        "Pool: configured",
         platform="binary_sensor",
         diagnostic=True,
         every=30,
@@ -277,8 +277,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "cooling_release",
         10207,
-        "Kühlung freigegeben",
-        "Cooling released",
+        "Kühlen: freigegeben",
+        "Cooling: released",
         platform="binary_sensor",
         diagnostic=True,
         every=30,
@@ -286,8 +286,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "compressor_thermal_power",
         10300,
-        "Heizleistung thermisch",
-        "Thermal power",
+        "Leistung: thermisch",
+        "Power: thermal",
         dtype="int16",
         scale=100,
         precision=0,
@@ -298,8 +298,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "electric_power",
         10301,
-        "Stromaufnahme",
-        "Electric power",
+        "Leistung: elektrisch",
+        "Power: electric",
         scale=100,
         precision=0,
         unit="W",
@@ -309,8 +309,8 @@ REGISTERS: tuple[Register, ...] = (
     _s(
         "electric_power_min",
         10302,
-        "Stromaufnahme Minimum",
-        "Electric power minimum",
+        "Leistung: elektrisch Minimum",
+        "Power: electric minimum",
         scale=100,
         precision=0,
         unit="W",
@@ -319,30 +319,30 @@ REGISTERS: tuple[Register, ...] = (
         every=10,
     ),
     # status: bit mask (VD1, VD2, ZWE1, ZWE2 – decoded into binary sensors) and operating mode
-    _s("heat_generator_state", 10000, "Zustand Wärmeerzeuger", "Heat generator state"),
-    _s("operating_mode", 10002, "Betriebsart", "Operating mode", options=_OPERATING_MODES),
-    _s("heating_status", 10003, "Status Heizen", "Heating status"),
-    _s("hot_water_status", 10004, "Status Warmwasser", "Hot water status"),
-    _s("cooling_status", 10006, "Status Kühlung", "Cooling status", diagnostic=True, every=2),
-    _s("pool_status", 10007, "Status Schwimmbad", "Pool status", diagnostic=True, every=2),
+    _s("heat_generator_state", 10000, "Status: Wärmeerzeuger (Bitmaske)", "Status: heat generator (bit mask)"),
+    _s("operating_mode", 10002, "Status: Betriebsart", "Status: operating mode", options=_OPERATING_MODES),
+    _s("heating_status", 10003, "Status: Heizen", "Status: heating"),
+    _s("hot_water_status", 10004, "Status: Warmwasser", "Status: hot water"),
+    _s("cooling_status", 10006, "Status: Kühlen", "Status: cooling", diagnostic=True, every=2),
+    _s("pool_status", 10007, "Status: Pool", "Status: pool", diagnostic=True, every=2),
     # ----------------------------------------------------------------- counters
-    _s("energy_el_total", 10310, "Strom gesamt", "Electric energy total", **_ENERGY),
-    _s("energy_el_heating", 10312, "Strom Heizen", "Electric energy heating", **_ENERGY),
-    _s("energy_el_dhw", 10314, "Strom Warmwasser", "Electric energy hot water", **_ENERGY),
-    _s("energy_th_total", 10320, "Wärme gesamt", "Thermal energy total", **_ENERGY),
-    _s("energy_th_heating", 10322, "Wärme Heizen", "Thermal energy heating", **_ENERGY),
-    _s("energy_th_dhw", 10324, "Wärme Warmwasser", "Thermal energy hot water", **_ENERGY),
-    _s("hours_hp", 10404, "Betriebsstunden Verdichter", "Compressor operating hours", **_HOURS),
-    _s("hours_heating", 10406, "Betriebsstunden Heizen", "Heating operating hours", **_HOURS),
-    _s("hours_dhw", 10408, "Betriebsstunden Warmwasser", "Hot water operating hours", **_HOURS),
+    _s("energy_el_total", 10310, "Energie: Strom gesamt", "Energy: electric total", **_ENERGY),
+    _s("energy_el_heating", 10312, "Energie: Strom Heizen", "Energy: electric heating", **_ENERGY),
+    _s("energy_el_dhw", 10314, "Energie: Strom Warmwasser", "Energy: electric hot water", **_ENERGY),
+    _s("energy_th_total", 10320, "Energie: Wärme gesamt", "Energy: thermal total", **_ENERGY),
+    _s("energy_th_heating", 10322, "Energie: Wärme Heizen", "Energy: thermal heating", **_ENERGY),
+    _s("energy_th_dhw", 10324, "Energie: Wärme Warmwasser", "Energy: thermal hot water", **_ENERGY),
+    _s("hours_hp", 10404, "Betriebsstunden: Verdichter", "Operating hours: compressor", **_HOURS),
+    _s("hours_heating", 10406, "Betriebsstunden: Heizen", "Operating hours: heating", **_HOURS),
+    _s("hours_dhw", 10408, "Betriebsstunden: Warmwasser", "Operating hours: hot water", **_HOURS),
     # ------------------------------------- settings (holding): numbers and selects
     # heating
-    _select("cfg_heating_mode", 10000, "Heizen Betriebsart", "Heating mode", _MODES),
+    _select("cfg_heating_mode", 10000, "Heizen: Betriebsart", "Heating: mode", _MODES),
     _number(
         "cfg_heating_setpoint",
         10001,
-        "Heizen Sollwert",
-        "Heating setpoint",
+        "Heizen: Sollwert",
+        "Heating: setpoint",
         lo=10,
         hi=70,
         step=0.5,
@@ -351,8 +351,8 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_heating_offset",
         10002,
-        "Heizkurven-Anhebung",
-        "Heating curve offset",
+        "Heizen: Heizkurven-Anhebung",
+        "Heating: curve offset",
         lo=-5,
         hi=5,
         step=0.5,
@@ -361,14 +361,14 @@ REGISTERS: tuple[Register, ...] = (
         config=False,
         every=1,
     ),
-    _select("cfg_heating_level", 10003, "Heizen Stufe", "Heating level", _LEVELS),
+    _select("cfg_heating_level", 10003, "Heizen: Stufe", "Heating: level", _LEVELS),
     # hot water
-    _select("cfg_dhw_mode", 10005, "Warmwasser Betriebsart", "Hot water mode", _MODES),
+    _select("cfg_dhw_mode", 10005, "Warmwasser: Betriebsart", "Hot water: mode", _MODES),
     _number(
         "cfg_dhw_setpoint",
         10006,
-        "Warmwasser Sollwert",
-        "Hot water setpoint",
+        "Warmwasser: Sollwert",
+        "Hot water: setpoint",
         lo=10,
         hi=65,
         step=0.5,
@@ -377,24 +377,24 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_dhw_offset",
         10007,
-        "Warmwasser Anhebung",
-        "Hot water offset",
+        "Warmwasser: Anhebung",
+        "Hot water: offset",
         lo=-10,
         hi=10,
         step=0.5,
         unit="K",
         signed=True,
     ),
-    _select("cfg_dhw_level", 10008, "Warmwasser Stufe", "Hot water level", _LEVELS),
+    _select("cfg_dhw_level", 10008, "Warmwasser: Stufe", "Hot water: level", _LEVELS),
     # mixing circuit 1 heating / cooling
     _select(
-        "cfg_mk1_mode", 10010, "Mischkreis 1 Heizen Betriebsart", "Mixing circuit 1 heating mode", _MODES
+        "cfg_mk1_mode", 10010, "Mischkreis 1: Heizen Betriebsart", "Mixing circuit 1: heating mode", _MODES
     ),
     _number(
         "cfg_mk1_setpoint",
         10011,
-        "Mischkreis 1 Heizen Sollwert",
-        "Mixing circuit 1 heating setpoint",
+        "Mischkreis 1: Heizen Sollwert",
+        "Mixing circuit 1: heating setpoint",
         lo=10,
         hi=70,
         step=0.5,
@@ -403,28 +403,28 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_mk1_offset",
         10012,
-        "Mischkreis 1 Heizen Anhebung",
-        "Mixing circuit 1 heating offset",
+        "Mischkreis 1: Heizen Anhebung",
+        "Mixing circuit 1: heating offset",
         lo=-10,
         hi=10,
         step=0.5,
         unit="K",
         signed=True,
     ),
-    _select("cfg_mk1_level", 10013, "Mischkreis 1 Heizen Stufe", "Mixing circuit 1 heating level", _LEVELS),
+    _select("cfg_mk1_level", 10013, "Mischkreis 1: Heizen Stufe", "Mixing circuit 1: heating level", _LEVELS),
     _select(
         "cfg_mk1_cool_mode",
         10015,
-        "Mischkreis 1 Kühlen Betriebsart",
-        "Mixing circuit 1 cooling mode",
+        "Mischkreis 1: Kühlen Betriebsart",
+        "Mixing circuit 1: cooling mode",
         _MODES,
         enabled_default=False,
     ),
     _number(
         "cfg_mk1_cool_setpoint",
         10016,
-        "Mischkreis 1 Kühlen Sollwert",
-        "Mixing circuit 1 cooling setpoint",
+        "Mischkreis 1: Kühlen Sollwert",
+        "Mixing circuit 1: cooling setpoint",
         lo=5,
         hi=40,
         step=0.5,
@@ -434,8 +434,8 @@ REGISTERS: tuple[Register, ...] = (
     _number(
         "cfg_mk1_cool_offset",
         10017,
-        "Mischkreis 1 Kühlen Anhebung",
-        "Mixing circuit 1 cooling offset",
+        "Mischkreis 1: Kühlen Anhebung",
+        "Mixing circuit 1: cooling offset",
         lo=-10,
         hi=10,
         step=0.5,
@@ -447,39 +447,39 @@ REGISTERS: tuple[Register, ...] = (
     _select(
         "cfg_power_limit_mode",
         10040,
-        "Leistungsbegrenzung Modus",
-        "Power limit mode",
+        "Leistungsbegrenzung: Modus",
+        "Power limit: mode",
         ("none", "soft", "hard"),
     ),
     _number(
-        "cfg_power_limit", 10041, "Leistungsbegrenzung Wert", "Power limit", lo=0, hi=30, step=0.1, unit="kW"
+        "cfg_power_limit", 10041, "Leistungsbegrenzung: Wert", "Power limit: value", lo=0, hi=30, step=0.1, unit="kW"
     ),
     # overall heating (firmware 3.92.0 or later)
-    _select("cfg_overall_mode", 10065, "Gesamt-Heizung Betriebsart", "Overall heating mode", _MODES),
+    _select("cfg_overall_mode", 10065, "Gesamt-Heizung: Betriebsart", "Overall heating: mode", _MODES),
     _number(
         "cfg_overall_offset",
         10066,
-        "Gesamt-Heizung Anhebung",
-        "Overall heating offset",
+        "Gesamt-Heizung: Anhebung",
+        "Overall heating: offset",
         lo=-10,
         hi=10,
         step=0.5,
         unit="K",
         signed=True,
     ),
-    _select("cfg_overall_level", 10067, "Gesamt-Heizung Stufe", "Overall heating level", _LEVELS),
+    _select("cfg_overall_level", 10067, "Gesamt-Heizung: Stufe", "Overall heating: level", _LEVELS),
     # ------------------------------------------------------------------ firmware
-    _s("fw_platform", 10400, "Firmware Plattform", "Firmware platform", diagnostic=True, every=120),
-    _s("fw_major", 10401, "Firmware Version Haupt", "Firmware major version", diagnostic=True, every=120),
-    _s("fw_minor", 10402, "Firmware Version Neben", "Firmware minor version", diagnostic=True, every=120),
+    _s("fw_platform", 10400, "Firmware: Plattform", "Firmware: platform", diagnostic=True, every=120),
+    _s("fw_major", 10401, "Firmware: Version Haupt", "Firmware: major version", diagnostic=True, every=120),
+    _s("fw_minor", 10402, "Firmware: Version Neben", "Firmware: minor version", diagnostic=True, every=120),
     # ------------------------------------------------- switches (blocks, holding)
-    _h("heating_block", 10050, "Heizung sperren", "Block heating", platform="switch"),
-    _h("dhw_block", 10051, "Warmwasser sperren", "Block hot water", platform="switch"),
-    _h("cooling_block", 10052, "Kühlung sperren", "Block cooling", platform="switch"),
-    _h("pool_block", 10053, "Pool sperren", "Block pool", platform="switch"),
+    _h("heating_block", 10050, "Heizen: sperren", "Heating: block", platform="switch"),
+    _h("dhw_block", 10051, "Warmwasser: sperren", "Hot water: block", platform="switch"),
+    _h("cooling_block", 10052, "Kühlen: sperren", "Cooling: block", platform="switch"),
+    _h("pool_block", 10053, "Pool: sperren", "Pool: block", platform="switch"),
     # circulation pump and extra hot water (firmware 3.92.0 or later)
-    _h("circulation", 10070, "Zirkulationspumpe", "Circulation pump", platform="switch"),
-    _h("extra_dhw", 10071, "Extra-Warmwasser", "Extra hot water", platform="switch"),
+    _h("circulation", 10070, "Warmwasser: Zirkulationspumpe", "Hot water: circulation pump", platform="switch"),
+    _h("extra_dhw", 10071, "Warmwasser: Extra", "Hot water: extra", platform="switch"),
 )
 
 # Raw values whose meaning is not documented. Disabled by default; handy for
@@ -503,8 +503,8 @@ RAW_REGISTERS: tuple[Register, ...] = tuple(
         key=f"raw_{address}",
         address=address,
         kind="input",
-        name_de=f"Diagnose Rohwert {address}",
-        name_en=f"Diagnostic raw value {address}",
+        name_de=f"Rohwert: {address}",
+        name_en=f"Raw value: {address}",
         diagnostic=True,
         enabled_default=False,
         every=4,
@@ -518,8 +518,8 @@ CAPABILITIES: tuple[Register, ...] = tuple(
         key=f"cap_{suffix}",
         address=address,
         kind="discrete",
-        name_de=f"Ausstattung {de} vorhanden",
-        name_en=f"Capability {en}",
+        name_de=f"Ausstattung: {de}",
+        name_en=f"Equipment: {en}",
         platform="binary_sensor",
         diagnostic=True,
         every=10,
@@ -539,6 +539,68 @@ CAPABILITIES: tuple[Register, ...] = tuple(
     )
 )
 
+# Limits and minimum/maximum values: rarely needed day to day, so they live in the
+# "Diagnose" section of the device page. Only the entity category changes, never the key.
+_SECONDARY_KEYS = frozenset(
+    {
+        "return_external",
+        "return_limit",
+        "return_min_target",
+        "heating_limit",
+        "dhw_min",
+        "dhw_max",
+        "dhw_limit",
+        "mk1_flow_min",
+        "mk1_flow_max",
+        "mk2_flow_min",
+        "mk2_flow_max",
+        "mk3_flow_min",
+        "mk3_flow_max",
+    }
+)
+REGISTERS = tuple(replace(reg, diagnostic=True) if reg.key in _SECONDARY_KEYS else reg for reg in REGISTERS)
+
 ALL_REGISTERS: tuple[Register, ...] = REGISTERS + RAW_REGISTERS + CAPABILITIES
+
+# -------------------------------------------------------------- installation equipment
+# Optional parts of an installation. Registers of a part that is switched off in the options are
+# neither polled nor turned into entities. Their registry entries (and entity IDs) stay, so
+# switching the part on again restores the very same entities.
+FEATURES: tuple[str, ...] = ("mk1", "mk2", "mk3", "cooling", "pool", "room_unit")
+
+# Capability flag (discrete input) used to pre-fill each option during setup.
+FEATURE_CAPABILITY: dict[str, str] = {
+    "mk1": "cap_mk1_heating",
+    "mk2": "cap_mk2_heating",
+    "mk3": "cap_mk3_heating",
+    "cooling": "cap_cooling",
+    "pool": "cap_pool",
+    "room_unit": "cap_room_controller",
+}
+
+# A register belongs to every listed part (all of them must be switched on).
+_FEATURES_OF: dict[str, tuple[str, ...]] = {
+    **{k: ("mk1",) for k in ("mk1_flow", "mk1_flow_target", "mk1_flow_min", "mk1_flow_max")},
+    **{k: ("mk1",) for k in ("cfg_mk1_mode", "cfg_mk1_setpoint", "cfg_mk1_offset", "cfg_mk1_level")},
+    **{k: ("mk1", "cooling") for k in ("cfg_mk1_cool_mode", "cfg_mk1_cool_setpoint", "cfg_mk1_cool_offset")},
+    **{k: ("mk2",) for k in ("mk2_flow", "mk2_flow_target", "mk2_flow_min", "mk2_flow_max")},
+    **{k: ("mk3",) for k in ("mk3_flow", "mk3_flow_target", "mk3_flow_min", "mk3_flow_max")},
+    **{k: ("cooling",) for k in ("cooling_block", "cooling_status")},
+    **{k: ("pool",) for k in ("pool_block", "pool_status")},
+    "room": ("room_unit",),
+}
+
+
+def features_of(reg: Register) -> tuple[str, ...]:
+    """Optional parts a register depends on (empty: always present)."""
+    return _FEATURES_OF.get(reg.key, ())
+
+
+def active_registers(features: list[str] | tuple[str, ...] | set[str] | None) -> tuple[Register, ...]:
+    """Registers to poll for the given parts. ``None`` means: everything (entries created before 0.3.0)."""
+    if features is None:
+        return ALL_REGISTERS
+    enabled = set(features)
+    return tuple(reg for reg in ALL_REGISTERS if enabled.issuperset(features_of(reg)))
 
 BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}

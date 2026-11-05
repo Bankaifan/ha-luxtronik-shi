@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import ALL_REGISTERS, Register
+from .registers import Register
 
 
 async def async_setup_entry(
@@ -23,7 +23,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     entities: list[BinarySensorEntity] = [LuxtronikOnline(coordinator)]
     entities.extend(
-        LuxtronikFlag(coordinator, reg) for reg in ALL_REGISTERS if reg.platform == "binary_sensor"
+        LuxtronikFlag(coordinator, reg) for reg in coordinator.registers if reg.platform == "binary_sensor"
     )
     entities.extend(LuxtronikStatusBit(coordinator, bit) for bit in STATUS_BITS)
     async_add_entities(entities)
@@ -31,10 +31,10 @@ async def async_setup_entry(
 
 # Bit mask of the input register "heat_generator_state" (10000).
 STATUS_BITS: tuple[tuple[str, int, str, str], ...] = (
-    ("compressor_1", 0, "Verdichter 1 läuft", "Compressor 1 running"),
-    ("compressor_2", 1, "Verdichter 2 läuft", "Compressor 2 running"),
-    ("aux_heater_1", 2, "Zusatzheizung 1 (ZWE) aktiv", "Auxiliary heater 1 active"),
-    ("aux_heater_2", 3, "Zusatzheizung 2 (ZWE) aktiv", "Auxiliary heater 2 active"),
+    ("compressor_1", 0, "Status: Verdichter 1 läuft", "Status: compressor 1 running"),
+    ("compressor_2", 1, "Status: Verdichter 2 läuft", "Status: compressor 2 running"),
+    ("aux_heater_1", 2, "Status: Zusatzheizung 1 (ZWE) aktiv", "Status: auxiliary heater 1 active"),
+    ("aux_heater_2", 3, "Status: Zusatzheizung 2 (ZWE) aktiv", "Status: auxiliary heater 2 active"),
 )
 
 

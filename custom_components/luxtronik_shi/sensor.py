@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import ALL_REGISTERS, Register
+from .registers import Register
 
 
 async def async_setup_entry(
@@ -19,7 +19,9 @@ async def async_setup_entry(
 ) -> None:
     """Create one sensor per measurement register."""
     coordinator = entry.runtime_data
-    async_add_entities(LuxtronikSensor(coordinator, reg) for reg in ALL_REGISTERS if reg.platform == "sensor")
+    async_add_entities(
+        LuxtronikSensor(coordinator, reg) for reg in coordinator.registers if reg.platform == "sensor"
+    )
 
 
 class LuxtronikSensor(LuxtronikEntity, SensorEntity):
