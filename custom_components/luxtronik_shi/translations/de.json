@@ -267,6 +267,15 @@
       },
       "raw": {
         "name": "Rohwert: {address}"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "cop_heating": {
+        "name": "COP gesamt"
+      },
+      "cop_dhw": {
+        "name": "COP gesamt"
       }
     },
     "binary_sensor": {

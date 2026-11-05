@@ -17,6 +17,7 @@ Other Luxtronik controllers with SHI should work but are untested.
 | Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active**, error number, heating/hot water/cooling/pool status, connection |
 | **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit (0–30 kW) |
 | **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3, overall heating; level (utility lockout / reduced / normal / boost); power limit (none / soft / hard) |
+| Calculated COP | **COP** (thermal / electric power, main device) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when electric power is below 200 W, values are zero, negative or implausible, or a counter was reset |
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool*, **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
 

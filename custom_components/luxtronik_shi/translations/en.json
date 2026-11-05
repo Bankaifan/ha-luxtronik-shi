@@ -267,6 +267,15 @@
       },
       "raw": {
         "name": "Raw value: {address}"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "cop_heating": {
+        "name": "COP overall"
+      },
+      "cop_dhw": {
+        "name": "COP overall"
       }
     },
     "binary_sensor": {

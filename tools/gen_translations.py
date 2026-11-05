@@ -208,6 +208,8 @@ for lang in ("en", "de"):
         if reg.options and reg.platform in ("sensor", "select"):
             entry["state"] = {opt: STATES[lang][opt] for opt in reg.options}
         entity[reg.platform][reg.key] = entry
+    for derived in registers.DERIVED_SENSORS:
+        entity["sensor"][derived.key] = {"name": derived.name_en if lang == "en" else derived.name_de}
     for key, _bit, de, en in binary_sensor.STATUS_BITS:
         entity["binary_sensor"][key] = {"name": en if lang == "en" else de}
     entity["binary_sensor"]["online"] = {"name": "Status: connection" if lang == "en" else "Status: Verbindung"}

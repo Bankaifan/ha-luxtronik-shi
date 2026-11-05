@@ -731,6 +731,76 @@ CLIMATE_KEYS: tuple[str, ...] = (CLIMATE_HEATING_KEY,)
 WATER_HEATER_DHW_KEY = "water_heater_dhw"
 WATER_HEATER_KEYS: tuple[str, ...] = (WATER_HEATER_DHW_KEY,)
 
+# ------------------------------------------------------------------- derived sensors
+# Sensors that are calculated from registers that are polled anyway (no extra Modbus reads). Their keys are
+# part of the entity contract. ``cop`` lives in the main device; the overall values live in the device of the
+# circuit they describe (see ``area_of``).
+
+
+@dataclass(frozen=True)
+class DerivedSensor:
+    """A sensor that is the quotient of two existing registers."""
+
+    key: str
+    name_de: str
+    name_en: str
+    thermal: str  # key of the thermal register (power or energy)
+    electric: str  # key of the electric register (power or energy)
+    cumulative: bool  # True: energy counters (overall value), False: instantaneous power
+
+
+DERIVED_SENSORS: tuple[DerivedSensor, ...] = (
+    DerivedSensor("cop", "COP", "COP", "compressor_thermal_power", "electric_power", cumulative=False),
+    DerivedSensor("cop_heating", "COP gesamt", "COP overall", "energy_th_heating", "energy_el_heating", True),
+    DerivedSensor("cop_dhw", "COP gesamt", "COP overall", "energy_th_dhw", "energy_el_dhw", True),
+)
+DERIVED_SENSOR_KEYS: tuple[str, ...] = tuple(sensor.key for sensor in DERIVED_SENSORS)
+
+# The following limits are a design choice of this integration, NOT a register fact and not documented by the
+# manufacturer. They only decide when a calculated COP is shown as "unknown" instead of a misleading number.
+# The electric power register has a resolution of 100 W, so below this value the quotient is mostly rounding noise.
+COP_MIN_ELECTRIC_POWER_W = 200.0
+# Overall values need some electric energy before the quotient says anything (e.g. a fresh counter).
+COP_MIN_ELECTRIC_ENERGY_KWH = 1.0
+# Heat pumps do not reach more than this; anything above is a measurement or timing artefact.
+COP_MAX_PLAUSIBLE = 12.0
+
+
+def _plausible(cop: float) -> float | None:
+    return cop if 0 < cop <= COP_MAX_PLAUSIBLE else None
+
+
+def instantaneous_cop(thermal_w: float | None, electric_w: float | None) -> float | None:
+    """Thermal power / electric power, ``None`` when the value cannot be trusted.
+
+    Unknown for missing values, electric power below ``COP_MIN_ELECTRIC_POWER_W``, thermal power of zero or
+    below (e.g. defrost, where the thermal power is negative) and implausibly high results.
+    """
+    if thermal_w is None or electric_w is None:
+        return None
+    if electric_w < COP_MIN_ELECTRIC_POWER_W or thermal_w <= 0:
+        return None
+    return _plausible(thermal_w / electric_w)
+
+
+def overall_cop(
+    thermal_kwh: float | None,
+    electric_kwh: float | None,
+    previous: tuple[float, float] | None = None,
+) -> float | None:
+    """Thermal energy / electric energy of two counters, ``None`` when the value cannot be trusted.
+
+    ``previous`` is the (thermal, electric) pair of the reading before. If a counter went backwards since then
+    (reset or replaced controller), the quotient mixes two different histories and is unknown for this reading.
+    """
+    if thermal_kwh is None or electric_kwh is None:
+        return None
+    if previous is not None and (thermal_kwh < previous[0] or electric_kwh < previous[1]):
+        return None
+    if electric_kwh < COP_MIN_ELECTRIC_ENERGY_KWH or thermal_kwh <= 0:
+        return None
+    return _plausible(thermal_kwh / electric_kwh)
+
 
 # ---------------------------------------------------------------------- devices
 # Entities are grouped into sub-devices like the menus of the Luxtronik controller. The main device
@@ -742,7 +812,7 @@ AREAS: tuple[str, ...] = ("heating", "hot_water", "cooling", "pool")
 _COOLING_KEYS = frozenset({"cooling_block", "cooling_status", "energy_el_cooling", "energy_th_cooling"})
 _POOL_KEYS = frozenset({"pool_block", "pool_status", "energy_el_pool", "energy_th_pool"})
 _HOT_WATER_KEYS = frozenset(
-    {"circulation", "extra_dhw", "hot_water_status", "energy_el_dhw", "energy_th_dhw", "hours_dhw"}
+    {"circulation", "extra_dhw", "hot_water_status", "energy_el_dhw", "energy_th_dhw", "hours_dhw", "cop_dhw"}
 )
 _HEATING_KEYS = frozenset(
     {
@@ -753,6 +823,7 @@ _HEATING_KEYS = frozenset(
         "energy_el_heating",
         "energy_th_heating",
         "hours_heating",
+        "cop_heating",
     }
 )
 

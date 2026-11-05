@@ -12,6 +12,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Added
+- Calculated COP sensors (issue #23), no new registers and no extra Modbus reads: `cop` (thermal power 10300 / electric
+  power 10301, in the main heat pump device) and `cop_heating` / `cop_dhw` (thermal / electric energy counters of
+  heating and hot water, 10322/10312 and 10324/10314, in the *Heating* / *Hot water* device). A sensor is unknown
+  (never a number) when an input is missing, the electric value is zero or below the minimum (200 W / 1 kWh), the
+  thermal value is zero or negative (e.g. defrost), the result is above 12, or an energy counter went backwards since
+  the previous reading. These limits are a design choice, not register facts.
 - Water heater entity for domestic hot water (issue #20), in the *Hot water* device. Target temperature writes the
   existing hot water setpoint register (10006, 10 ... 65 °C in 0.5 K steps, out-of-range values are rejected before
   anything is written); the operation modes are the options of the existing hot water mode register (10005: `off` /
