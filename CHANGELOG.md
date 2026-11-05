@@ -12,7 +12,7 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/):
 
 ## [Unreleased]
 
-## [0.3.0] – unveröffentlicht
+## [0.3.0] – 05.11.2026
 
 ### Hinzugefügt
 - **Ausstattung der Anlage** im Einrichtungsdialog und in den Optionen: Mischkreis 1–3, Kühlung, Pool,
