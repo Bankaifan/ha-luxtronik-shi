@@ -25,6 +25,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 - Sub-devices like the Luxtronik controller menus: heat pump (main), heating, hot water, and cooling/pool when
   selected in the equipment (#8). Created through the device registry and linked to the main device.
 - CI job `tests-latest-ha` runs the tests against the newest Home Assistant test harness (Python 3.14).
+- CI: `validate.yml` restricts the `GITHUB_TOKEN` to read access (CodeQL finding); only the HACS job may comment on PRs.
 
 ### Changed
 - Firmware version is written to the device registry instead of mutating the shared `DeviceInfo`.
