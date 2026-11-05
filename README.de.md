@@ -192,6 +192,13 @@ sobald seine Ursache weg ist.
 * Bei Warmwasser-Betriebsart 0 („Aus") ignoriert die Wärmepumpe den Sollwert; das tatsächliche Ziel steht im Sensor *Warmwasser Soll*.
 * Schreibzugriffe wirken direkt auf die Wärmepumpe. Wer Heizungs-/Warmwassersperre oder Offset automatisiert, sollte
   das mit Bedacht tun.
+* **Werte können nach einem Neustart der Steuerung zurückfallen.** Die SHI-Holdingregister sind flüchtig (siehe
+  *Quellen*). Nach Stromausfall oder Neustart der Steuerung können über diese Integration geschriebene Werte, etwa die
+  Heizungs- oder Warmwassersperre, auf den Standardwert der Steuerung zurückfallen, z. B. `aus`. Die Integration
+  erkennt das **nicht** und korrigiert es auch nicht: Die Entität zeigt den Wert der Steuerung, und er wird nicht
+  automatisch neu geschrieben. Dasselbe passiert, wenn ein anderer Schreiber (Planer oder jemand an der Steuerung) einen
+  Wert ändert. Nach einem Stromausfall Sperren und Betriebsart prüfen oder Automatisierung bzw. Planer die Werte erneut
+  schreiben lassen.
 
 ## Entwicklung
 
