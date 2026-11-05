@@ -152,9 +152,17 @@ REGISTERS: tuple[Register, ...] = (
     # target that jumps while the pump heats), so the names below follow the measurements.
     _s("return", 10100, "Temperatur: Rücklauf", "Temperature: return", scale=0.1, **_TEMP),
     _s("return_target", 10101, "Temperatur: Rücklauf-Soll", "Temperature: return target", scale=0.1, **_TEMP),
-    _temp_in("return_external", 10102, "Temperatur: Rücklauf extern", "Temperature: return external", every=2),
+    _temp_in(
+        "return_external", 10102, "Temperatur: Rücklauf extern", "Temperature: return external", every=2
+    ),
     _temp_in("return_limit", 10103, "Temperatur: Rücklauf-Begrenzung", "Temperature: return limit", every=10),
-    _temp_in("return_min_target", 10104, "Temperatur: Rücklauf-Soll Minimum", "Temperature: return target minimum", every=10),
+    _temp_in(
+        "return_min_target",
+        10104,
+        "Temperatur: Rücklauf-Soll Minimum",
+        "Temperature: return target minimum",
+        every=10,
+    ),
     _s("flow", 10105, "Temperatur: Vorlauf", "Temperature: flow", scale=0.1, **_TEMP),
     _temp_in(
         "room",
@@ -173,7 +181,9 @@ REGISTERS: tuple[Register, ...] = (
     _temp_in("dhw_limit", 10124, "Warmwasser: Grenztemperatur", "Hot water: limit temperature", every=10),
     # mixing circuits (flow actual / target / minimum / maximum)
     _temp_in("mk1_flow", 10140, "Mischkreis 1: Vorlauf", "Mixing circuit 1: flow", every=1),
-    _temp_in("mk1_flow_target", 10141, "Mischkreis 1: Vorlauf-Soll", "Mixing circuit 1: flow target", every=1),
+    _temp_in(
+        "mk1_flow_target", 10141, "Mischkreis 1: Vorlauf-Soll", "Mixing circuit 1: flow target", every=1
+    ),
     _temp_in(
         "mk1_flow_min", 10142, "Mischkreis 1: Vorlauf Minimum", "Mixing circuit 1: flow minimum", every=10
     ),
@@ -319,7 +329,9 @@ REGISTERS: tuple[Register, ...] = (
         every=10,
     ),
     # status: bit mask (VD1, VD2, ZWE1, ZWE2 – decoded into binary sensors) and operating mode
-    _s("heat_generator_state", 10000, "Status: Wärmeerzeuger (Bitmaske)", "Status: heat generator (bit mask)"),
+    _s(
+        "heat_generator_state", 10000, "Status: Wärmeerzeuger (Bitmaske)", "Status: heat generator (bit mask)"
+    ),
     _s("operating_mode", 10002, "Status: Betriebsart", "Status: operating mode", options=_OPERATING_MODES),
     _s("heating_status", 10003, "Status: Heizen", "Status: heating"),
     _s("hot_water_status", 10004, "Status: Warmwasser", "Status: hot water"),
@@ -452,7 +464,14 @@ REGISTERS: tuple[Register, ...] = (
         ("none", "soft", "hard"),
     ),
     _number(
-        "cfg_power_limit", 10041, "Leistungsbegrenzung: Wert", "Power limit: value", lo=0, hi=30, step=0.1, unit="kW"
+        "cfg_power_limit",
+        10041,
+        "Leistungsbegrenzung: Wert",
+        "Power limit: value",
+        lo=0,
+        hi=30,
+        step=0.1,
+        unit="kW",
     ),
     # overall heating (firmware 3.92.0 or later)
     _select("cfg_overall_mode", 10065, "Gesamt-Heizung: Betriebsart", "Overall heating: mode", _MODES),
@@ -478,16 +497,107 @@ REGISTERS: tuple[Register, ...] = (
     _h("cooling_block", 10052, "Kühlen: sperren", "Cooling: block", platform="switch"),
     _h("pool_block", 10053, "Pool: sperren", "Pool: block", platform="switch"),
     # circulation pump and extra hot water (firmware 3.92.0 or later)
-    _h("circulation", 10070, "Warmwasser: Zirkulationspumpe", "Hot water: circulation pump", platform="switch"),
+    _h(
+        "circulation",
+        10070,
+        "Warmwasser: Zirkulationspumpe",
+        "Hot water: circulation pump",
+        platform="switch",
+    ),
     _h("extra_dhw", 10071, "Warmwasser: Extra", "Hot water: extra", platform="switch"),
+    # --------------------------------------- formerly raw values, meaning from python-luxtronik
+    # Keys stay "raw_<address>" because they are part of the entity contract.
+    _temp_in("raw_10109", 10109, "Temperatur: Außen Mittelwert", "Temperature: outside average", every=4),
+    _temp_in(
+        "raw_10110", 10110, "Temperatur: Wärmequelle Eintritt", "Temperature: heat source inlet", every=2
+    ),
+    _s(
+        "raw_10112",
+        10112,
+        "Rohwert: Vorlauf Maximum (10112)",
+        "Raw value: flow maximum (10112)",
+        diagnostic=True,
+        enabled_default=False,
+        every=4,
+    ),
 )
+
+
+def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
+    """Holdings of mixing circuit 2 or 3: same layout as circuit 1, ranges from python-luxtronik."""
+    base = 10000 + 10 * n
+    de, en, k = f"Mischkreis {n}", f"Mixing circuit {n}", f"cfg_mk{n}"
+    return (
+        _select(f"{k}_mode", base, f"{de}: Heizen Betriebsart", f"{en}: heating mode", _MODES),
+        _number(
+            f"{k}_setpoint",
+            base + 1,
+            f"{de}: Heizen Sollwert",
+            f"{en}: heating setpoint",
+            lo=20,
+            hi=65,
+            step=0.5,
+            unit="°C",
+        ),
+        _number(
+            f"{k}_offset",
+            base + 2,
+            f"{de}: Heizen Anhebung",
+            f"{en}: heating offset",
+            lo=-5,
+            hi=5,
+            step=0.5,
+            unit="K",
+            signed=True,
+        ),
+        _select(f"{k}_level", base + 3, f"{de}: Heizen Stufe", f"{en}: heating level", _LEVELS),
+        _select(f"{k}_cool_mode", base + 5, f"{de}: Kühlen Betriebsart", f"{en}: cooling mode", _MODES),
+        _number(
+            f"{k}_cool_setpoint",
+            base + 6,
+            f"{de}: Kühlen Sollwert",
+            f"{en}: cooling setpoint",
+            lo=5,
+            hi=25,
+            step=0.5,
+            unit="°C",
+        ),
+        _number(
+            f"{k}_cool_offset",
+            base + 7,
+            f"{de}: Kühlen Anhebung",
+            f"{en}: cooling offset",
+            lo=-5,
+            hi=5,
+            step=0.5,
+            unit="K",
+            signed=True,
+        ),
+    )
+
+
+# Added in 0.4.0 (source: python-luxtronik definitions). Entries created before 0.3.0 without an equipment
+# option do not get these, so their polling load and entity list stay as they were.
+ADDED_IN_0_4: tuple[Register, ...] = (
+    *_mixing_circuit_holdings(2),
+    *_mixing_circuit_holdings(3),
+    _temp_in(
+        "heat_source_out",
+        10111,
+        "Temperatur: Wärmequelle Austritt",
+        "Temperature: heat source outlet",
+        every=2,
+    ),
+    _s("energy_el_cooling", 10316, "Energie: Strom Kühlen", "Energy: electric cooling", **_ENERGY),
+    _s("energy_el_pool", 10318, "Energie: Strom Pool", "Energy: electric pool", **_ENERGY),
+    _s("energy_th_cooling", 10326, "Energie: Wärme Kühlen", "Energy: thermal cooling", **_ENERGY),
+    _s("energy_th_pool", 10328, "Energie: Wärme Pool", "Energy: thermal pool", **_ENERGY),
+)
+REGISTERS = REGISTERS + ADDED_IN_0_4
 
 # Raw values whose meaning is not documented. Disabled by default; handy for
 # analysis and for reverse engineering of new firmware versions.
 RAW_INPUT_ADDRESSES: tuple[int, ...] = (
-    10109,
-    10110,
-    10112,
     10113,
     10350,
     10351,
@@ -562,6 +672,10 @@ REGISTERS = tuple(replace(reg, diagnostic=True) if reg.key in _SECONDARY_KEYS el
 
 ALL_REGISTERS: tuple[Register, ...] = REGISTERS + RAW_REGISTERS + CAPABILITIES
 
+# Keys of undocumented raw values (shown with a generic "Raw value: <address>" name).
+RAW_KEYS: frozenset[str] = frozenset(reg.key for reg in RAW_REGISTERS)
+_LEGACY_EXCLUDED: frozenset[str] = frozenset(reg.key for reg in ADDED_IN_0_4)
+
 # -------------------------------------------------------------- installation equipment
 # Optional parts of an installation. Registers of a part that is switched off in the options are
 # neither polled nor turned into entities. Their registry entries (and entity IDs) stay, so
@@ -588,6 +702,10 @@ _FEATURES_OF: dict[str, tuple[str, ...]] = {
     **{k: ("cooling",) for k in ("cooling_block", "cooling_status")},
     **{k: ("pool",) for k in ("pool_block", "pool_status")},
     "room": ("room_unit",),
+    **{f"cfg_mk{n}_{s}": (f"mk{n}",) for n in (2, 3) for s in ("mode", "setpoint", "offset", "level")},
+    **{f"cfg_mk{n}_cool_{s}": (f"mk{n}", "cooling") for n in (2, 3) for s in ("mode", "setpoint", "offset")},
+    **{k: ("cooling",) for k in ("energy_el_cooling", "energy_th_cooling")},
+    **{k: ("pool",) for k in ("energy_el_pool", "energy_th_pool")},
 }
 
 
@@ -599,8 +717,9 @@ def features_of(reg: Register) -> tuple[str, ...]:
 def active_registers(features: list[str] | tuple[str, ...] | set[str] | None) -> tuple[Register, ...]:
     """Registers to poll for the given parts. ``None`` means: everything (entries created before 0.3.0)."""
     if features is None:
-        return ALL_REGISTERS
+        return tuple(reg for reg in ALL_REGISTERS if reg.key not in _LEGACY_EXCLUDED)
     enabled = set(features)
     return tuple(reg for reg in ALL_REGISTERS if enabled.issuperset(features_of(reg)))
+
 
 BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}

@@ -11,6 +11,26 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.4.0] – 2026-11-05
+
+### Action required
+- Only if you had enabled the raw values 10109 or 10110: they are now temperatures in °C. Home Assistant may
+  report a unit change for their long-term statistics; accept it in *Settings → Repairs*.
+
+### Added
+- Mixing circuits 2 and 3: mode, setpoint, offset and level for heating, mode/setpoint/offset for cooling
+  (holdings 10020–10037, ranges from python-luxtronik). Available when the mixing circuit (and for cooling also
+  *cooling*) is selected in the equipment options.
+- Heat source outlet temperature (10111).
+- Energy counters for cooling and pool (10316, 10318, 10326, 10328), with the matching equipment part.
+
+### Changed
+- 10109 and 10110 are no longer anonymous raw values: *Temperature: outside average* and *Temperature: heat
+  source inlet* (signed, °C, enabled by default for new installs). 10112 is named *flow maximum* but stays a
+  raw value, because python-luxtronik documents no unit or scale. Keys stay `raw_10109` etc. (entity contract).
+- Entries without an equipment option (created before 0.3.0) do not get the registers added in 0.4.0, so their
+  polling load stays the same. Save the equipment in the options to use them.
+
 ## [0.3.2] – 2026-11-05
 
 ### Added
@@ -77,7 +97,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.2.0...v0.3.0

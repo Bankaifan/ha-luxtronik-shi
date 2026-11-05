@@ -12,11 +12,11 @@ Other Luxtronik controllers with SHI should work but are untested.
 
 | Area | Entities |
 |---|---|
-| Temperatures | flow, return, return target/limit/minimum, return external, outside, room (room unit only), heating/hot water limit temperatures, hot water (actual, target, min, max), mixing circuits 1–3 (flow, target, min, max) |
-| Power & energy | electric and thermal power, minimum electric power, electric/thermal energy counters (total, heating, hot water), operating hours |
+| Temperatures | flow, return, heat source inlet/outlet, outside average, return target/limit/minimum, return external, outside, room (room unit only), heating/hot water limit temperatures, hot water (actual, target, min, max), mixing circuits 1–3 (flow, target, min, max) |
+| Power & energy | electric and thermal power, minimum electric power, electric/thermal energy counters (total, heating, hot water, cooling, pool), operating hours |
 | Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active**, error number, heating/hot water/cooling/pool status, connection |
-| **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuit 1 setpoint and offset (heating and cooling), overall heating offset, power limit (0–30 kW) |
-| **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuit 1, overall heating; level (utility lockout / reduced / normal / boost); power limit (none / soft / hard) |
+| **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit (0–30 kW) |
+| **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3, overall heating; level (utility lockout / reduced / normal / boost); power limit (none / soft / hard) |
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool*, **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
 
