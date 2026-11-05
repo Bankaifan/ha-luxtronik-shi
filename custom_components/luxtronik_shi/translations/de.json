@@ -267,6 +267,15 @@
       },
       "raw": {
         "name": "Rohwert: {address}"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "cop_heating": {
+        "name": "COP gesamt"
+      },
+      "cop_dhw": {
+        "name": "COP gesamt"
       }
     },
     "binary_sensor": {
@@ -548,6 +557,12 @@
           "level": "Stufe"
         }
       }
+    }
+  },
+  "issues": {
+    "shi_unreachable": {
+      "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
+      "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet."
     }
   },
   "device": {

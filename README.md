@@ -17,8 +17,25 @@ Other Luxtronik controllers with SHI should work but are untested.
 | Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active**, error number, heating/hot water/cooling/pool status, connection |
 | **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit (0–30 kW) |
 | **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3, overall heating; level (utility lockout / reduced / normal / boost); power limit (none / soft / hard) |
+| Calculated COP | **COP** (thermal / electric power, main device) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when electric power is below 200 W, values are zero, negative or implausible, or a counter was reset |
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool*, **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
+
+A **climate entity** for the heating circuit combines the existing heating mode (off / heat) and heating setpoint
+(10–70 °C) with the flow temperature as current value. It writes the same registers as the heating mode select and the
+heating setpoint number. It is enabled by default on new installations; for entries created before it existed it is
+disabled by default (enable it in the entity settings).
+
+> Planners such as the Heat Pump Optimizer write the same registers (heating mode and setpoint). Do not use the climate
+> entity and such a planner at the same time, or they overwrite each other.
+
+A **water heater entity** in the *Hot water* device combines the existing hot water mode (off / setpoint / offset /
+level, as in the mode select) and hot water setpoint (10–65 °C) with the hot water temperature as current value. It
+writes the same registers as the hot water mode select and setpoint number. Like the climate entity it is enabled by
+default on new installations and disabled by default for entries created before it existed.
+
+> The Heat Pump Optimizer does not control hot water through this entity. A planner should not write the same registers
+> (hot water mode and setpoint) at the same time as this entity, or they overwrite each other.
 
 Settings (numbers and selects) are in the *Configuration* section of the device page. Writes use the same registers as
 the Smart Home Interface itself; the heat pump enforces its own limits.
@@ -143,6 +160,16 @@ register map changes. The recommended way is the integration.
 * Not contained in python-luxtronik and therefore only backed by observation: the equipment registers (discrete
   inputs 10000–10011), firmware major/minor version (10401/10402) and the interpretation of 10404/10406/10408 as
   operating hours.
+* Complete table of all registers (type, address, data type, scale, unit, range): [docs/registers.md](docs/registers.md).
+
+## Repair issues
+
+The integration raises this issue under *Settings > System > Repairs*. It disappears by itself when its
+condition ends.
+
+| Issue | Severity | Raised when |
+|---|---|---|
+| Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
 
 ## Notes and limitations
 

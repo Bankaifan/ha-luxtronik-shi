@@ -195,6 +195,21 @@ STATES = {
     },
 }
 
+ISSUES = {
+    "en": {
+        "shi_unreachable": {
+            "title": "{name}: Smart Home Interface not reachable",
+            "description": "The heat pump at {host} has not answered for more than {minutes} minutes. Entities are unavailable and nothing can be written. Check power, network and that Modbus/TCP is still enabled in the controller. This issue disappears by itself as soon as the heat pump answers again.",
+        },
+    },
+    "de": {
+        "shi_unreachable": {
+            "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
+            "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet.",
+        },
+    },
+}
+
 for lang in ("en", "de"):
     entity: dict[str, dict] = {"sensor": {}, "binary_sensor": {}, "switch": {}, "number": {}, "select": {}}
     for reg in registers.ALL_REGISTERS:
@@ -208,6 +223,8 @@ for lang in ("en", "de"):
         if reg.options and reg.platform in ("sensor", "select"):
             entry["state"] = {opt: STATES[lang][opt] for opt in reg.options}
         entity[reg.platform][reg.key] = entry
+    for derived in registers.DERIVED_SENSORS:
+        entity["sensor"][derived.key] = {"name": derived.name_en if lang == "en" else derived.name_de}
     for key, _bit, de, en in binary_sensor.STATUS_BITS:
         entity["binary_sensor"][key] = {"name": en if lang == "en" else de}
     entity["binary_sensor"]["online"] = {"name": "Status: connection" if lang == "en" else "Status: Verbindung"}
@@ -218,6 +235,7 @@ for lang in ("en", "de"):
     data["options"]["step"]["init"]["data"].update(labels)
     data["options"]["step"]["init"]["description"] = EQUIPMENT_TEXT[lang]["options"]
     data["entity"] = entity
+    data["issues"] = ISSUES[lang]
     data["device"] = {area: {"name": name} for area, name in DEVICE_NAMES[lang].items()}
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

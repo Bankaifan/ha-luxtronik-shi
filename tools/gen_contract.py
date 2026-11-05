@@ -26,6 +26,9 @@ contract: dict[str, list[str]] = json.loads(FIXTURE.read_text(encoding="utf-8"))
 current: dict[str, set[str]] = {}
 for reg in registers.ALL_REGISTERS:
     current.setdefault(reg.platform, set()).add(reg.key)
+current["climate"] = set(registers.CLIMATE_KEYS)
+current["water_heater"] = set(registers.WATER_HEATER_KEYS)
+current["sensor"] |= set(registers.DERIVED_SENSOR_KEYS)
 current.setdefault("binary_sensor", set()).update([bit[0] for bit in bits] + ["online"])
 
 added = []

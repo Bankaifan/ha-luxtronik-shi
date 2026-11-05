@@ -267,6 +267,15 @@
       },
       "raw": {
         "name": "Raw value: {address}"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "cop_heating": {
+        "name": "COP overall"
+      },
+      "cop_dhw": {
+        "name": "COP overall"
       }
     },
     "binary_sensor": {
@@ -548,6 +557,12 @@
           "level": "Level"
         }
       }
+    }
+  },
+  "issues": {
+    "shi_unreachable": {
+      "title": "{name}: Smart Home Interface not reachable",
+      "description": "The heat pump at {host} has not answered for more than {minutes} minutes. Entities are unavailable and nothing can be written. Check power, network and that Modbus/TCP is still enabled in the controller. This issue disappears by itself as soon as the heat pump answers again."
     }
   },
   "device": {

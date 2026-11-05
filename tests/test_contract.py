@@ -13,7 +13,12 @@ import ast
 import json
 import pathlib
 
-from custom_components.luxtronik_shi.registers import ALL_REGISTERS
+from custom_components.luxtronik_shi.registers import (
+    ALL_REGISTERS,
+    CLIMATE_KEYS,
+    DERIVED_SENSOR_KEYS,
+    WATER_HEATER_KEYS,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTRACT = json.loads((ROOT / "tests" / "fixtures" / "entity_contract.json").read_text(encoding="utf-8"))
@@ -33,6 +38,9 @@ def _current() -> dict[str, set[str]]:
     current: dict[str, set[str]] = {}
     for reg in ALL_REGISTERS:
         current.setdefault(reg.platform, set()).add(reg.key)
+    current["climate"] = set(CLIMATE_KEYS)
+    current["water_heater"] = set(WATER_HEATER_KEYS)
+    current["sensor"] |= set(DERIVED_SENSOR_KEYS)
     current.setdefault("binary_sensor", set()).update([*_status_bits(), "online"])
     return current
 

@@ -15,6 +15,7 @@ Andere Luxtronik-Anlagen mit SHI sollten funktionieren, sind aber nicht getestet
 | Temperaturen | Vorlauf, Rücklauf, Wärmequelle Ein-/Austritt, Außen-Mittelwert, Rücklauf-Soll/-Begrenzung/-Minimum, Rücklauf extern, Außen, Raum (nur mit Raumeinheit), Grenztemperaturen Heizen/Warmwasser, Warmwasser (Ist, Soll, Min, Max), Mischkreise 1–3 (Vorlauf, Soll, Min, Max) |
 | Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser, Kühlen, Pool), Betriebsstunden |
 | Status | Betriebsart als Klartext (Heizen, Warmwasser, Pool, EVU-Sperre, Abtauen, Aus, externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv**, Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool, Verbindung |
+| Berechneter COP | **COP** (thermische / elektrische Leistung, Gerät der Wärmepumpe) und **COP gesamt** für Heizen und Warmwasser (thermische / elektrische Energiezähler, im Gerät *Heizung* / *Warmwasser*); unbekannt statt einer Zahl bei elektrischer Leistung unter 200 W, Nullwerten, negativen oder unplausiblen Werten oder nach einem Zählerreset |
 | **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−5 … +5 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Leistungsbegrenzung (0–30 kW) |
 | **Schreiben: Auswahl** | Betriebsart (Aus / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3, Gesamt-Heizung; Stufe (EVU-Sperre / Absenkung / Normal / Boost); Leistungsbegrenzung (keine / weich / hart) |
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren*, **Zirkulationspumpe**, *Extra-Warmwasser* |
@@ -47,6 +48,23 @@ Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung 
 
 > Wer einen Planer wie den Heat Pump Optimizer nutzt: Teile, deren Entitäten der Planer liest oder
 > schreibt (z. B. Mischkreis 1), nicht abwählen.
+
+Eine **Climate-Entität** für den Heizkreis fasst die vorhandene Betriebsart (Aus / Heizen) und den Heizungs-Sollwert
+(10–70 °C) zusammen und zeigt die Vorlauftemperatur als Istwert. Sie schreibt dieselben Register wie die Auswahl
+„Betriebsart" und die Zahl „Sollwert" der Heizung. Bei neuen Installationen ist sie standardmäßig aktiviert; bei Einträgen,
+die vor ihrer Einführung angelegt wurden, ist sie standardmäßig deaktiviert (in den Entitäts-Einstellungen aktivierbar).
+
+> Planer wie der Heat Pump Optimizer schreiben dieselben Register (Betriebsart und Sollwert der Heizung). Climate-Entität
+> und ein solcher Planer nicht gleichzeitig verwenden, sonst überschreiben sie sich gegenseitig.
+
+Eine **Water-Heater-Entität** im Gerät *Warmwasser* fasst die vorhandene Betriebsart (Aus / Sollwert / Anhebung / Stufe,
+wie in der Auswahl) und den Warmwasser-Sollwert (10–65 °C) zusammen und zeigt die Warmwassertemperatur als Istwert. Sie
+schreibt dieselben Register wie die Auswahl „Betriebsart" und die Zahl „Sollwert" des Warmwassers. Wie die Climate-Entität
+ist sie bei neuen Installationen standardmäßig aktiviert und bei Einträgen, die vor ihrer Einführung angelegt wurden,
+standardmäßig deaktiviert.
+
+> Der Heat Pump Optimizer steuert das Warmwasser nicht über diese Entität. Ein Planer sollte nicht gleichzeitig dieselben
+> Register (Betriebsart und Sollwert des Warmwassers) schreiben, sonst überschreiben sie sich gegenseitig.
 
 Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
 dieselben Register wie die Smart-Home-Schnittstelle selbst; die Wärmepumpe erzwingt dabei ihre eigenen Grenzen.
@@ -144,6 +162,16 @@ neue Registerlisten-Änderungen getestet. Der empfohlene Weg ist die Integration
 * Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
   (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402) und die Deutung von
   10404/10406/10408 als Betriebsstunden.
+* Vollständige Tabelle aller Register (Typ, Adresse, Datentyp, Skalierung, Einheit, Bereich): [docs/registers.md](docs/registers.md).
+
+## Reparaturhinweise
+
+Die Integration meldet diesen Hinweis unter *Einstellungen > System > Reparaturen*. Er verschwindet von selbst,
+sobald seine Ursache weg ist.
+
+| Hinweis | Schweregrad | Wird ausgelöst, wenn |
+|---|---|---|
+| Smart-Home-Schnittstelle nicht erreichbar | Fehler | Alle Abfragen sind 10 Minuten in Folge fehlgeschlagen. |
 
 ## Hinweise und Grenzen
 

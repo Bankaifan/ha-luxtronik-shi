@@ -5,17 +5,25 @@ from __future__ import annotations
 import inspect
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, MANUFACTURER, MODEL
+from .const import (
+    DOMAIN,
+    ISSUE_UNREACHABLE,
+    MANUFACTURER,
+    MODEL,
+    UNREACHABLE_AFTER,
+)
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
 from .registers import ALL_REGISTERS, AREAS, Register, area_of, decode
 
@@ -91,6 +99,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_info = DeviceInfo(identifiers={(DOMAIN, entry.entry_id)})
         self._main_device_id: str | None = None
         self._sw_version: str | None = None
+        self._first_failure: datetime | None = None  # start of the current run of failed polls
+        # Set by async_setup_entry: whether new climate entities are enabled by default.
+        self.climate_enabled_default = True
+        # Same for the water heater entity.
+        self.water_heater_enabled_default = True
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:
@@ -139,8 +152,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if self._tick % block.every == 0:
                     await self._read_block(block)
         except ModbusCommError as err:
+            self._update_unreachable_issue(failed=True)
             raise UpdateFailed(f"Keine Verbindung zur Wärmepumpe: {err}") from err
         self._tick += 1
+        self._update_unreachable_issue(failed=False)
         self._update_firmware()
         return dict(self._values)
 
@@ -193,6 +208,40 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if version != self._sw_version:
             self._sw_version = version
             dr.async_get(self.hass).async_update_device(self._main_device_id, sw_version=version)
+
+    # ------------------------------------------------------------------ repair issues
+    def _issue_id(self, key: str) -> str:
+        return f"{key}_{self.config_entry.entry_id}"
+
+    def _update_unreachable_issue(self, *, failed: bool) -> None:
+        """Raise an error after UNREACHABLE_AFTER seconds of failed polls, delete it on the next success."""
+        issue_id = self._issue_id(ISSUE_UNREACHABLE)
+        if not failed:
+            self._first_failure = None
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        now = dt_util.utcnow()
+        if self._first_failure is None:
+            self._first_failure = now
+        if (now - self._first_failure).total_seconds() < UNREACHABLE_AFTER:
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_UNREACHABLE,
+            translation_placeholders={
+                "name": self.config_entry.title,
+                "host": self.client.host,
+                "minutes": str(UNREACHABLE_AFTER // 60),
+            },
+        )
+
+    def async_delete_issues(self) -> None:
+        """Remove the repair issues of this entry (on unload)."""
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_UNREACHABLE))
 
     # ------------------------------------------------------------------ writing
     async def async_write(self, reg: Register, raw: int) -> None:

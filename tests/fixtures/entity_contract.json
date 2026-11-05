@@ -20,6 +20,9 @@
     "online",
     "pool_configured"
   ],
+  "climate": [
+    "climate_heating"
+  ],
   "number": [
     "cfg_dhw_offset",
     "cfg_dhw_setpoint",
@@ -62,6 +65,9 @@
     "buffer_type",
     "compressor_thermal_power",
     "cooling_status",
+    "cop",
+    "cop_dhw",
+    "cop_heating",
     "dhw",
     "dhw_limit",
     "dhw_max",
@@ -134,5 +140,8 @@
     "extra_dhw",
     "heating_block",
     "pool_block"
+  ],
+  "water_heater": [
+    "water_heater_dhw"
   ]
 }

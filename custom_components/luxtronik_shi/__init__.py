@@ -5,13 +5,22 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL
 from .coordinator import LuxtronikCoordinator
 from .modbus_client import LuxtronikModbusClient
-from .registers import active_registers
+from .registers import CLIMATE_KEYS, WATER_HEATER_KEYS, active_registers
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.SELECT]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.CLIMATE,
+    Platform.WATER_HEATER,
+]
 
 type LuxtronikConfigEntry = ConfigEntry[LuxtronikCoordinator]
 
@@ -29,6 +38,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
         await client.close()
         raise
 
+    # The climate entity is enabled by default only on new installations: an entry that already has
+    # entities but no climate entity yet was set up before the platform existed.
+    known = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    has_climate = any(e.domain == Platform.CLIMATE and e.unique_id.endswith(CLIMATE_KEYS[0]) for e in known)
+    coordinator.climate_enabled_default = not known or has_climate
+    # Same rule for the water heater entity (added later than the climate entity).
+    has_water_heater = any(
+        e.domain == Platform.WATER_HEATER and e.unique_id.endswith(WATER_HEATER_KEYS[0]) for e in known
+    )
+    coordinator.water_heater_enabled_default = not known or has_water_heater
+
     entry.runtime_data = coordinator
     coordinator.async_setup_devices()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -39,5 +59,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        entry.runtime_data.async_delete_issues()
         await entry.runtime_data.client.close()
     return unloaded
