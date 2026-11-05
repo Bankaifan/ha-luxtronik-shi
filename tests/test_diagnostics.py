@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from homeassistant.components.diagnostics import REDACTED
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_PORT
@@ -34,7 +35,8 @@ async def test_diagnostics(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert len(shi.requests) == requests_before  # no new Modbus reads
     for key in ("integration_version", "home_assistant_version", "config_entry", "features", "firmware", "blocks"):
         assert key in diag
-    assert diag["integration_version"] == "0.6.0"
+    manifest = json.loads((Path(__file__).parent.parent / "custom_components/luxtronik_shi/manifest.json").read_text())
+    assert diag["integration_version"] == manifest["version"]
     assert diag["features"]["selected"] == ["mk1"]
     assert set(diag["features"]["capability_flags"]) == {
         "mk1", "mk2", "mk3", "cooling", "pool", "room_unit"

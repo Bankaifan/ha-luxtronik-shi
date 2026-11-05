@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.7.0] – 2026-11-05
+
 ### Added
 - Repair issue (issue #24), shown under Settings > System > Repairs and deleted automatically when the condition ends
   (also when the entry is unloaded): *SHI not reachable* (error), raised when all polls failed for 10 minutes in a row.
@@ -166,7 +168,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.2...v0.4.0
