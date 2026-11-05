@@ -1,50 +1,58 @@
-# Arbeitsregeln für dieses Repo
+# Working rules for this repository
 
-Home-Assistant-Integration `luxtronik_shi` für alpha innotec / Luxtronik Wärmepumpen über das
-Smart Home Interface (SHI, Modbus/TCP). Die Integration **schreibt auf eine produktive Heizung** und wird
-vom Heat Pump Optimizer (HPO) gesteuert. Stabilität geht vor Funktionsumfang.
+Home Assistant integration `luxtronik_shi` for alpha innotec / Luxtronik heat pumps via the Smart Home
+Interface (SHI, Modbus/TCP). The integration **writes to a heating system in production** and is driven by the
+Heat Pump Optimizer (HPO). Stability comes before features.
 
-## Harte Regeln
+## Hard rules
 
-1. **Entity-Vertrag.** Unique-IDs sind `<entry_id>_<key>`. Keys in `registers.py`, die Keys der Statusbits in
-   `binary_sensor.py` und `online` dürfen nie umbenannt, entfernt oder auf eine andere Plattform verschoben
-   werden. `tests/test_contract.py` erzwingt das. Neue Keys mit `python tools/gen_contract.py` eintragen.
-   Das Unique-ID-Schema nicht ändern ohne Registry-Migration (`async_migrate_entries`), Test und
-   Owner-Freigabe.
-   Keys, an denen der HPO der Referenzanlage hängt (Auswahl): `flow`, `return`, `outside`, `dhw`,
+1. **Entity contract.** Unique IDs are `<entry_id>_<key>`. Keys in `registers.py`, the status bit keys in
+   `binary_sensor.py` and `online` must never be renamed, removed or moved to another platform.
+   `tests/test_contract.py` enforces this. Add new keys with `python tools/gen_contract.py`.
+   Do not change the unique ID scheme without a registry migration (`async_migrate_entries`), a test and the
+   owner's approval.
+   Keys the HPO of the reference installation depends on (selection): `flow`, `return`, `outside`, `dhw`,
    `compressor_thermal_power`, `energy_el_heating`, `aux_heater_1`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`,
-   `heating_block`, `dhw_block`, `circulation`.
-2. **Anzeigenamen sind frei**, Keys nicht. Namen (`name_de`/`name_en`) dürfen sich ändern; bestehende
-   Entity-IDs bleiben in der Registry erhalten. Übersetzungen nur mit `python tools/gen_translations.py`
-   erzeugen, nie die JSON-Dateien von Hand ändern.
-3. **Keine erfundenen Registerfakten.** Adresse, Datentyp, Skalierung, Wertebereich und Wirkung nur mit Quelle:
+   `heating_block`, `dhw_block`, `circulation`. Never make these depend on an optional equipment part other
+   than the one they belong to (`cfg_mk1_setpoint` → `mk1`).
+2. **Display names may change, keys may not.** Names (`name_de`/`name_en`) may change; existing entity IDs stay
+   in the registry. Generate translations only with `python tools/gen_translations.py`, never edit the JSON
+   files by hand.
+3. **No invented register facts.** Address, data type, scale, range and effect only with a source:
    - `python-luxtronik` (Bouni/python-luxtronik, `luxtronik/definitions/{inputs,holdings}.py`, MIT),
-   - Messung an der Referenzanlage (LWDV 91-1/3, FW 3.92.3) mit Beschreibung,
-   - sonst als **offen** markieren und als Rohwert (`raw_<adresse>`, standardmäßig deaktiviert) führen.
-4. **Schreibende Register** nur mit Test gegen `tests/fake_shi.py`, inklusive Rücklesen. Keine neuen
-   Schreibzugriffe ohne Wertebereich.
-5. **Nie gegen echte Geräte oder ein echtes Home Assistant testen.** Nur die Simulation.
-6. **Keine Polling-Last erhöhen** ohne Grund: Blockabfragen, `every` für selten benötigte Werte.
+   - a measurement on the reference installation (LWDV 91-1/3, FW 3.92.3) with a description,
+   - otherwise mark it as **open** and expose it as a raw value (`raw_<address>`, disabled by default).
+4. **Writable registers** only with a test against `tests/fake_shi.py`, including read-back. No new writes
+   without a value range.
+5. **Never test against real devices or a real Home Assistant.** Simulation only.
+6. **Do not increase polling load** without reason: block reads, `every` for rarely needed values.
 
-## Versionierung
+## Versioning
 
-* `0.x.y` Beta, `1.0.0` erste fertige Version. `x.Y.0` neue Funktion, `x.y.Z` Fix/Doku/Tests.
-* Jede Änderung trägt sich unter `## [Unreleased]` bzw. der kommenden Version in `CHANGELOG.md` ein.
-* Version steht in `custom_components/luxtronik_shi/manifest.json`; `tools/check_version.py` prüft
-  Manifest, CHANGELOG und Tag. Releases erstellt der Owner (Tag `vX.Y.Z`).
+* `0.x.y` beta, `1.0.0` first complete version. `x.Y.0` new feature, `x.y.Z` fix/docs/tests.
+* Every change gets an entry under `## [Unreleased]` or the upcoming version in `CHANGELOG.md`.
+* The version lives in `custom_components/luxtronik_shi/manifest.json`; `tools/check_version.py` checks
+  manifest, CHANGELOG and tag. The owner creates releases (tag `vX.Y.Z`, CHANGELOG entry dated, not "unreleased").
 
-## Ablauf
+## Workflow
 
-* Arbeit über Branch + Pull Request, nie direkt auf `main`. Der Owner prüft und merged.
-* Vor dem PR: `ruff check .` und `pytest --timeout=60` grün.
-* Breaking Changes nur nach Rücksprache, fett im CHANGELOG, mit Migrationshinweis in der README.
+* Work on a branch and open a pull request; never push to `main` (protected). No force push.
+  The owner reviews and merges.
+* Commit author: `git config user.name "Daniel"` and
+  `git config user.email "476059+Bankaifan@users.noreply.github.com"`. Every commit message ends with the
+  trailer `Co-authored-by: Claude <noreply@anthropic.com>`.
+* **Everything on GitHub in English:** commit messages, PR titles and descriptions, issues, comments, labels,
+  CHANGELOG, README and code comments. German only in `README.de.md` and the German translations.
+* README changes go into both `README.md` (English) and `README.de.md` (German).
+* Before opening a PR: `ruff check .` and `pytest --timeout=60` pass.
+* Breaking changes only after consultation, in bold in the CHANGELOG, with migration notes in the README.
 
-## Befehle
+## Commands
 
 ```bash
 pip install -r requirements_test.txt pytest-timeout ruff
 ruff check . && pytest --timeout=60
-python tools/gen_translations.py   # nach Namensänderungen
-python tools/gen_contract.py       # nach neuen Keys
-python tools/check_version.py      # Version/CHANGELOG
+python tools/gen_translations.py   # after name changes
+python tools/gen_contract.py       # after adding keys
+python tools/check_version.py      # version/CHANGELOG
 ```
