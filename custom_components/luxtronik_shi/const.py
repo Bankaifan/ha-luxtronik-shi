@@ -6,6 +6,7 @@ DOMAIN = "luxtronik_shi"
 
 CONF_SLAVE = "slave"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_FEATURES = "features"
 
 DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1

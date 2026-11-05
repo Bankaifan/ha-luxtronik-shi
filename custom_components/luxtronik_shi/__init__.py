@@ -6,9 +6,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL
+from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL
 from .coordinator import LuxtronikCoordinator
 from .modbus_client import LuxtronikModbusClient
+from .registers import active_registers
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.SELECT]
 
@@ -19,7 +20,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
     """Set up one heat pump."""
     client = LuxtronikModbusClient(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_SLAVE])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    coordinator = LuxtronikCoordinator(hass, entry, client, scan_interval)
+    # Entries created before 0.3.0 have no equipment option: keep every entity.
+    registers = active_registers(entry.options.get(CONF_FEATURES))
+    coordinator = LuxtronikCoordinator(hass, entry, client, scan_interval, registers)
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception:

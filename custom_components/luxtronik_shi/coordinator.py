@@ -69,6 +69,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry,
         client: LuxtronikModbusClient,
         scan_interval: int,
+        registers: tuple[Register, ...] = ALL_REGISTERS,
     ) -> None:
         super().__init__(
             hass,
@@ -80,7 +81,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self._values: dict[str, Any] = {}
         self._tick = 0
-        self._blocks = plan_blocks(ALL_REGISTERS)
+        self.registers = registers
+        self._blocks = plan_blocks(registers)
         self._missing: set[str] = set()
         self.device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},

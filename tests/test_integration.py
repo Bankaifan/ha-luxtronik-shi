@@ -42,12 +42,25 @@ async def test_config_flow(hass: HomeAssistant, shi: FakeSHI) -> None:
         result["flow_id"],
         {CONF_NAME: "Wärmepumpe", CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1},
     )
+    # Second step: equipment, pre-filled from the capability flags (fake = reference: only mixing circuit 1)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "equipment"
+    defaults = {str(k): k.default() for k in result["data_schema"].schema}
+    assert defaults == {"mk1": True, "mk2": False, "mk3": False, "cooling": False, "pool": False, "room_unit": False}
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], defaults)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Wärmepumpe"
     assert result["data"] == {CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1}
+    assert result["options"] == {"scan_interval": 30, "features": ["mk1"]}
     await hass.async_block_till_done()
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     assert entry.state is ConfigEntryState.LOADED
+
+    registry = er.async_get(hass)
+    keys = {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in er.async_entries_for_config_entry(registry, entry.entry_id)}
+    assert {"flow", "cfg_mk1_setpoint", "heating_block", "dhw_block", "circulation"} <= keys
+    assert not keys & {"pool_block", "cooling_block", "mk2_flow", "cfg_mk1_cool_mode", "room"}
 
 
 async def test_config_flow_cannot_connect(hass: HomeAssistant, socket_enabled) -> None:
@@ -255,3 +268,46 @@ async def test_unique_id_scheme(hass: HomeAssistant, shi: FakeSHI) -> None:
         assert reg_entry.unique_id.startswith(prefix), reg_entry.unique_id
         key = reg_entry.unique_id.removeprefix(prefix)
         assert key in contract[reg_entry.domain], f"{reg_entry.domain}.{key} nicht im Vertrag"
+
+
+async def test_equipment_off_and_on_keeps_entity_ids(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Switching a part off removes its entities; switching it on again restores the same entity IDs."""
+    entry = await _setup(hass, shi)
+    pool_block = _entity_id(hass, entry, "switch", "pool_block")
+    mk1_setpoint = _entity_id(hass, entry, "number", "cfg_mk1_setpoint")
+    reads_before = len(entry.runtime_data.registers)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 30, "mk1": True, "mk2": False, "mk3": False,
+                            "cooling": False, "pool": False, "room_unit": False}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options["features"] == ["mk1"]
+    assert len(entry.runtime_data.registers) < reads_before
+    assert "pool_block" not in {r.key for r in entry.runtime_data.registers}
+    assert hass.states.get(pool_block) is None or hass.states.get(pool_block).state == "unavailable"
+    assert hass.states.get(mk1_setpoint).state not in ("unavailable", "unknown")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 30, "mk1": True, "mk2": False, "mk3": False,
+                            "cooling": False, "pool": True, "room_unit": False}
+    )
+    await hass.async_block_till_done()
+    assert _entity_id(hass, entry, "switch", "pool_block") == pool_block
+    assert hass.states.get(pool_block).state in ("on", "off")
+
+
+async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Entries from before 0.3.0 have no equipment option and must not lose any entity."""
+    import json
+    import pathlib
+
+    entry = await _setup(hass, shi)
+    assert "features" not in entry.options
+    contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
+    registry = er.async_get(hass)
+    entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+    assert len(entries) == sum(len(keys) for keys in contract.values())

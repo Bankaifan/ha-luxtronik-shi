@@ -12,6 +12,25 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/):
 
 ## [Unreleased]
 
+## [0.3.0] – unveröffentlicht
+
+### Hinzugefügt
+- **Ausstattung der Anlage** im Einrichtungsdialog und in den Optionen: Mischkreis 1–3, Kühlung, Pool,
+  Raumeinheit. Beim Einrichten aus den Ausstattungs-Registern (Discrete Inputs 10002–10011) vorbelegt.
+  Abgewählte Teile werden nicht abgefragt und bekommen keine Entitäten; ihre Registry-Einträge und
+  Entity-IDs bleiben erhalten und kommen beim Wiedereinschalten zurück.
+- Tests für Vorbelegung, Ab- und Wiederanwahl und für Einträge ohne Ausstattungs-Option.
+
+### Geändert
+- **Anzeigenamen nach Bereichen gegliedert** („Heizen: Sollwert“, „Warmwasser: Temperatur“,
+  „Mischkreis 1: Vorlauf“, „Status: Betriebsart“, „Energie: Strom Heizen“ …), damit die Geräteseite sortiert
+  ist. Keys, Unique-IDs und bestehende Entity-IDs ändern sich **nicht**; sichtbar ändern sich nur Namen von
+  Entitäten, denen kein eigener Name gegeben wurde.
+- Grenz-, Minimum- und Maximumwerte (Rücklauf-Begrenzung, Warmwasser Min/Max/Grenze, Mischkreis Min/Max,
+  Rücklauf extern) liegen jetzt unter *Diagnose*.
+- Einträge, die vor 0.3.0 angelegt wurden, behalten alle Entitäten, bis die Ausstattung in den Optionen
+  geändert wird.
+
 ## [0.2.1] – unveröffentlicht
 
 ### Hinzugefügt

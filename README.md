@@ -16,7 +16,27 @@ Andere Luxtronik-Anlagen mit SHI sollten funktionieren, sind aber nicht getestet
 | **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−5 … +5 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreis 1 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Leistungsbegrenzung (0–30 kW) |
 | **Schreiben: Auswahl** | Betriebsart (Aus / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreis 1, Gesamt-Heizung; Stufe (EVU-Sperre / Absenkung / Normal / Boost); Leistungsbegrenzung (keine / weich / hart) |
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren*, **Zirkulationspumpe**, *Extra-Warmwasser* |
-| Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
+| Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
+
+### Gliederung in Home Assistant
+
+Die Entitätsnamen beginnen mit ihrem Bereich, so steht auf der Geräteseite zusammen, was zusammengehört:
+`Temperatur:` · `Heizen:` · `Warmwasser:` · `Mischkreis 1–3:` · `Kühlen:` · `Pool:` · `Leistungsbegrenzung:` ·
+`Gesamt-Heizung:` · `Status:` · `Leistung:` · `Energie:` · `Betriebsstunden:` · `Anlage:` · `Firmware:` ·
+`Ausstattung:` · `Rohwert:`. Innerhalb der Geräteseite trennt Home Assistant außerdem nach *Steuerelemente*,
+*Sensoren*, *Konfiguration* und *Diagnose*.
+
+### Ausstattung der Anlage
+
+Beim Einrichten fragt die Integration, welche optionalen Teile vorhanden sind: **Mischkreis 1–3, Kühlung,
+Pool, Raumeinheit**. Vorausgewählt ist, was die Wärmepumpe über ihre Ausstattungs-Register meldet.
+Abgewählte Teile werden nicht abgefragt und erscheinen nicht als Entitäten. Änderbar unter
+*Einstellungen → Geräte & Dienste → Luxtronik SHI → Konfigurieren*. Die Entity-IDs abgewählter Teile bleiben
+reserviert; schaltet man den Teil wieder ein, kommen dieselben Entitäten zurück.
+Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung dort einmal gespeichert wird.
+
+> Wer einen Planer wie den Heat Pump Optimizer nutzt: Teile, deren Entitäten der Planer liest oder
+> schreibt (z. B. Mischkreis 1), nicht abwählen.
 
 Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
 dieselben Register wie die Smart-Home-Schnittstelle selbst; die Wärmepumpe erzwingt dabei ihre eigenen Grenzen.
@@ -36,6 +56,7 @@ Wichtige Eigenschaften:
 2. „Luxtronik SHI (Modbus)" installieren, Home Assistant neu starten.
 3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „Luxtronik SHI (Modbus)"**.
 4. Name, IP-Adresse der Wärmepumpe, Port (502) und Geräte-ID (1) eintragen.
+5. Ausstattung bestätigen (siehe oben).
 
 Voraussetzung: In der Regelung ist Modbus/TCP aktiviert (Smart-Home-Schnittstelle) und die Wärmepumpe ist im Netz erreichbar.
 
@@ -77,6 +98,17 @@ Beide Integrationen können nebeneinander laufen, sollten aber klar getrennt wer
 Das Skript erzeugt aus der Registerliste die gleichwertige YAML-Konfiguration (`modbus:`-Hub plus Templates). Es ist ein
 **Legacy-Werkzeug** für alle, die bewusst bei YAML bleiben wollen. Es wird nicht mehr produktiv eingesetzt und nicht gegen
 neue Registerlisten-Änderungen getestet. Der empfohlene Weg ist die Integration.
+
+## Quellen der Registerkarte
+
+* [Bouni/python-luxtronik](https://github.com/Bouni/python-luxtronik), Modul `luxtronik/shi` und
+  `luxtronik/definitions/{inputs,holdings}.py` (MIT): Adressen, Datentypen, Wertebereiche, Firmware-Stand.
+  Laut dieser Quelle sind die SHI-Holding-Register **flüchtig** und werden beim Neustart der Regelung
+  zurückgesetzt – anders als die dauerhaften Einstellungen der Regelung.
+* Messungen an der Referenzanlage (LWDV 91-1/3, Firmware 3.92.3), siehe unten.
+* Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
+  (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402) und die Deutung von
+  10404/10406/10408 als Betriebsstunden.
 
 ## Hinweise und Grenzen
 
