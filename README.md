@@ -51,13 +51,26 @@ Key properties:
 * Negative values (heating curve offset) are written correctly as 16-bit two's complement.
 * German and English.
 
-## Installation (HACS)
+## Installation
+
+The integration is not in the default catalog (yet), so it is added by link.
+
+**Home Assistant 2026.11 or newer (Marketplace):**
+
+1. **Settings → Marketplace → Add from link** → `https://github.com/Bankaifan/ha-luxtronik-shi`. Adding a repository by
+   link needs a GitHub connection (device sign-in, read-only access to public data).
+2. Install "Luxtronik SHI (Modbus)", restart Home Assistant.
+
+**Older Home Assistant (HACS):**
 
 1. HACS → ⋮ → **Custom repositories** → `https://github.com/Bankaifan/ha-luxtronik-shi`, category **Integration**.
 2. Install "Luxtronik SHI (Modbus)", restart Home Assistant.
-3. **Settings → Devices & services → Add integration → "Luxtronik SHI (Modbus)"**.
-4. Enter name, IP address of the heat pump, port (502) and unit ID (1).
-5. Confirm the installation equipment (see above).
+
+**Then, in both cases:**
+
+1. **Settings → Devices & services → Add integration → "Luxtronik SHI (Modbus)"**.
+2. Enter name, IP address of the heat pump, port (502) and unit ID (1).
+3. Confirm the installation equipment (see above).
 
 Requirement: Modbus/TCP (Smart Home Interface) is enabled in the controller and the heat pump is reachable on the network.
 

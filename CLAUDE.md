@@ -38,6 +38,9 @@ Heat Pump Optimizer (HPO). Stability comes before features.
   `## [Unreleased]` above it, update the compare links). On merge, `.github/workflows/release.yml` creates tag
   `vX.Y.Z` and the GitHub release from that CHANGELOG section. Without a bump, entries just collect under
   `[Unreleased]`. Never create tags by hand.
+* The CHANGELOG section becomes the release notes shown in the Home Assistant update entity. If users must do
+  something before or after updating (changed option, removed entity, renamed setting), put a
+  `### Action required` subsection **first** in that version's section.
 * State the proposed version and the reason (feature/fix/breaking) in the PR description, so the owner can
   object during review.
 

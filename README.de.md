@@ -52,13 +52,26 @@ Wichtige Eigenschaften:
 * Negative Werte (Heizkurven-Anhebung) werden korrekt als 16-bit-Zweierkomplement geschrieben.
 * Deutsch und Englisch.
 
-## Installation (HACS)
+## Installation
+
+Die Integration ist (noch) nicht im Standard-Katalog und wird deshalb per Link hinzugefügt.
+
+**Home Assistant 2026.11 oder neuer (Marketplace):**
+
+1. **Einstellungen → Marketplace →** per Link hinzufügen (*Add from link*) → `https://github.com/Bankaifan/ha-luxtronik-shi`.
+   Dafür ist eine GitHub-Verbindung nötig (Anmeldung per Gerätecode, nur Lesezugriff auf öffentliche Daten).
+2. „Luxtronik SHI (Modbus)" installieren, Home Assistant neu starten.
+
+**Ältere Home-Assistant-Versionen (HACS):**
 
 1. HACS → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/Bankaifan/ha-luxtronik-shi`, Kategorie **Integration**.
 2. „Luxtronik SHI (Modbus)" installieren, Home Assistant neu starten.
-3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „Luxtronik SHI (Modbus)"**.
-4. Name, IP-Adresse der Wärmepumpe, Port (502) und Geräte-ID (1) eintragen.
-5. Ausstattung bestätigen (siehe oben).
+
+**Danach in beiden Fällen:**
+
+1. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „Luxtronik SHI (Modbus)"**.
+2. Name, IP-Adresse der Wärmepumpe, Port (502) und Geräte-ID (1) eintragen.
+3. Ausstattung bestätigen (siehe oben).
 
 Voraussetzung: In der Regelung ist Modbus/TCP aktiviert (Smart-Home-Schnittstelle) und die Wärmepumpe ist im Netz erreichbar.
 

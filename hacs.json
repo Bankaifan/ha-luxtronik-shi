@@ -1,5 +1,4 @@
 {
   "name": "Luxtronik SHI (Modbus)",
-  "homeassistant": "2025.8.0",
-  "render_readme": true
+  "homeassistant": "2025.8.0"
 }

@@ -11,6 +11,18 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.3.2] – 2026-11-05
+
+### Added
+- Integration icon in `custom_components/luxtronik_shi/brand/` (`icon.png`, `icon@2x.png`), shown by Home Assistant
+  2026.3+ and the Marketplace. Source drawing in `assets/icon.svg`. No manufacturer logos are used.
+- Manifest `categories`: `climate.heat_pumps_air_conditioning` (Marketplace/HACS catalog category).
+
+### Changed
+- `hacs.json`: removed `render_readme` (no longer a documented key).
+- CI: the HACS action no longer skips the `brands` check.
+- README: installation via the Home Assistant Marketplace (2026.11+) alongside HACS.
+
 ## [0.3.1] – 2026-11-05
 
 ### Added
@@ -65,7 +77,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/2f54427...v0.2.0
