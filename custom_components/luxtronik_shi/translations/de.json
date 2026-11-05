@@ -232,6 +232,30 @@
       "fw_minor": {
         "name": "Firmware: Version Neben"
       },
+      "raw_10109": {
+        "name": "Temperatur: Außen Mittelwert"
+      },
+      "raw_10110": {
+        "name": "Temperatur: Wärmequelle Eintritt"
+      },
+      "raw_10112": {
+        "name": "Rohwert: Vorlauf Maximum (10112)"
+      },
+      "heat_source_out": {
+        "name": "Temperatur: Wärmequelle Austritt"
+      },
+      "energy_el_cooling": {
+        "name": "Energie: Strom Kühlen"
+      },
+      "energy_el_pool": {
+        "name": "Energie: Strom Pool"
+      },
+      "energy_th_cooling": {
+        "name": "Energie: Wärme Kühlen"
+      },
+      "energy_th_pool": {
+        "name": "Energie: Wärme Pool"
+      },
       "raw": {
         "name": "Rohwert: {address}"
       }
@@ -345,6 +369,30 @@
       },
       "cfg_overall_offset": {
         "name": "Gesamt-Heizung: Anhebung"
+      },
+      "cfg_mk2_setpoint": {
+        "name": "Mischkreis 2: Heizen Sollwert"
+      },
+      "cfg_mk2_offset": {
+        "name": "Mischkreis 2: Heizen Anhebung"
+      },
+      "cfg_mk2_cool_setpoint": {
+        "name": "Mischkreis 2: Kühlen Sollwert"
+      },
+      "cfg_mk2_cool_offset": {
+        "name": "Mischkreis 2: Kühlen Anhebung"
+      },
+      "cfg_mk3_setpoint": {
+        "name": "Mischkreis 3: Heizen Sollwert"
+      },
+      "cfg_mk3_offset": {
+        "name": "Mischkreis 3: Heizen Anhebung"
+      },
+      "cfg_mk3_cool_setpoint": {
+        "name": "Mischkreis 3: Kühlen Sollwert"
+      },
+      "cfg_mk3_cool_offset": {
+        "name": "Mischkreis 3: Kühlen Anhebung"
       }
     },
     "select": {
@@ -435,6 +483,60 @@
           "reduced": "Absenkung",
           "normal": "Normal",
           "boost": "Boost"
+        }
+      },
+      "cfg_mk2_mode": {
+        "name": "Mischkreis 2: Heizen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_mk2_level": {
+        "name": "Mischkreis 2: Heizen Stufe",
+        "state": {
+          "evu_lock": "EVU-Sperre",
+          "reduced": "Absenkung",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_mk2_cool_mode": {
+        "name": "Mischkreis 2: Kühlen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_mk3_mode": {
+        "name": "Mischkreis 3: Heizen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
+        }
+      },
+      "cfg_mk3_level": {
+        "name": "Mischkreis 3: Heizen Stufe",
+        "state": {
+          "evu_lock": "EVU-Sperre",
+          "reduced": "Absenkung",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_mk3_cool_mode": {
+        "name": "Mischkreis 3: Kühlen Betriebsart",
+        "state": {
+          "off": "Aus",
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
         }
       }
     }

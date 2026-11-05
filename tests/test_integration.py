@@ -119,7 +119,7 @@ async def test_values(hass: HomeAssistant, shi: FakeSHI) -> None:
 
     # raw diagnostic values are registered but disabled by default
     registry = er.async_get(hass)
-    raw = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10109"))
+    raw = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10113"))
     assert raw.disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
 
@@ -310,4 +310,67 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
-    assert len(entries) == sum(len(keys) for keys in contract.values())
+    from custom_components.luxtronik_shi.registers import ADDED_IN_0_4
+
+    # everything from before 0.4.0, nothing that was added later
+    added = {reg.key for reg in ADDED_IN_0_4}
+    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added)
+    assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
+
+
+async def _setup_with(hass: HomeAssistant, shi: FakeSHI, features: list[str]) -> MockConfigEntry:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="WP",
+        unique_id=f"127.0.0.1:{shi.port}:1",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1},
+        options={"scan_interval": 30, "features": features},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_promoted_raw_values(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; keys stay raw_*."""
+    entry = await _setup_with(hass, shi, ["mk1"])
+    data = entry.runtime_data.data
+    assert data["raw_10109"] == 0.5
+    assert data["raw_10110"] == 0.6
+    assert data["heat_source_out"] == -1.0
+    registry = er.async_get(hass)
+    entity = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10110"))
+    assert entity.disabled_by is None
+    assert entity.unit_of_measurement == "°C"
+
+
+async def test_mixing_circuit_2_write(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup_with(hass, shi, ["mk1", "mk2"])
+    setpoint = _entity_id(hass, entry, "number", "cfg_mk2_setpoint")
+    await hass.services.async_call("number", "set_value", {"entity_id": setpoint, "value": 32.5}, blocking=True)
+    assert shi.holding_value(10021) == 325
+    assert hass.states.get(setpoint).state == "32.5"
+
+    offset = _entity_id(hass, entry, "number", "cfg_mk2_offset")
+    await hass.services.async_call("number", "set_value", {"entity_id": offset, "value": -2}, blocking=True)
+    assert shi.holding_value(10022) == 0x10000 - 20
+    assert hass.states.get(offset).state == "-2.0"
+
+    mode = _entity_id(hass, entry, "select", "cfg_mk2_mode")
+    await hass.services.async_call("select", "select_option", {"entity_id": mode, "option": "setpoint"}, blocking=True)
+    assert shi.holding_value(10020) == 1
+
+    # mixing circuit 3 and cooling are not selected: no entities
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cfg_mk3_setpoint") is None
+    assert registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cfg_mk2_cool_setpoint") is None
+
+
+async def test_cooling_and_pool_energy(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup_with(hass, shi, ["mk1", "cooling", "pool"])
+    data = entry.runtime_data.data
+    assert data["energy_el_cooling"] == 1.0
+    assert data["energy_el_pool"] == 2.0
+    assert data["energy_th_cooling"] == 3.0
+    assert data["energy_th_pool"] == 4.0

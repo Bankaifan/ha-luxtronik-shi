@@ -6,7 +6,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import LuxtronikCoordinator
-from .registers import Register
+from .registers import RAW_KEYS, Register
 
 
 class LuxtronikEntity(CoordinatorEntity[LuxtronikCoordinator]):
@@ -19,7 +19,7 @@ class LuxtronikEntity(CoordinatorEntity[LuxtronikCoordinator]):
         self._reg = reg
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{reg.key}"
         self._attr_device_info = coordinator.device_info
-        if reg.key.startswith("raw_"):
+        if reg.key in RAW_KEYS:
             self._attr_translation_key = "raw"
             self._attr_translation_placeholders = {"address": str(reg.address)}
         else:

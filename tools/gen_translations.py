@@ -180,7 +180,7 @@ for lang in ("en", "de"):
     entity: dict[str, dict] = {"sensor": {}, "binary_sensor": {}, "switch": {}, "number": {}, "select": {}}
     for reg in registers.ALL_REGISTERS:
         name = reg.name_en if lang == "en" else reg.name_de
-        if reg.key.startswith("raw_"):
+        if reg.key in registers.RAW_KEYS:
             entity["sensor"]["raw"] = {
                 "name": "Raw value: {address}" if lang == "en" else "Rohwert: {address}"
             }

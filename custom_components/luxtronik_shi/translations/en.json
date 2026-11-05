@@ -232,6 +232,30 @@
       "fw_minor": {
         "name": "Firmware: minor version"
       },
+      "raw_10109": {
+        "name": "Temperature: outside average"
+      },
+      "raw_10110": {
+        "name": "Temperature: heat source inlet"
+      },
+      "raw_10112": {
+        "name": "Raw value: flow maximum (10112)"
+      },
+      "heat_source_out": {
+        "name": "Temperature: heat source outlet"
+      },
+      "energy_el_cooling": {
+        "name": "Energy: electric cooling"
+      },
+      "energy_el_pool": {
+        "name": "Energy: electric pool"
+      },
+      "energy_th_cooling": {
+        "name": "Energy: thermal cooling"
+      },
+      "energy_th_pool": {
+        "name": "Energy: thermal pool"
+      },
       "raw": {
         "name": "Raw value: {address}"
       }
@@ -345,6 +369,30 @@
       },
       "cfg_overall_offset": {
         "name": "Overall heating: offset"
+      },
+      "cfg_mk2_setpoint": {
+        "name": "Mixing circuit 2: heating setpoint"
+      },
+      "cfg_mk2_offset": {
+        "name": "Mixing circuit 2: heating offset"
+      },
+      "cfg_mk2_cool_setpoint": {
+        "name": "Mixing circuit 2: cooling setpoint"
+      },
+      "cfg_mk2_cool_offset": {
+        "name": "Mixing circuit 2: cooling offset"
+      },
+      "cfg_mk3_setpoint": {
+        "name": "Mixing circuit 3: heating setpoint"
+      },
+      "cfg_mk3_offset": {
+        "name": "Mixing circuit 3: heating offset"
+      },
+      "cfg_mk3_cool_setpoint": {
+        "name": "Mixing circuit 3: cooling setpoint"
+      },
+      "cfg_mk3_cool_offset": {
+        "name": "Mixing circuit 3: cooling offset"
       }
     },
     "select": {
@@ -435,6 +483,60 @@
           "reduced": "Reduced",
           "normal": "Normal",
           "boost": "Boost"
+        }
+      },
+      "cfg_mk2_mode": {
+        "name": "Mixing circuit 2: heating mode",
+        "state": {
+          "off": "Off",
+          "setpoint": "Setpoint",
+          "offset": "Offset",
+          "level": "Level"
+        }
+      },
+      "cfg_mk2_level": {
+        "name": "Mixing circuit 2: heating level",
+        "state": {
+          "evu_lock": "Utility lockout",
+          "reduced": "Reduced",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_mk2_cool_mode": {
+        "name": "Mixing circuit 2: cooling mode",
+        "state": {
+          "off": "Off",
+          "setpoint": "Setpoint",
+          "offset": "Offset",
+          "level": "Level"
+        }
+      },
+      "cfg_mk3_mode": {
+        "name": "Mixing circuit 3: heating mode",
+        "state": {
+          "off": "Off",
+          "setpoint": "Setpoint",
+          "offset": "Offset",
+          "level": "Level"
+        }
+      },
+      "cfg_mk3_level": {
+        "name": "Mixing circuit 3: heating level",
+        "state": {
+          "evu_lock": "Utility lockout",
+          "reduced": "Reduced",
+          "normal": "Normal",
+          "boost": "Boost"
+        }
+      },
+      "cfg_mk3_cool_mode": {
+        "name": "Mixing circuit 3: cooling mode",
+        "state": {
+          "off": "Off",
+          "setpoint": "Setpoint",
+          "offset": "Offset",
+          "level": "Level"
         }
       }
     }
