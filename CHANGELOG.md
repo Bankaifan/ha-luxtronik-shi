@@ -11,6 +11,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Changed
+- CI runs the tests against the minimum Home Assistant version declared in `hacs.json` (2025.8.0) in addition to the
+  newest ones. The minimum passes, so it stays at 2025.8.0.
+
 ## [0.6.0] – 2026-11-05
 
 ### Added
