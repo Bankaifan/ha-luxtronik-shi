@@ -397,7 +397,7 @@ async def test_sub_devices(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert heating.via_device_id == main.id and hot_water.via_device_id == main.id
     assert heating.name == "WP Heating"
     assert hot_water.name == "WP Hot water"
-    assert main.sw_version == "3.1 (Plattform 3)"
+    assert main.sw_version == "3.92 (Plattform 3)"
 
     def device_of(platform: str, key: str) -> str:
         return entities.async_get(_entity_id(hass, entry, platform, key)).device_id

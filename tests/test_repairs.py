@@ -1,4 +1,4 @@
-"""Repair issue: unreachable SHI (issue #24)."""
+"""Repair issues: old firmware and unreachable SHI (issue #24)."""
 
 from __future__ import annotations
 
@@ -122,3 +122,44 @@ async def test_issue_removed_when_entry_is_unloaded(hass: HomeAssistant, shi: Fa
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert _issue(hass, entry, "shi_unreachable") is None
+
+
+async def test_old_firmware_raises_warning(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.set_firmware(3, 90)
+    entry = await _setup(hass, shi)
+    issue = _issue(hass, entry, "firmware_old")
+    assert issue is not None
+    assert issue.severity is ir.IssueSeverity.WARNING
+    assert issue.translation_key == "firmware_old"
+    assert issue.translation_placeholders["version"] == "3.90"
+    assert issue.translation_placeholders["minimum"] == "3.92.0"
+    assert not issue.is_fixable
+
+
+@pytest.mark.parametrize("firmware", [(3, 92), (3, 93), (4, 0)])
+async def test_no_firmware_issue_for_current_firmware(
+    hass: HomeAssistant, shi: FakeSHI, firmware: tuple[int, int]
+) -> None:
+    shi.set_firmware(*firmware)
+    entry = await _setup(hass, shi)
+    assert _issue(hass, entry, "firmware_old") is None
+
+
+async def test_firmware_issue_disappears_after_update(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.set_firmware(3, 1)
+    entry = await _setup(hass, shi)
+    assert _issue(hass, entry, "firmware_old") is not None
+    shi.set_firmware(3, 92)
+    coordinator = entry.runtime_data
+    coordinator._tick = 120  # firmware is only polled every 120th cycle
+    await coordinator.async_refresh()
+    assert _issue(hass, entry, "firmware_old") is None
+
+
+async def test_firmware_issue_removed_when_entry_is_unloaded(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.set_firmware(3, 1)
+    entry = await _setup(hass, shi)
+    assert _issue(hass, entry, "firmware_old") is not None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert _issue(hass, entry, "firmware_old") is None
