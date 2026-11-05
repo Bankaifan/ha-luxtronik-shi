@@ -9,7 +9,14 @@ versioning follows [Semantic Versioning](https://semver.org/):
 * Changes that could alter an entity ID (key renamed/removed, platform changed, unique ID scheme changed) are
   **breaking changes**. They are marked in bold here and need a migration path.
 
-## [2026-11-05]
+## [Unreleased]
+
+## [0.3.1] – 2026-11-05
+
+### Added
+- Automatic releases: when a version bump reaches `main`, the workflow `release.yml` creates the tag `vX.Y.Z`
+  and a GitHub release with the matching CHANGELOG section as notes.
+- Pull requests that bump the version are checked for a dated CHANGELOG section.
 
 ### Changed
 - README in English; German version moved to `README.de.md`. CHANGELOG and `CLAUDE.md` in English.
@@ -32,7 +39,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   external) are now in the *Diagnostic* section.
 - Entries created before 0.3.0 keep all entities until the equipment is changed in the options.
 
-## [0.2.1] – unreleased
+## [0.2.1] – not released separately (included in 0.3.0)
 
 ### Added
 - Entity contract: `tests/fixtures/entity_contract.json` and `tests/test_contract.py` fail CI when a key is
@@ -58,6 +65,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/2f54427...v0.2.0
 [0.1.0]: https://github.com/Bankaifan/ha-luxtronik-shi/commit/2f54427

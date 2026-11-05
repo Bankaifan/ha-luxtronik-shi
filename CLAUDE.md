@@ -32,7 +32,14 @@ Heat Pump Optimizer (HPO). Stability comes before features.
 * `0.x.y` beta, `1.0.0` first complete version. `x.Y.0` new feature, `x.y.Z` fix/docs/tests.
 * Every change gets an entry under `## [Unreleased]` or the upcoming version in `CHANGELOG.md`.
 * The version lives in `custom_components/luxtronik_shi/manifest.json`; `tools/check_version.py` checks
-  manifest, CHANGELOG and tag. The owner creates releases (tag `vX.Y.Z`, CHANGELOG entry dated, not "unreleased").
+  manifest, CHANGELOG and tag.
+* **Releases are automatic.** Whoever prepares a PR decides whether it releases: to release, bump the manifest
+  version per the rules above and rename `## [Unreleased]` to `## [X.Y.Z] – YYYY-MM-DD` (keep an empty
+  `## [Unreleased]` above it, update the compare links). On merge, `.github/workflows/release.yml` creates tag
+  `vX.Y.Z` and the GitHub release from that CHANGELOG section. Without a bump, entries just collect under
+  `[Unreleased]`. Never create tags by hand.
+* State the proposed version and the reason (feature/fix/breaking) in the PR description, so the owner can
+  object during review.
 
 ## Workflow
 

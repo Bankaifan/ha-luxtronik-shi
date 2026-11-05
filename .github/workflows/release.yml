@@ -1,0 +1,49 @@
+name: Release
+
+# Creates tag vX.Y.Z and a GitHub release automatically when a version bump reaches main.
+# The version is taken from manifest.json, the release notes from the matching CHANGELOG section.
+# Nothing happens if the tag already exists, so ordinary merges without a version bump are ignored.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Detect version bump
+        id: version
+        run: |
+          version="$(python tools/check_version.py --version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "Tag v$version exists, nothing to release."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check CHANGELOG
+        if: steps.version.outputs.new == 'true'
+        run: python tools/check_version.py "refs/tags/v${{ steps.version.outputs.version }}"
+      - name: Create tag and release
+        if: steps.version.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python tools/check_version.py --notes > notes.md
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md
