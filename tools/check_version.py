@@ -6,20 +6,33 @@ Usage:
   python tools/check_version.py refs/tags/v0.3.0   # tag must match the manifest version, section dated
   python tools/check_version.py --version          # print the manifest version
   python tools/check_version.py --notes            # print the CHANGELOG section of the manifest version
+  python tools/check_version.py --prerelease       # print "true" for X.Y.Z-beta.N, otherwise "false"
+
+Versions are X.Y.Z (stable) or X.Y.Z-beta.N (beta, published as a GitHub pre-release).
+CHECK_VERSION_ROOT overrides the repo root (used by the tests).
 """
 
 import json
+import os
 import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(os.environ.get("CHECK_VERSION_ROOT") or pathlib.Path(__file__).resolve().parent.parent)
+STABLE = re.compile(r"\d+\.\d+\.\d+")
+BETA = re.compile(r"\d+\.\d+\.\d+-beta\.\d+")
 version = json.loads((ROOT / "custom_components" / "luxtronik_shi" / "manifest.json").read_text())["version"]
 changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 args = sys.argv[1:]
 
 if "--version" in args:
     print(version)
+    sys.exit(0)
+
+is_beta = bool(BETA.fullmatch(version))
+
+if "--prerelease" in args:
+    print("true" if is_beta else "false")
     sys.exit(0)
 
 heading = re.compile(rf"^## \[{re.escape(version)}\](.*)$", re.MULTILINE)
@@ -34,8 +47,8 @@ if "--notes" in args:
     sys.exit(0)
 
 errors = []
-if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-    errors.append(f"Manifest version '{version}' is not X.Y.Z")
+if not (STABLE.fullmatch(version) or is_beta):
+    errors.append(f"Manifest version '{version}' is not X.Y.Z or X.Y.Z-beta.N")
 if not match:
     errors.append(f"CHANGELOG.md has no section '## [{version}]'")
 
@@ -49,4 +62,5 @@ if release and match and not re.search(r"\d{4}-\d{2}-\d{2}", match.group(1)):
 if errors:
     print("\n".join(errors))
     sys.exit(1)
-print(f"Version {version} ok" + (" (ready to release)" if release else ""))
+kind = "beta pre-release" if is_beta else "release"
+print(f"Version {version} ok" + (f" (ready to publish as {kind})" if release else ""))

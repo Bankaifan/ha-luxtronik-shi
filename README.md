@@ -108,6 +108,12 @@ Requirement: Modbus/TCP (Smart Home Interface) is enabled in the controller and 
 > **Do not delete and re-add the integration** if other automations or a planner depend on its entity IDs.
 > Re-adding creates new entities with default IDs. Use *Reconfigure* to change host, port or unit ID instead.
 
+## Beta versions
+
+Pre-release versions (`X.Y.Z-beta.N`) are published as GitHub pre-releases. To test one in HACS, open the integration,
+choose **Redownload** and enable **Show beta versions**. Beta versions may change between releases and are meant for
+testing. Users who do not enable this option are not affected and only get stable versions.
+
 ## Migrating from a YAML `modbus:` configuration
 
 The integration fully replaces a YAML configuration (`modbus:` hub plus template entities). The internal keys

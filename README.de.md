@@ -111,6 +111,13 @@ Voraussetzung: In der Regelung ist Modbus/TCP aktiviert (Smart-Home-Schnittstell
 > Beim Neuanlegen entstehen neue Entitäten mit Standard-IDs. Host, Port oder Geräte-ID stattdessen über
 > *Neu konfigurieren* ändern.
 
+## Beta-Versionen
+
+Vorabversionen (`X.Y.Z-beta.N`) werden als GitHub-Pre-Releases veröffentlicht. Zum Testen in HACS die Integration
+öffnen, **Erneut herunterladen** (*Redownload*) wählen und **Beta-Versionen anzeigen** (*Show beta versions*)
+aktivieren. Beta-Versionen können sich zwischen den Releases ändern und sind zum Testen gedacht. Wer die Option nicht
+aktiviert, ist nicht betroffen und erhält nur stabile Versionen.
+
 ## Umstieg von einer bestehenden YAML-`modbus:`-Konfiguration
 
 Die Integration ersetzt die YAML-Konfiguration (`modbus:`-Hub plus Template-Entitäten) vollständig. Die internen Schlüssel sind
