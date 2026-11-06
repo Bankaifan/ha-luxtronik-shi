@@ -20,6 +20,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 - Write and read-back test for the pool lock switch (`pool_block`, 10053) and the range limits of the power limit
   (`cfg_power_limit_mode` 10040, `cfg_power_limit` 10041). The registers were already exposed; ranges match
   python-luxtronik (`lock_swimming_pool` 0..1, `lpc_mode` 0..2, `pc_limit` 0..300 kW/10).
+- Write and read-back test for all writable holdings of mixing circuits 2 and 3 (`cfg_mk2_*`, `cfg_mk3_*`: mode,
+  setpoint, offset, level, and the cooling mode, setpoint and offset), including the range limits. The registers were
+  already exposed; ranges match python-luxtronik (`mc{2,3}_heat_setpoint` 20..65 °C, `mc{2,3}_heat_offset` and
+  `mc{2,3}_cool_offset` -5..5 K, `mc{2,3}_cool_setpoint` 5..25 °C, modes 0..3).
 
 ### Documentation
 - README (English and German) reworked: banner and badges, a highlights section and table of contents, installation

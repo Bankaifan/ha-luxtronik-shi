@@ -400,6 +400,54 @@ async def test_mixing_circuit_2_write(hass: HomeAssistant, shi: FakeSHI) -> None
     assert registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cfg_mk2_cool_setpoint") is None
 
 
+@pytest.mark.parametrize("n", [2, 3])
+async def test_mixing_circuit_all_holdings_write_and_readback(hass: HomeAssistant, shi: FakeSHI, n: int) -> None:
+    """Every writable holding of mixing circuits 2 and 3 (heating and cooling): write, raw word, read-back."""
+    entry = await _setup_with(hass, shi, ["mk1", f"mk{n}", "cooling"])
+    base = 10000 + 10 * n
+    numbers = (
+        # key, address, value, expected raw word (python-luxtronik: 0.1 scale, offsets are int16)
+        ("setpoint", base + 1, 20.0, 200),
+        ("setpoint", base + 1, 65.0, 650),
+        ("offset", base + 2, 5.0, 50),
+        ("offset", base + 2, -5.0, 0x10000 - 50),
+        ("cool_setpoint", base + 6, 5.0, 50),
+        ("cool_setpoint", base + 6, 25.0, 250),
+        ("cool_offset", base + 7, 5.0, 50),
+        ("cool_offset", base + 7, -5.0, 0x10000 - 50),
+    )
+    for suffix, address, value, raw in numbers:
+        entity_id = _entity_id(hass, entry, "number", f"cfg_mk{n}_{suffix}")
+        await hass.services.async_call(
+            "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+        )
+        assert shi.holding_value(address) == raw
+        assert float(hass.states.get(entity_id).state) == value
+        # values outside the range of the source are rejected before anything is written
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(
+                "number", "set_value", {"entity_id": entity_id, "value": 1000}, blocking=True
+            )
+        assert shi.holding_value(address) == raw
+
+    selects = (
+        ("mode", base, "offset", 2),
+        ("level", base + 3, "boost", 3),
+        ("cool_mode", base + 5, "level", 3),
+    )
+    for suffix, address, option, raw in selects:
+        entity_id = _entity_id(hass, entry, "select", f"cfg_mk{n}_{suffix}")
+        await hass.services.async_call(
+            "select", "select_option", {"entity_id": entity_id, "option": option}, blocking=True
+        )
+        assert shi.holding_value(address) == raw
+        assert hass.states.get(entity_id).state == option
+
+    # there is no cooling level register for mixing circuits in the source
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("select", DOMAIN, f"{entry.entry_id}_cfg_mk{n}_cool_level") is None
+
+
 async def test_cooling_and_pool_energy(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = await _setup_with(hass, shi, ["mk1", "cooling", "pool"])
     data = entry.runtime_data.data
