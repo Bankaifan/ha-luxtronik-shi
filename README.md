@@ -72,15 +72,20 @@ that is already set up.
 
 | Area | Entities |
 |---|---|
-| Temperatures | flow, return, heat source inlet/outlet, outside average, return target/limit/minimum, return external, outside, room (room unit only), heating/hot water limit temperatures, hot water (actual, target, min, max), mixing circuits 1–3 (flow, target, min, max) |
+| Temperatures | flow, return, heat source inlet/outlet, outside average, return target/limit/minimum, return external, outside, room (room unit only), heating/hot water limit temperatures, hot water (actual, target, min, max), mixing circuits 1–3 (flow, target, min, max; disabled by default for circuits 2 and 3) |
 | Power & energy | electric and thermal power, minimum electric power, electric/thermal energy counters (total, heating, hot water, cooling, pool), operating hours |
 | Calculated COP | **COP** (thermal / electric power, main device) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when electric power is below 200 W, values are zero, negative or implausible, or a counter was reset |
-| Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active**, error number, heating/hot water/cooling/pool status, connection |
+| Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status, connection |
 | **Climate / water heater** | heating circuit (off / heat, setpoint 10–70 °C) and hot water (off / setpoint / offset / level, setpoint 10–65 °C), see below |
-| **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit (0–30 kW) |
-| **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3, overall heating; level (utility lockout / reduced / normal / boost); power limit (none / soft / hard) |
-| **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool*, **circulation pump**, *extra hot water* |
+| **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
+| **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (utility lockout / reduced / normal / boost); power limit mode (none / soft / hard) |
+| **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
+
+Mixing circuits 2 and 3 have the same writable entities as circuit 1 (mode, setpoint, offset, level, and the cooling mode,
+setpoint and offset), but their write ranges follow python-luxtronik and are narrower: heating setpoint 20–65 °C and
+offset −5 … +5 K, cooling setpoint 5–25 °C and offset −5 … +5 K. Circuit 1 allows 10–70 °C and −10 … +10 K. They only
+exist when the circuit is selected in the [equipment](#installation-equipment) (the cooling entities also need cooling).
 
 Settings (numbers and selects) are in the *Configuration* section of the device page. Writes use the same registers as
 the Smart Home Interface itself; the heat pump enforces its own limits. Every write is read back, so the UI always shows
@@ -109,7 +114,7 @@ Like the menus of the Luxtronik controller, the entities are split into devices:
 | **<name>** (heat pump) | temperatures (flow, return, outside, heat source), status and operating mode, compressor/auxiliary heater, power, COP, total energy and compressor hours, power limit, system values, firmware, equipment flags, raw values |
 | **<name> Heating** | climate entity, mode, setpoint, heating curve offset, level, overall heating, block, mixing circuits 1–3, heating energy, hours and COP |
 | **<name> Hot water** | water heater entity, temperatures, mode, setpoint, offset, level, block, circulation pump, extra hot water, hot water energy, hours and COP |
-| **<name> Cooling** / **<name> Pool** | only when cooling or a pool is selected in the equipment |
+| **<name> Cooling** / **<name> Pool** | only when cooling or a pool is selected in the equipment; Cooling holds the cooling entities of the mixing circuits, Pool the pool block, status and energy |
 
 The sub-devices are linked to the heat pump device. Within a sub-device the names are short (*Setpoint*,
 *Block*, *Mixing circuit 1: setpoint*); Home Assistant shows them together with the device name, e.g.
@@ -235,6 +240,12 @@ those who deliberately stay on YAML, no longer used in production and not tested
   Pump Optimizer) can block at a planned 0 W and release again if the planner fails or the room gets too cold.
 * The *level* values (utility lockout / reduced / normal / boost) come from community documentation (probably
   SG-Ready) and are not confirmed on every firmware. Circulation pump and extra hot water require firmware 3.92.0.
+* **Status bits VD2, ZWE2, ZWE3:** the binary sensors `heatpump_vd2_status`, `heatpump_zwe2_status` and
+  `heatpump_zwe3_status` come from python-luxtronik (bits 1, 3 and 4 of register 10000) and are disabled by default.
+  VD2 and ZWE2 show the same bits as *compressor 2* and *auxiliary heater 2*; ZWE3 needs firmware 3.90.1 or later
+  (per python-luxtronik).
+* **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
+  limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve
   position and no "valve always open" switch. That is configured on the controller (installer level).
 * **Heating circulation pumps** (HUP) cannot be controlled via the SHI, only the hot water circulation pump. The native

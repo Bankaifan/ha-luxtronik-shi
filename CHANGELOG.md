@@ -30,6 +30,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
   first, climate and water heater in one section, a new *Diagnostics* section, the YAML migration collapsed, and
   the notes on volatile holding registers and on the release workflow brought up to date. New `assets/banner.svg`
   (own design) rendered to `assets/banner.png`.
+- README (English and German): features and notes describe the writable entities of mixing circuits 2 and 3 with
+  their ranges, the pool block, the power limit and the disabled status bits `heatpump_vd2_status`,
+  `heatpump_zwe2_status` and `heatpump_zwe3_status`.
+- Code comment in `registers.py`: python-luxtronik `heat_source_input` (10110) and `max_flow_temp` (10112) are
+  already exposed as `raw_10110` and `raw_10112`; a second entity on the same address needs an alias mechanism
+  (separate decision).
 
 ## [0.8.2] – 2026-11-06
 
