@@ -241,14 +241,14 @@
       "fw_minor": {
         "name": "Firmware: Version Neben"
       },
-      "raw_10109": {
+      "outside_temp_average": {
         "name": "Temperatur: Außen Mittelwert"
       },
-      "raw_10110": {
+      "heat_source_input": {
         "name": "Temperatur: Wärmequelle Eintritt"
       },
-      "raw_10112": {
-        "name": "Rohwert: Vorlauf Maximum (10112)"
+      "max_flow_temp": {
+        "name": "Temperatur: Vorlauf Maximum"
       },
       "heat_source_out": {
         "name": "Temperatur: Wärmequelle Austritt"
@@ -332,6 +332,15 @@
       },
       "aux_heater_2": {
         "name": "Status: Zusatzheizung 2 (ZWE) aktiv"
+      },
+      "heatpump_vd2_status": {
+        "name": "Status: VD2 läuft"
+      },
+      "heatpump_zwe2_status": {
+        "name": "Status: ZWE2 aktiv"
+      },
+      "heatpump_zwe3_status": {
+        "name": "Status: ZWE3 aktiv"
       },
       "online": {
         "name": "Status: Verbindung"

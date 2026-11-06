@@ -22,8 +22,8 @@ async def test_water_heater_new_installation_is_enabled(hass: HomeAssistant, shi
     assert state.state == "off"  # holding 10005 = 0
     assert state.attributes["temperature"] == 40.0  # holding 10006 = 400
     assert state.attributes["current_temperature"] == 48.2  # input 10120 = 482
-    assert state.attributes["min_temp"] == 10
-    assert state.attributes["max_temp"] == 65
+    assert state.attributes["min_temp"] == 30
+    assert state.attributes["max_temp"] == 75
     assert state.attributes["operation_list"] == ["off", "setpoint", "offset", "level"]
     # lives in the hot water device, next to the existing hot water entities
     registry = er.async_get(hass)
@@ -67,7 +67,7 @@ async def test_water_heater_set_temperature_writes_and_reads_back(hass: HomeAssi
     assert shi.holding_value(10005) == 0  # mode untouched
 
 
-@pytest.mark.parametrize("value", [9.5, 65.5, 0, 100, -5])
+@pytest.mark.parametrize("value", [29.5, 75.5, 0, 100, -5])
 async def test_water_heater_set_temperature_out_of_range_is_rejected(
     hass: HomeAssistant, shi: FakeSHI, value: float
 ) -> None:
@@ -81,7 +81,7 @@ async def test_water_heater_set_temperature_out_of_range_is_rejected(
     assert not [r for r in shi.requests if r[0] == 6]
 
 
-@pytest.mark.parametrize(("value", "expected"), [(10, 100), (65, 650)])
+@pytest.mark.parametrize(("value", "expected"), [(30, 300), (75, 750)])
 async def test_water_heater_set_temperature_limits_are_accepted(
     hass: HomeAssistant, shi: FakeSHI, value: float, expected: int
 ) -> None:

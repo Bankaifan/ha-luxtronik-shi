@@ -23,8 +23,8 @@ async def test_climate_new_installation_is_enabled(hass: HomeAssistant, shi: Fak
     assert state.state == "off"  # holding 10000 = 0 (off)
     assert state.attributes["temperature"] == 22.0  # holding 10001 = 220
     assert state.attributes["current_temperature"] == 35.1  # input flow, 10105 = 351
-    assert state.attributes["min_temp"] == 10
-    assert state.attributes["max_temp"] == 70
+    assert state.attributes["min_temp"] == 15
+    assert state.attributes["max_temp"] == 75
     assert state.attributes["controller_mode"] == "off"
     assert set(state.attributes["hvac_modes"]) == {"off", "heat"}
 
@@ -68,7 +68,7 @@ async def test_climate_set_temperature_writes_and_reads_back(hass: HomeAssistant
     assert shi.holding_value(10000) == 0
 
 
-@pytest.mark.parametrize("value", [9.5, 70.5, 0, 100, -5])
+@pytest.mark.parametrize("value", [14.5, 75.5, 0, 100, -5])
 async def test_climate_set_temperature_out_of_range_is_rejected(
     hass: HomeAssistant, shi: FakeSHI, value: float
 ) -> None:
@@ -82,7 +82,7 @@ async def test_climate_set_temperature_out_of_range_is_rejected(
     assert not [r for r in shi.requests if r[0] == 6]
 
 
-@pytest.mark.parametrize(("value", "expected"), [(10, 100), (70, 700)])
+@pytest.mark.parametrize(("value", "expected"), [(15, 150), (75, 750)])
 async def test_climate_set_temperature_limits_are_accepted(
     hass: HomeAssistant, shi: FakeSHI, value: float, expected: int
 ) -> None:

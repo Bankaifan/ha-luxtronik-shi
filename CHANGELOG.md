@@ -11,11 +11,74 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Action required
+- **Write ranges of nine settings now follow the python-luxtronik source (`holdings.py`), with the owner's approval.**
+  The Home Assistant number, climate and water heater entities (and so the limits an optimizer reads from them)
+  change as follows. Check automations and optimizers that rely on the old limits.
+
+  | Key | Address | Old range | New range |
+  |---|---|---|---|
+  | `cfg_heating_setpoint` (also the climate entity) | 10001 | 10–70 °C | 15–75 °C |
+  | `cfg_heating_offset` | 10002 | −5 … +5 K | −20 … +20 K |
+  | `cfg_dhw_setpoint` (also the water heater entity) | 10006 | 10–65 °C | 30–75 °C |
+  | `cfg_dhw_offset` | 10007 | −10 … +10 K | −20 … +20 K |
+  | `cfg_mk1_setpoint` | 10011 | 10–70 °C | 20–65 °C |
+  | `cfg_mk1_offset` | 10012 | −10 … +10 K | −5 … +5 K |
+  | `cfg_mk1_cool_setpoint` | 10016 | 5–40 °C | 5–25 °C |
+  | `cfg_mk1_cool_offset` | 10017 | −10 … +10 K | −5 … +5 K |
+  | `cfg_overall_offset` | 10066 | −10 … +10 K | −20 … +20 K |
+
+  Ranges got wider for the heating and hot water settings and the overall offset, and narrower for mixing circuit 1
+  (setpoint, offset, cooling setpoint and offset). Values outside the new range are rejected before anything is
+  written. Keys and unique IDs are unchanged.
+- **Three keys of already released entities were renamed (with the owner's approval): `raw_10109` is now
+  `outside_temp_average`, `raw_10110` is now `heat_source_input` and `raw_10112` is now `max_flow_temp`.** Your entities are kept: on start the integration moves
+  the registry entries to the new unique IDs, so entity IDs, history, customised names, areas and the enabled/disabled
+  state stay as they are. Only the name is new for 10110 and 10112 (*Temperature: heat source inlet*, *Temperature:
+  flow maximum*; 10109 keeps *Temperature: outside average*) and the unique ID ends with the new key. Check
+  automations, templates or tools that look entities up by the old unique ID `<entry_id>_raw_10109` /
+  `<entry_id>_raw_10110` / `<entry_id>_raw_10112`; entity IDs are unaffected.
+- `max_flow_temp` (10112) is now a temperature in °C (0.1 °C resolution, uint16, from python-luxtronik) instead of a
+  unitless raw number. If you had enabled it, the value changes from e.g. `600` to `60.0`, and Home Assistant starts
+  long-term statistics for it.
+
+### Added
+- Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
+  and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
+  `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
+- Undocumented raw values, all disabled by default and polled every 30th cycle: inputs 10352, 10353, 10410–10413, 10416,
+  10417 and 10500–10502 (`unknown_input_*` in python-luxtronik) and the read-only holding 10060
+  (`unknown_holding_60`), as `raw_<address>`. Their meaning is unknown, so they stay raw values. Entries created before
+  0.3.0 (no equipment option) do not get them, so their polling load stays the same.
+
+### Changed
+- **`raw_10109` renamed to `outside_temp_average`, `raw_10110` to `heat_source_input` and `raw_10112` to
+  `max_flow_temp`** (python-luxtronik `outside_temp_average`, `heat_source_input` and `max_flow_temp`). Registry migration at start-up keeps the entity IDs, see *Action required*. The old keys stay
+  in the entity contract fixture; `RENAMED_KEYS` in `registers.py` tells the contract test that they were renamed on
+  purpose.
+
+### Tests
+- `tests/test_migration.py`: the renamed entities keep their entity ID, state, unit and disabled flag after the
+  migration (also for entries without equipment option and when the new unique ID already exists); the added raw
+  values are read, disabled and not polled by entries without equipment option. The contract test accepts a missing
+  key only if `RENAMED_KEYS` maps it to a key on the same platform.
+- Write and read-back test for the pool lock switch (`pool_block`, 10053) and the range limits of the power limit
+  (`cfg_power_limit_mode` 10040, `cfg_power_limit` 10041). The registers were already exposed; ranges match
+  python-luxtronik (`lock_swimming_pool` 0..1, `lpc_mode` 0..2, `pc_limit` 0..300 kW/10).
+- Write and read-back test for all writable holdings of mixing circuits 2 and 3 (`cfg_mk2_*`, `cfg_mk3_*`: mode,
+  setpoint, offset, level, and the cooling mode, setpoint and offset), including the range limits. The registers were
+  already exposed; ranges match python-luxtronik (`mc{2,3}_heat_setpoint` 20..65 °C, `mc{2,3}_heat_offset` and
+  `mc{2,3}_cool_offset` -5..5 K, `mc{2,3}_cool_setpoint` 5..25 °C, modes 0..3).
+
 ### Documentation
 - README (English and German) reworked: banner and badges, a highlights section and table of contents, installation
   first, climate and water heater in one section, a new *Diagnostics* section, the YAML migration collapsed, and
   the notes on volatile holding registers and on the release workflow brought up to date. New `assets/banner.svg`
   (own design) rendered to `assets/banner.png`.
+- README (English and German): features and notes describe the writable entities of mixing circuits 2 and 3 with
+  their ranges, the pool block, the power limit and the disabled status bits `heatpump_vd2_status`,
+  `heatpump_zwe2_status` and `heatpump_zwe3_status`.
+- README (English and German): notes on the renamed keys and on the added raw values.
 
 ## [0.8.2] – 2026-11-06
 

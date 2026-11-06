@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
-from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL
+from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL, DOMAIN
 from .coordinator import LuxtronikCoordinator
 from .modbus_client import LuxtronikModbusClient
-from .registers import CLIMATE_KEYS, WATER_HEATER_KEYS, active_registers
+from .registers import CLIMATE_KEYS, RENAMED_KEYS, WATER_HEATER_KEYS, active_registers
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -25,8 +25,33 @@ PLATFORMS = [
 type LuxtronikConfigEntry = ConfigEntry[LuxtronikCoordinator]
 
 
+async def async_migrate_renamed_keys(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Move registry entries of renamed keys (``RENAMED_KEYS``) to the new unique ID.
+
+    Only the unique ID changes. The entity ID, the name chosen by the user, the area and the enabled/disabled
+    state stay as they are. If the new unique ID already exists, the old entry is left alone.
+    """
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+
+    @callback
+    def _migrate(entity: er.RegistryEntry) -> dict[str, str] | None:
+        if entity.platform != DOMAIN or not entity.unique_id.startswith(prefix):
+            return None
+        new_key = RENAMED_KEYS.get(entity.unique_id.removeprefix(prefix))
+        if new_key is None:
+            return None
+        new_unique_id = f"{prefix}{new_key}"
+        if registry.async_get_entity_id(entity.domain, DOMAIN, new_unique_id):
+            return None
+        return {"new_unique_id": new_unique_id}
+
+    await er.async_migrate_entries(hass, entry.entry_id, _migrate)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -> bool:
     """Set up one heat pump."""
+    await async_migrate_renamed_keys(hass, entry)
     client = LuxtronikModbusClient(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_SLAVE])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     # Entries created before 0.3.0 have no equipment option: keep every entity.

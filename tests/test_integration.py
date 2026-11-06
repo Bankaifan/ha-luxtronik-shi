@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -168,7 +170,7 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
     assert data["raw_10113"] is None
     assert data["dhw_limit"] is None
     assert data["heating_limit"] is None
-    assert data["raw_10112"] == 7
+    assert data["max_flow_temp"] == 0.7
     assert any(block.split for block in entry.runtime_data._blocks)
 
 
@@ -253,6 +255,37 @@ async def test_circulation_switch(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert hass.states.get(entity_id).state == "on"
 
 
+async def test_pool_block_and_power_limit_write_readback(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Pool lock (python-luxtronik ``lock_swimming_pool``, index 53, 0/1) and power limit (index 40/41).
+
+    Ranges from python-luxtronik holdings.py: lpc_mode 0..2, pc_limit 0..300 (kW/10), lock_swimming_pool 0..1.
+    """
+    entry = await _setup(hass, shi)
+
+    pool = _entity_id(hass, entry, "switch", "pool_block")
+    await hass.services.async_call("switch", "turn_on", {"entity_id": pool}, blocking=True)
+    assert shi.holding_value(10053) == 1
+    assert hass.states.get(pool).state == "on"
+    await hass.services.async_call("switch", "turn_off", {"entity_id": pool}, blocking=True)
+    assert shi.holding_value(10053) == 0
+    assert hass.states.get(pool).state == "off"
+
+    limit = _entity_id(hass, entry, "number", "cfg_power_limit")
+    await hass.services.async_call("number", "set_value", {"entity_id": limit, "value": 30}, blocking=True)
+    assert shi.holding_value(10041) == 300
+    assert float(hass.states.get(limit).state) == 30.0
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call("number", "set_value", {"entity_id": limit, "value": 30.1}, blocking=True)
+    assert shi.holding_value(10041) == 300
+
+    select = _entity_id(hass, entry, "select", "cfg_power_limit_mode")
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": select, "option": "hard"}, blocking=True
+    )
+    assert shi.holding_value(10040) == 2
+    assert hass.states.get(select).state == "hard"
+
+
 async def test_unique_id_scheme(hass: HomeAssistant, shi: FakeSHI) -> None:
     """Every entity uses <entry_id>_<key>; changing that scheme would change all entity IDs."""
     import json
@@ -310,11 +343,12 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
-    from custom_components.luxtronik_shi.registers import ADDED_IN_0_4
+    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, RENAMED_KEYS
 
-    # everything from before 0.4.0, nothing that was added later
-    added = {reg.key for reg in ADDED_IN_0_4}
-    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added)
+    # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2).
+    # Renamed keys stay in the contract but have no entity of their own any more (see tests/test_migration.py).
+    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED)}
+    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added) - len(RENAMED_KEYS)
     assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
 
 
@@ -333,14 +367,14 @@ async def _setup_with(hass: HomeAssistant, shi: FakeSHI, features: list[str]) ->
 
 
 async def test_promoted_raw_values(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; keys stay raw_*."""
+    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; 10109 is now outside_temp_average."""
     entry = await _setup_with(hass, shi, ["mk1"])
     data = entry.runtime_data.data
-    assert data["raw_10109"] == 0.5
-    assert data["raw_10110"] == 0.6
+    assert data["outside_temp_average"] == 0.5
+    assert data["heat_source_input"] == 0.6
     assert data["heat_source_out"] == -1.0
     registry = er.async_get(hass)
-    entity = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10110"))
+    entity = registry.async_get(_entity_id(hass, entry, "sensor", "heat_source_input"))
     assert entity.disabled_by is None
     assert entity.unit_of_measurement == "°C"
 
@@ -365,6 +399,54 @@ async def test_mixing_circuit_2_write(hass: HomeAssistant, shi: FakeSHI) -> None
     registry = er.async_get(hass)
     assert registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cfg_mk3_setpoint") is None
     assert registry.async_get_entity_id("number", DOMAIN, f"{entry.entry_id}_cfg_mk2_cool_setpoint") is None
+
+
+@pytest.mark.parametrize("n", [2, 3])
+async def test_mixing_circuit_all_holdings_write_and_readback(hass: HomeAssistant, shi: FakeSHI, n: int) -> None:
+    """Every writable holding of mixing circuits 2 and 3 (heating and cooling): write, raw word, read-back."""
+    entry = await _setup_with(hass, shi, ["mk1", f"mk{n}", "cooling"])
+    base = 10000 + 10 * n
+    numbers = (
+        # key, address, value, expected raw word (python-luxtronik: 0.1 scale, offsets are int16)
+        ("setpoint", base + 1, 20.0, 200),
+        ("setpoint", base + 1, 65.0, 650),
+        ("offset", base + 2, 5.0, 50),
+        ("offset", base + 2, -5.0, 0x10000 - 50),
+        ("cool_setpoint", base + 6, 5.0, 50),
+        ("cool_setpoint", base + 6, 25.0, 250),
+        ("cool_offset", base + 7, 5.0, 50),
+        ("cool_offset", base + 7, -5.0, 0x10000 - 50),
+    )
+    for suffix, address, value, raw in numbers:
+        entity_id = _entity_id(hass, entry, "number", f"cfg_mk{n}_{suffix}")
+        await hass.services.async_call(
+            "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+        )
+        assert shi.holding_value(address) == raw
+        assert float(hass.states.get(entity_id).state) == value
+        # values outside the range of the source are rejected before anything is written
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(
+                "number", "set_value", {"entity_id": entity_id, "value": 1000}, blocking=True
+            )
+        assert shi.holding_value(address) == raw
+
+    selects = (
+        ("mode", base, "offset", 2),
+        ("level", base + 3, "boost", 3),
+        ("cool_mode", base + 5, "level", 3),
+    )
+    for suffix, address, option, raw in selects:
+        entity_id = _entity_id(hass, entry, "select", f"cfg_mk{n}_{suffix}")
+        await hass.services.async_call(
+            "select", "select_option", {"entity_id": entity_id, "option": option}, blocking=True
+        )
+        assert shi.holding_value(address) == raw
+        assert hass.states.get(entity_id).state == option
+
+    # there is no cooling level register for mixing circuits in the source
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("select", DOMAIN, f"{entry.entry_id}_cfg_mk{n}_cool_level") is None
 
 
 async def test_cooling_and_pool_energy(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -441,3 +523,46 @@ async def test_existing_entity_ids_survive_device_move(hass: HomeAssistant, shi:
     ):
         state = hass.states.get(entity_id)
         assert state is not None and state.state not in ("unavailable", "unknown"), entity_id
+
+
+# key, address, minimum, maximum (python-luxtronik holdings.py "range", raw 0.1 scale)
+_WRITE_RANGES = (
+    ("cfg_heating_setpoint", 10001, 15.0, 75.0),
+    ("cfg_heating_offset", 10002, -20.0, 20.0),
+    ("cfg_dhw_setpoint", 10006, 30.0, 75.0),
+    ("cfg_dhw_offset", 10007, -20.0, 20.0),
+    ("cfg_mk1_setpoint", 10011, 20.0, 65.0),
+    ("cfg_mk1_offset", 10012, -5.0, 5.0),
+    ("cfg_mk1_cool_setpoint", 10016, 5.0, 25.0),
+    ("cfg_mk1_cool_offset", 10017, -5.0, 5.0),
+    ("cfg_overall_offset", 10066, -20.0, 20.0),
+)
+
+
+@pytest.mark.parametrize(("key", "address", "lo", "hi"), _WRITE_RANGES)
+async def test_write_ranges_follow_source(
+    hass: HomeAssistant, shi: FakeSHI, key: str, address: int, lo: float, hi: float
+) -> None:
+    """Both limits are written and read back; a step beyond either limit is rejected without a write."""
+    entry = await _setup_with(hass, shi, ["mk1", "cooling"])
+    registry = er.async_get(hass)
+    entity_id = _entity_id(hass, entry, "number", key)
+    if registry.async_get(entity_id).disabled_by is not None:  # cooling entities are disabled by default
+        registry.async_update_entity(entity_id, disabled_by=None)
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert float(hass.states.get(entity_id).attributes["min"]) == lo
+    assert float(hass.states.get(entity_id).attributes["max"]) == hi
+    for value in (lo, hi):
+        await hass.services.async_call(
+            "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+        )
+        assert shi.holding_value(address) == round(value * 10) & 0xFFFF
+        assert float(hass.states.get(entity_id).state) == value
+    before = shi.holding_value(address)
+    for value in (lo - 0.5, hi + 0.5):
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(
+                "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+            )
+        assert shi.holding_value(address) == before
