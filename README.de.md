@@ -79,16 +79,15 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 | Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser, Kühlen, Pool), Betriebsstunden |
 | Berechneter COP | **COP** (thermische / elektrische Leistung, Gerät der Wärmepumpe) und **COP gesamt** für Heizen und Warmwasser (thermische / elektrische Energiezähler, im Gerät *Heizung* / *Warmwasser*); unbekannt statt einer Zahl bei elektrischer Leistung unter 200 W, Nullwerten, negativen oder unplausiblen Werten oder nach einem Zählerreset |
 | Status | Betriebsart als Klartext (Heizen, Warmwasser, Pool, EVU-Sperre, Abtauen, Aus, externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv** (zusätzliche Statusbits für VD2, ZWE2 und ZWE3 sind standardmäßig deaktiviert), Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool, Verbindung |
-| **Climate / Water Heater** | Heizkreis (Aus / Heizen, Sollwert 10–70 °C) und Warmwasser (Aus / Sollwert / Anhebung / Stufe, Sollwert 10–65 °C), siehe unten |
-| **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−5 … +5 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
+| **Climate / Water Heater** | Heizkreis (Aus / Heizen, Sollwert 15–75 °C) und Warmwasser (Aus / Sollwert / Anhebung / Stufe, Sollwert 30–75 °C), siehe unten |
+| **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
 | **Schreiben: Auswahl** | Betriebsart (Aus / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (EVU-Sperre / Absenkung / Normal / Boost); Modus der Leistungsbegrenzung (keine / weich / hart) |
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser* |
 | Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
 
 Mischkreis 2 und 3 haben dieselben schreibbaren Entitäten wie Mischkreis 1 (Betriebsart, Sollwert, Anhebung, Stufe sowie
-Betriebsart, Sollwert und Anhebung für Kühlen). Ihre Schreibbereiche folgen python-luxtronik und sind enger: Heizen
-Sollwert 20–65 °C und Anhebung −5 … +5 K, Kühlen Sollwert 5–25 °C und Anhebung −5 … +5 K. Mischkreis 1 erlaubt
-10–70 °C und −10 … +10 K. Sie existieren nur, wenn der Mischkreis in der [Ausstattung](#ausstattung-der-anlage) gewählt ist (die
+Betriebsart, Sollwert und Anhebung für Kühlen). Alle Schreibbereiche folgen python-luxtronik (holdings.py): Heizen
+Sollwert 20–65 °C und Anhebung −5 … +5 K, Kühlen Sollwert 5–25 °C und Anhebung −5 … +5 K. Mischkreis 1 hat dieselben Bereiche. Sie existieren nur, wenn der Mischkreis in der [Ausstattung](#ausstattung-der-anlage) gewählt ist (die
 Kühl-Entitäten brauchen zusätzlich Kühlung).
 
 Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
@@ -98,9 +97,9 @@ Schreibzugriff wird der Wert zurückgelesen, die Oberfläche zeigt also immer de
 
 ### Climate und Water Heater
 
-Eine **Climate-Entität** für den Heizkreis fasst die Betriebsart (Aus / Heizen) und den Heizungs-Sollwert (10–70 °C)
+Eine **Climate-Entität** für den Heizkreis fasst die Betriebsart (Aus / Heizen) und den Heizungs-Sollwert (15–75 °C)
 zusammen und zeigt die Vorlauftemperatur als Istwert. Eine **Water-Heater-Entität** im Gerät *Warmwasser* fasst die
-Warmwasser-Betriebsart (Aus / Sollwert / Anhebung / Stufe) und den Warmwasser-Sollwert (10–65 °C) zusammen und zeigt die
+Warmwasser-Betriebsart (Aus / Sollwert / Anhebung / Stufe) und den Warmwasser-Sollwert (30–75 °C) zusammen und zeigt die
 Warmwassertemperatur als Istwert. Beide schreiben dieselben Register wie die passende Auswahl „Betriebsart" und die Zahl
 „Sollwert".
 

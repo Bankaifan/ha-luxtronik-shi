@@ -76,15 +76,15 @@ that is already set up.
 | Power & energy | electric and thermal power, minimum electric power, electric/thermal energy counters (total, heating, hot water, cooling, pool), operating hours |
 | Calculated COP | **COP** (thermal / electric power, main device) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when electric power is below 200 W, values are zero, negative or implausible, or a counter was reset |
 | Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status, connection |
-| **Climate / water heater** | heating circuit (off / heat, setpoint 10–70 °C) and hot water (off / setpoint / offset / level, setpoint 10–65 °C), see below |
-| **Write: numbers** | **heating curve offset** (−5 … +5 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
+| **Climate / water heater** | heating circuit (off / heat, setpoint 15–75 °C) and hot water (off / setpoint / offset / level, setpoint 30–75 °C), see below |
+| **Write: numbers** | **heating curve offset** (−20 … +20 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
 | **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (utility lockout / reduced / normal / boost); power limit mode (none / soft / hard) |
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
 
 Mixing circuits 2 and 3 have the same writable entities as circuit 1 (mode, setpoint, offset, level, and the cooling mode,
-setpoint and offset), but their write ranges follow python-luxtronik and are narrower: heating setpoint 20–65 °C and
-offset −5 … +5 K, cooling setpoint 5–25 °C and offset −5 … +5 K. Circuit 1 allows 10–70 °C and −10 … +10 K. They only
+setpoint and offset), and all write ranges follow python-luxtronik holdings.py: heating setpoint 20–65 °C and
+offset −5 … +5 K, cooling setpoint 5–25 °C and offset −5 … +5 K. Circuit 1 has the same ranges. They only
 exist when the circuit is selected in the [equipment](#installation-equipment) (the cooling entities also need cooling).
 
 Settings (numbers and selects) are in the *Configuration* section of the device page. Writes use the same registers as
@@ -93,9 +93,9 @@ the real device state. Negative values (heating curve offset) are written correc
 
 ### Climate and water heater
 
-A **climate entity** for the heating circuit combines the heating mode (off / heat) and heating setpoint (10–70 °C) with
+A **climate entity** for the heating circuit combines the heating mode (off / heat) and heating setpoint (15–75 °C) with
 the flow temperature as current value. A **water heater entity** in the *Hot water* device combines the hot water mode
-(off / setpoint / offset / level) and hot water setpoint (10–65 °C) with the hot water temperature as current value.
+(off / setpoint / offset / level) and hot water setpoint (30–75 °C) with the hot water temperature as current value.
 Both write the same registers as the matching mode select and setpoint number.
 
 Both are enabled by default on new installations. For entries created before they existed they are disabled by default

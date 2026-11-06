@@ -523,3 +523,46 @@ async def test_existing_entity_ids_survive_device_move(hass: HomeAssistant, shi:
     ):
         state = hass.states.get(entity_id)
         assert state is not None and state.state not in ("unavailable", "unknown"), entity_id
+
+
+# key, address, minimum, maximum (python-luxtronik holdings.py "range", raw 0.1 scale)
+_WRITE_RANGES = (
+    ("cfg_heating_setpoint", 10001, 15.0, 75.0),
+    ("cfg_heating_offset", 10002, -20.0, 20.0),
+    ("cfg_dhw_setpoint", 10006, 30.0, 75.0),
+    ("cfg_dhw_offset", 10007, -20.0, 20.0),
+    ("cfg_mk1_setpoint", 10011, 20.0, 65.0),
+    ("cfg_mk1_offset", 10012, -5.0, 5.0),
+    ("cfg_mk1_cool_setpoint", 10016, 5.0, 25.0),
+    ("cfg_mk1_cool_offset", 10017, -5.0, 5.0),
+    ("cfg_overall_offset", 10066, -20.0, 20.0),
+)
+
+
+@pytest.mark.parametrize(("key", "address", "lo", "hi"), _WRITE_RANGES)
+async def test_write_ranges_follow_source(
+    hass: HomeAssistant, shi: FakeSHI, key: str, address: int, lo: float, hi: float
+) -> None:
+    """Both limits are written and read back; a step beyond either limit is rejected without a write."""
+    entry = await _setup_with(hass, shi, ["mk1", "cooling"])
+    registry = er.async_get(hass)
+    entity_id = _entity_id(hass, entry, "number", key)
+    if registry.async_get(entity_id).disabled_by is not None:  # cooling entities are disabled by default
+        registry.async_update_entity(entity_id, disabled_by=None)
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert float(hass.states.get(entity_id).attributes["min"]) == lo
+    assert float(hass.states.get(entity_id).attributes["max"]) == hi
+    for value in (lo, hi):
+        await hass.services.async_call(
+            "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+        )
+        assert shi.holding_value(address) == round(value * 10) & 0xFFFF
+        assert float(hass.states.get(entity_id).state) == value
+    before = shi.holding_value(address)
+    for value in (lo - 0.5, hi + 0.5):
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(
+                "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
+            )
+        assert shi.holding_value(address) == before

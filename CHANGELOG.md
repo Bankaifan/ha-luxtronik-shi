@@ -12,6 +12,25 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Action required
+- **Write ranges of nine settings now follow the python-luxtronik source (`holdings.py`), with the owner's approval.**
+  The Home Assistant number, climate and water heater entities (and so the limits an optimizer reads from them)
+  change as follows. Check automations and optimizers that rely on the old limits.
+
+  | Key | Address | Old range | New range |
+  |---|---|---|---|
+  | `cfg_heating_setpoint` (also the climate entity) | 10001 | 10–70 °C | 15–75 °C |
+  | `cfg_heating_offset` | 10002 | −5 … +5 K | −20 … +20 K |
+  | `cfg_dhw_setpoint` (also the water heater entity) | 10006 | 10–65 °C | 30–75 °C |
+  | `cfg_dhw_offset` | 10007 | −10 … +10 K | −20 … +20 K |
+  | `cfg_mk1_setpoint` | 10011 | 10–70 °C | 20–65 °C |
+  | `cfg_mk1_offset` | 10012 | −10 … +10 K | −5 … +5 K |
+  | `cfg_mk1_cool_setpoint` | 10016 | 5–40 °C | 5–25 °C |
+  | `cfg_mk1_cool_offset` | 10017 | −10 … +10 K | −5 … +5 K |
+  | `cfg_overall_offset` | 10066 | −10 … +10 K | −20 … +20 K |
+
+  Ranges got wider for the heating and hot water settings and the overall offset, and narrower for mixing circuit 1
+  (setpoint, offset, cooling setpoint and offset). Values outside the new range are rejected before anything is
+  written. Keys and unique IDs are unchanged.
 - **Three keys of already released entities were renamed (with the owner's approval): `raw_10109` is now
   `outside_temp_average`, `raw_10110` is now `heat_source_input` and `raw_10112` is now `max_flow_temp`.** Your entities are kept: on start the integration moves
   the registry entries to the new unique IDs, so entity IDs, history, customised names, areas and the enabled/disabled
