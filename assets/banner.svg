@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320">
+  <!-- Banner for the README. Own design, no manufacturer logos. Rendered to banner.png with rsvg-convert. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B2E4F"/>
+      <stop offset="1" stop-color="#1F6FB2"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="320" rx="24" fill="url(#bg)"/>
+  <!-- subtle heat waves in the background -->
+  <g fill="none" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="18" stroke-linecap="round">
+    <path d="M1010 300 C 980 240, 1040 180, 1010 120 C 980 60, 1040 20, 1010 -20"/>
+    <path d="M1100 300 C 1070 240, 1130 180, 1100 120 C 1070 60, 1130 20, 1100 -20"/>
+    <path d="M1190 300 C 1160 240, 1220 180, 1190 120 C 1160 60, 1220 20, 1190 -20"/>
+  </g>
+  <!-- icon tile -->
+  <rect x="64" y="56" width="208" height="208" rx="40" fill="#FFFFFF"/>
+  <g transform="translate(80 72) scale(0.6875)">
+    <rect x="8" y="64" width="240" height="184" rx="28" fill="#1F6FB2"/>
+    <circle cx="104" cy="156" r="62" fill="#FFFFFF"/>
+    <circle cx="104" cy="156" r="52" fill="#1F6FB2"/>
+    <g fill="#FFFFFF" transform="translate(104 156)">
+      <path d="M0 -6 C 10 -30, 34 -36, 40 -20 C 30 -12, 14 -6, 0 -6 Z"/>
+      <path d="M0 -6 C 10 -30, 34 -36, 40 -20 C 30 -12, 14 -6, 0 -6 Z" transform="rotate(120)"/>
+      <path d="M0 -6 C 10 -30, 34 -36, 40 -20 C 30 -12, 14 -6, 0 -6 Z" transform="rotate(240)"/>
+      <circle r="9"/>
+    </g>
+    <g fill="#FFFFFF" opacity="0.85">
+      <rect x="186" y="104" width="44" height="10" rx="5"/>
+      <rect x="186" y="128" width="44" height="10" rx="5"/>
+      <rect x="186" y="152" width="44" height="10" rx="5"/>
+    </g>
+    <rect x="180" y="190" width="56" height="40" rx="8" fill="#F08C00"/>
+    <g fill="#1F6FB2">
+      <rect x="192" y="202" width="8" height="16" rx="2"/>
+      <rect x="204" y="202" width="8" height="16" rx="2"/>
+      <rect x="216" y="202" width="8" height="16" rx="2"/>
+    </g>
+    <g fill="none" stroke="#F08C00" stroke-width="12" stroke-linecap="round">
+      <path d="M64 50 C 54 38, 74 26, 64 8"/>
+      <path d="M104 50 C 94 38, 114 26, 104 8"/>
+      <path d="M144 50 C 134 38, 154 26, 144 8"/>
+    </g>
+  </g>
+  <!-- text -->
+  <g font-family="Inter, DejaVu Sans, sans-serif" fill="#FFFFFF">
+    <text x="320" y="146" font-size="76" font-weight="700">Luxtronik SHI</text>
+    <text x="322" y="198" font-size="30" font-weight="400" fill-opacity="0.9">alpha innotec / Luxtronik heat pumps in Home Assistant</text>
+  </g>
+  <!-- pill: Modbus/TCP -->
+  <g font-family="Inter, DejaVu Sans, sans-serif" font-size="22" font-weight="600">
+    <rect x="322" y="226" width="166" height="40" rx="20" fill="#F08C00"/>
+    <text x="405" y="253" text-anchor="middle" fill="#FFFFFF">Modbus/TCP</text>
+    <rect x="502" y="226" width="150" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.15"/>
+    <text x="577" y="253" text-anchor="middle" fill="#FFFFFF">Config flow</text>
+    <rect x="666" y="226" width="118" height="40" rx="20" fill="#FFFFFF" fill-opacity="0.15"/>
+    <text x="725" y="253" text-anchor="middle" fill="#FFFFFF">No YAML</text>
+  </g>
+</svg>
