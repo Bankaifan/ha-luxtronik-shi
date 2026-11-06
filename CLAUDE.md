@@ -35,8 +35,9 @@ Heat Pump Optimizer (HPO). Stability comes before features.
   manifest, CHANGELOG and tag.
 * **Releases are automatic.** Whoever prepares a PR decides whether it releases: to release, bump the manifest
   version per the rules above and rename `## [Unreleased]` to `## [X.Y.Z] – YYYY-MM-DD` (keep an empty
-  `## [Unreleased]` above it, update the compare links). On merge, `.github/workflows/release.yml` creates tag
-  `vX.Y.Z` and the GitHub release from that CHANGELOG section. Without a bump, entries just collect under
+  `## [Unreleased]` above it, update the compare links). After the merge, once the *Validate* workflow has
+  passed on `main`, `.github/workflows/release.yml` creates tag `vX.Y.Z` and the GitHub release from that
+  CHANGELOG section. Without a bump, entries just collect under
   `[Unreleased]`. Never create tags by hand.
 * The CHANGELOG section becomes the release notes shown in the Home Assistant update entity. If users must do
   something before or after updating (changed option, removed entity, renamed setting), put a

@@ -11,6 +11,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.8.2] – 2026-11-06
+
+### Changed
+- Releases are now created only after the *Validate* workflow (hassfest, HACS action, tests) succeeded for the
+  pushed commit on `main`, and the release targets exactly that commit. Before, the release workflow ran in parallel
+  with the validation. No change to the integration itself.
+
 ## [0.8.1] – 2026-11-06
 
 ### Fixed
@@ -197,7 +204,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.6.0...v0.7.0
