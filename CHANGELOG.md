@@ -11,6 +11,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Fixed
+- Deprecation warnings on newer Home Assistant releases: the climate and water heater entities now use
+  `_attr_native_temperature_unit`, `native_current_temperature` and `native_target_temperature` when the Home Assistant
+  base class provides them, and the previous attribute names on older releases (minimum 2025.8). Units, values and
+  setpoint writes are unchanged. No entity, key or ID changes.
+
 ## [0.8.0] – 2026-11-06
 
 ### Added

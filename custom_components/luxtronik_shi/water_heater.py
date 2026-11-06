@@ -20,6 +20,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import LuxtronikConfigEntry
+from .compat import WATER_HEATER_NATIVE_TEMPERATURE
 from .coordinator import LuxtronikCoordinator
 from .registers import BY_KEY, WATER_HEATER_DHW_KEY, encode_int16
 
@@ -42,7 +43,11 @@ class LuxtronikHotWaterHeater(CoordinatorEntity[LuxtronikCoordinator], WaterHeat
 
     _attr_has_entity_name = True
     _attr_name = None  # the entity carries the name of the hot water device
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # Old or new attribute names depending on the Home Assistant base class (see compat.py).
+    if WATER_HEATER_NATIVE_TEMPERATURE:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_operation_list = list(_MODE_REG.options)
     _attr_supported_features = (
         WaterHeaterEntityFeature.TARGET_TEMPERATURE | WaterHeaterEntityFeature.OPERATION_MODE
@@ -69,15 +74,20 @@ class LuxtronikHotWaterHeater(CoordinatorEntity[LuxtronikCoordinator], WaterHeat
             return None
         return _MODE_REG.options[value]
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _current_temperature(self) -> float | None:
         """Hot water temperature."""
         return self._data(_TEMP_REG)
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _target_temperature(self) -> float | None:
         """Hot water setpoint read back from the heat pump."""
         return self._data(_SETPOINT_REG)
+
+    if WATER_HEATER_NATIVE_TEMPERATURE:
+        native_current_temperature = property(_current_temperature)
+        native_target_temperature = property(_target_temperature)
+    else:
+        current_temperature = property(_current_temperature)
+        target_temperature = property(_target_temperature)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Write the hot water setpoint (range of the register, read back afterwards)."""
