@@ -11,6 +11,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Documentation
+- README (English and German) reworked: banner and badges, a highlights section and table of contents, installation
+  first, climate and water heater in one section, a new *Diagnostics* section, the YAML migration collapsed, and
+  the notes on volatile holding registers and on the release workflow brought up to date. New `assets/banner.svg`
+  (own design) rendered to `assets/banner.png`.
+
 ## [0.8.2] – 2026-11-06
 
 ### Changed
