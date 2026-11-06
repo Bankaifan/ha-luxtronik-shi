@@ -433,7 +433,7 @@ async def test_mixing_circuit_all_holdings_write_and_readback(hass: HomeAssistan
 
     selects = (
         ("mode", base, "offset", 2),
-        ("level", base + 3, "boost", 3),
+        ("level", base + 3, "decreased", 3),
         ("cool_mode", base + 5, "level", 3),
     )
     for suffix, address, option, raw in selects:
@@ -536,6 +536,7 @@ _WRITE_RANGES = (
     ("cfg_mk1_cool_setpoint", 10016, 5.0, 25.0),
     ("cfg_mk1_cool_offset", 10017, -5.0, 5.0),
     ("cfg_overall_offset", 10066, -20.0, 20.0),
+    ("cfg_room_setpoint", 10060, 20.0, 40.0),
 )
 
 
@@ -544,7 +545,7 @@ async def test_write_ranges_follow_source(
     hass: HomeAssistant, shi: FakeSHI, key: str, address: int, lo: float, hi: float
 ) -> None:
     """Both limits are written and read back; a step beyond either limit is rejected without a write."""
-    entry = await _setup_with(hass, shi, ["mk1", "cooling"])
+    entry = await _setup_with(hass, shi, ["mk1", "cooling", "room_unit"])
     registry = er.async_get(hass)
     entity_id = _entity_id(hass, entry, "number", key)
     if registry.async_get(entity_id).disabled_by is not None:  # cooling entities are disabled by default

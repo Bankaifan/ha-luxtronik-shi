@@ -397,6 +397,9 @@
       "cfg_overall_offset": {
         "name": "Gesamt: Anhebung"
       },
+      "cfg_room_setpoint": {
+        "name": "Raumtemperatur-Sollwert"
+      },
       "cfg_mk2_setpoint": {
         "name": "Mischkreis 2: Sollwert"
       },
@@ -435,10 +438,10 @@
       "cfg_heating_level": {
         "name": "Stufe",
         "state": {
-          "evu_lock": "EVU-Sperre",
-          "reduced": "Absenkung",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Anhebung",
+          "increased2": "Anhebung (Stufe 2)",
+          "decreased": "Absenkung"
         }
       },
       "cfg_dhw_mode": {
@@ -453,10 +456,10 @@
       "cfg_dhw_level": {
         "name": "Stufe",
         "state": {
-          "evu_lock": "EVU-Sperre",
-          "reduced": "Absenkung",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Anhebung",
+          "increased2": "Anhebung (Stufe 2)",
+          "decreased": "Absenkung"
         }
       },
       "cfg_mk1_mode": {
@@ -471,10 +474,10 @@
       "cfg_mk1_level": {
         "name": "Mischkreis 1: Stufe",
         "state": {
-          "evu_lock": "EVU-Sperre",
-          "reduced": "Absenkung",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Anhebung",
+          "increased2": "Anhebung (Stufe 2)",
+          "decreased": "Absenkung"
         }
       },
       "cfg_mk1_cool_mode": {
@@ -506,10 +509,10 @@
       "cfg_overall_level": {
         "name": "Gesamt: Stufe",
         "state": {
-          "evu_lock": "EVU-Sperre",
-          "reduced": "Absenkung",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Anhebung",
+          "increased2": "Anhebung (Stufe 2)",
+          "decreased": "Absenkung"
         }
       },
       "cfg_mk2_mode": {
@@ -524,10 +527,10 @@
       "cfg_mk2_level": {
         "name": "Mischkreis 2: Stufe",
         "state": {
-          "evu_lock": "EVU-Sperre",
-          "reduced": "Absenkung",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Anhebung",
+          "increased2": "Anhebung (Stufe 2)",
+          "decreased": "Absenkung"
         }
       },
       "cfg_mk2_cool_mode": {
@@ -551,10 +554,10 @@
       "cfg_mk3_level": {
         "name": "Mischkreis 3: Stufe",
         "state": {
-          "evu_lock": "EVU-Sperre",
-          "reduced": "Absenkung",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Anhebung",
+          "increased2": "Anhebung (Stufe 2)",
+          "decreased": "Absenkung"
         }
       },
       "cfg_mk3_cool_mode": {

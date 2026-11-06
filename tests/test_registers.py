@@ -36,6 +36,20 @@ def test_encode_negative_offset():
     assert decode(BY_KEY["cfg_heating_offset"], [65531]) == -0.5
 
 
+def test_level_options_follow_python_luxtronik():
+    # python-luxtronik LevelMode: 0 Normal, 1 Increased, 2 Increased2, 3 Decreased.
+    expected = ("normal", "increased", "increased2", "decreased")
+    for key in ("cfg_heating_level", "cfg_dhw_level", "cfg_mk1_level", "cfg_overall_level"):
+        assert BY_KEY[key].options == expected
+
+
+def test_room_setpoint_is_writable_number():
+    reg = BY_KEY["cfg_room_setpoint"]
+    assert reg.kind == "holding" and reg.platform == "number"
+    assert reg.address == 10060
+    assert (reg.min_value, reg.max_value) == (20, 40)
+
+
 def test_blocks_cover_every_register_exactly_once():
     blocks = plan_blocks(ALL_REGISTERS)
     covered = [reg.key for block in blocks for reg in block.registers]

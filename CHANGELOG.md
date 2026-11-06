@@ -41,15 +41,24 @@ versioning follows [Semantic Versioning](https://semver.org/):
 - `max_flow_temp` (10112) is now a temperature in °C (0.1 °C resolution, uint16, from python-luxtronik) instead of a
   unitless raw number. If you had enabled it, the value changes from e.g. `600` to `60.0`, and Home Assistant starts
   long-term statistics for it.
+- **The options of the five level selects now follow the python-luxtronik `LevelMode` source.** `cfg_heating_level`
+  (10003), `cfg_dhw_level` (10008), `cfg_mk1_level` (10013), the mixing-circuit-2/3 levels and `cfg_overall_level`
+  (10067) previously offered `evu_lock`/`reduced`/`normal`/`boost` (raw 0/1/2/3); they now offer
+  `normal`/`increased`/`increased2`/`decreased` (raw 0/1/2/3). So the value written for a given selection changes
+  (e.g. `normal` wrote 2 before and writes 0 now). Keys and unique IDs are unchanged. Check automations or optimizers
+  that set or read a level option.
 
 ### Added
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
 - Undocumented raw values, all disabled by default and polled every 30th cycle: inputs 10352, 10353, 10410–10413, 10416,
-  10417 and 10500–10502 (`unknown_input_*` in python-luxtronik) and the read-only holding 10060
-  (`unknown_holding_60`), as `raw_<address>`. Their meaning is unknown, so they stay raw values. Entries created before
-  0.3.0 (no equipment option) do not get them, so their polling load stays the same.
+  10417 and 10500–10502 (`unknown_input_*` in python-luxtronik), as `raw_<address>`. Their meaning is unknown, so they
+  stay raw values. Entries created before 0.3.0 (no equipment option) do not get them, so their polling load stays the same.
+- `cfg_room_setpoint` (holding 10060): writable room-temperature setpoint of the room control unit (number,
+  20–40 °C, 0.5 °C step; only with the *room unit* equipment option). Firmware V3.92.3 exposes this address as the
+  writable `RBE_RoomTemperatureSetpointRegister` (target `RBE_RT_Soll`); see
+  `docs/firmware-3.92.3-shi-analysis.md`. 10060 was never released as a raw value, so there is no migration.
 
 ### Changed
 - **`raw_10109` renamed to `outside_temp_average`, `raw_10110` to `heat_source_input` and `raw_10112` to
@@ -69,6 +78,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
   setpoint, offset, level, and the cooling mode, setpoint and offset), including the range limits. The registers were
   already exposed; ranges match python-luxtronik (`mc{2,3}_heat_setpoint` 20..65 °C, `mc{2,3}_heat_offset` and
   `mc{2,3}_cool_offset` -5..5 K, `mc{2,3}_cool_setpoint` 5..25 °C, modes 0..3).
+- Write and read-back test with range limits for `cfg_room_setpoint` (10060, 20..40 °C), and a check that the level
+  selects expose the python-luxtronik order (`normal`/`increased`/`increased2`/`decreased`).
 
 ### Documentation
 - README (English and German) reworked: banner and badges, a highlights section and table of contents, installation

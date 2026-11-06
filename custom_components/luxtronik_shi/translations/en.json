@@ -397,6 +397,9 @@
       "cfg_overall_offset": {
         "name": "Overall: offset"
       },
+      "cfg_room_setpoint": {
+        "name": "Room temperature setpoint"
+      },
       "cfg_mk2_setpoint": {
         "name": "Mixing circuit 2: setpoint"
       },
@@ -435,10 +438,10 @@
       "cfg_heating_level": {
         "name": "Level",
         "state": {
-          "evu_lock": "Utility lockout",
-          "reduced": "Reduced",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Increased",
+          "increased2": "Increased (step 2)",
+          "decreased": "Decreased"
         }
       },
       "cfg_dhw_mode": {
@@ -453,10 +456,10 @@
       "cfg_dhw_level": {
         "name": "Level",
         "state": {
-          "evu_lock": "Utility lockout",
-          "reduced": "Reduced",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Increased",
+          "increased2": "Increased (step 2)",
+          "decreased": "Decreased"
         }
       },
       "cfg_mk1_mode": {
@@ -471,10 +474,10 @@
       "cfg_mk1_level": {
         "name": "Mixing circuit 1: level",
         "state": {
-          "evu_lock": "Utility lockout",
-          "reduced": "Reduced",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Increased",
+          "increased2": "Increased (step 2)",
+          "decreased": "Decreased"
         }
       },
       "cfg_mk1_cool_mode": {
@@ -506,10 +509,10 @@
       "cfg_overall_level": {
         "name": "Overall: level",
         "state": {
-          "evu_lock": "Utility lockout",
-          "reduced": "Reduced",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Increased",
+          "increased2": "Increased (step 2)",
+          "decreased": "Decreased"
         }
       },
       "cfg_mk2_mode": {
@@ -524,10 +527,10 @@
       "cfg_mk2_level": {
         "name": "Mixing circuit 2: level",
         "state": {
-          "evu_lock": "Utility lockout",
-          "reduced": "Reduced",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Increased",
+          "increased2": "Increased (step 2)",
+          "decreased": "Decreased"
         }
       },
       "cfg_mk2_cool_mode": {
@@ -551,10 +554,10 @@
       "cfg_mk3_level": {
         "name": "Mixing circuit 3: level",
         "state": {
-          "evu_lock": "Utility lockout",
-          "reduced": "Reduced",
           "normal": "Normal",
-          "boost": "Boost"
+          "increased": "Increased",
+          "increased2": "Increased (step 2)",
+          "decreased": "Decreased"
         }
       },
       "cfg_mk3_cool_mode": {

@@ -105,7 +105,7 @@ _HOURS = {
 }
 _SETTING = {"config": True, "every": 2}
 _MODES = ("off", "setpoint", "offset", "level")
-_LEVELS = ("evu_lock", "reduced", "normal", "boost")
+_LEVELS = ("normal", "increased", "increased2", "decreased")
 _OPERATING_MODES = (
     "heating",
     "hot_water",
@@ -485,6 +485,20 @@ REGISTERS: tuple[Register, ...] = (
         signed=True,
     ),
     _select("cfg_overall_level", 10067, "Gesamt: Stufe", "Overall: level", _LEVELS),
+    # room temperature setpoint of the room control unit (RBE). Firmware V3.92.3 exposes this as the
+    # writable holding RBE_RoomTemperatureSetpointRegister (target RBE_RT_Soll); see
+    # docs/firmware-3.92.3-shi-analysis.md. python-luxtronik lists 10060 only as read-only "unknown".
+    # Range is not a register fact: 20-40 C are plausible room temperatures (owner decision).
+    _number(
+        "cfg_room_setpoint",
+        10060,
+        "Raumtemperatur-Sollwert",
+        "Room temperature setpoint",
+        lo=20,
+        hi=40,
+        step=0.5,
+        unit="°C",
+    ),
     # ------------------------------------------------------------------ firmware
     _s("fw_platform", 10400, "Firmware: Plattform", "Firmware: platform", diagnostic=True, every=120),
     _s("fw_major", 10401, "Firmware: Version Haupt", "Firmware: major version", diagnostic=True, every=120),
@@ -636,7 +650,8 @@ RAW_INPUT_ADDRESSES_ADDED: tuple[int, ...] = (
     10502,
 )
 # Holding registers that only python-luxtronik lists as read-only and with unknown function. Read, never written.
-RAW_HOLDING_ADDRESSES_ADDED: tuple[int, ...] = (10060,)
+# (10060 was briefly here but is the writable RBE room-temperature setpoint, now exposed as cfg_room_setpoint.)
+RAW_HOLDING_ADDRESSES_ADDED: tuple[int, ...] = ()
 
 
 def _raw(address: int, kind: RegKind, every: int) -> Register:
@@ -741,6 +756,7 @@ _FEATURES_OF: dict[str, tuple[str, ...]] = {
     **{k: ("cooling",) for k in ("cooling_block", "cooling_status")},
     **{k: ("pool",) for k in ("pool_block", "pool_status")},
     "room": ("room_unit",),
+    "cfg_room_setpoint": ("room_unit",),
     **{f"cfg_mk{n}_{s}": (f"mk{n}",) for n in (2, 3) for s in ("mode", "setpoint", "offset", "level")},
     **{f"cfg_mk{n}_cool_{s}": (f"mk{n}", "cooling") for n in (2, 3) for s in ("mode", "setpoint", "offset")},
     **{k: ("cooling",) for k in ("energy_el_cooling", "energy_th_cooling")},
