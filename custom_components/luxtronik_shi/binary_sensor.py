@@ -30,11 +30,22 @@ async def async_setup_entry(
 
 
 # Bit mask of the input register "heat_generator_state" (10000).
+# Bit positions as in python-luxtronik (inputs.py, index 0, heatpump_status): VD1 = bit 0, VD2 = bit 1,
+# ZWE1 = bit 2, ZWE2 = bit 3, ZWE3 = bit 4 (since 3.90.1). The first four entries predate the
+# heatpump_* keys; the heatpump_* entries of the same bits are disabled by default.
 STATUS_BITS: tuple[tuple[str, int, str, str], ...] = (
     ("compressor_1", 0, "Status: Verdichter 1 läuft", "Status: compressor 1 running"),
     ("compressor_2", 1, "Status: Verdichter 2 läuft", "Status: compressor 2 running"),
     ("aux_heater_1", 2, "Status: Zusatzheizung 1 (ZWE) aktiv", "Status: auxiliary heater 1 active"),
     ("aux_heater_2", 3, "Status: Zusatzheizung 2 (ZWE) aktiv", "Status: auxiliary heater 2 active"),
+    ("heatpump_vd2_status", 1, "Status: VD2 läuft", "Status: VD2 running"),
+    ("heatpump_zwe2_status", 3, "Status: ZWE2 aktiv", "Status: ZWE2 active"),
+    ("heatpump_zwe3_status", 4, "Status: ZWE3 aktiv", "Status: ZWE3 active"),
+)
+
+# Status bits added without a previous entity: disabled by default so the existing UI does not change.
+_DISABLED_BY_DEFAULT: frozenset[str] = frozenset(
+    {"heatpump_vd2_status", "heatpump_zwe2_status", "heatpump_zwe3_status"}
 )
 
 
@@ -62,7 +73,8 @@ class LuxtronikStatusBit(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEn
         self._attr_translation_key = self._key
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._key}"
         self._attr_device_info = coordinator.device_info
-        if self._key.startswith("compressor"):
+        self._attr_entity_registry_enabled_default = self._key not in _DISABLED_BY_DEFAULT
+        if self._key.startswith(("compressor", "heatpump_vd")):
             self._attr_device_class = BinarySensorDeviceClass.RUNNING
         else:
             self._attr_device_class = BinarySensorDeviceClass.HEAT

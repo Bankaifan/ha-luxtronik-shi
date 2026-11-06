@@ -505,6 +505,9 @@ REGISTERS: tuple[Register, ...] = (
     _h("extra_dhw", 10071, "Extra", "Extra", platform="switch"),
     # --------------------------------------- formerly raw values, meaning from python-luxtronik
     # Keys stay "raw_<address>" because they are part of the entity contract.
+    # Address 10110 is python-luxtronik "heat_source_input" (index 110, int16, 0.1 °C) and 10112 is
+    # "max_flow_temp" (index 112, uint16, 0.1 °C). A second key on the same address is not possible: the
+    # register map must stay unique per (kind, address), so these stay as they are.
     _temp_in("raw_10109", 10109, "Temperatur: Außen Mittelwert", "Temperature: outside average", every=4),
     _temp_in(
         "raw_10110", 10110, "Temperatur: Wärmequelle Eintritt", "Temperature: heat source inlet", every=2

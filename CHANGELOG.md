@@ -11,6 +11,11 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Added
+- Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
+  and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
+  `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
+
 ### Documentation
 - README (English and German) reworked: banner and badges, a highlights section and table of contents, installation
   first, climate and water heater in one section, a new *Diagnostics* section, the YAML migration collapsed, and

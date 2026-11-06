@@ -333,6 +333,15 @@
       "aux_heater_2": {
         "name": "Status: auxiliary heater 2 active"
       },
+      "heatpump_vd2_status": {
+        "name": "Status: VD2 running"
+      },
+      "heatpump_zwe2_status": {
+        "name": "Status: ZWE2 active"
+      },
+      "heatpump_zwe3_status": {
+        "name": "Status: ZWE3 active"
+      },
       "online": {
         "name": "Status: connection"
       }

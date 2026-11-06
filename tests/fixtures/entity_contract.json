@@ -17,6 +17,9 @@
     "compressor_2",
     "cooling_configured",
     "cooling_release",
+    "heatpump_vd2_status",
+    "heatpump_zwe2_status",
+    "heatpump_zwe3_status",
     "online",
     "pool_configured"
   ],
