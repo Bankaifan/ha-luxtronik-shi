@@ -244,6 +244,13 @@ those who deliberately stay on YAML, no longer used in production and not tested
   `heatpump_zwe3_status` come from python-luxtronik (bits 1, 3 and 4 of register 10000) and are disabled by default.
   VD2 and ZWE2 show the same bits as *compressor 2* and *auxiliary heater 2*; ZWE3 needs firmware 3.90.1 or later
   (per python-luxtronik).
+* **Renamed raw values (10110, 10112):** `raw_10110` is now `heat_source_input` (heat source inlet, °C) and `raw_10112` is
+  `max_flow_temp` (flow maximum, °C, disabled by default). The integration moves the existing entities over when it
+  starts, so their entity IDs, history and settings stay. Only the unique ID suffix and the name change; adjust
+  anything that matches on the old `raw_*` unique ID. Long-term statistics of 10112 start now (it had no unit before).
+* **Undocumented raw values:** registers that python-luxtronik lists with unknown function (inputs 10352, 10353, 10410–10413,
+  10416, 10417, 10500–10502 and holding 10060) are available as disabled `raw_<address>` diagnostic sensors. They are
+  read only (never written) and polled rarely.
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve

@@ -256,6 +256,14 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   `heatpump_zwe3_status` stammen aus python-luxtronik (Bit 1, 3 und 4 von Register 10000) und sind standardmäßig
   deaktiviert. VD2 und ZWE2 zeigen dieselben Bits wie *Verdichter 2* und *Zusatzheizung 2*; ZWE3 gibt es laut
   python-luxtronik ab Firmware 3.90.1.
+* **Umbenannte Rohwerte (10110, 10112):** `raw_10110` heißt jetzt `heat_source_input` (Wärmequelle Eintritt, °C) und
+  `raw_10112` heißt `max_flow_temp` (Vorlauf Maximum, °C, standardmäßig deaktiviert). Die Integration überträgt die
+  vorhandenen Entitäten beim Start, Entity-IDs, Verlauf und Einstellungen bleiben erhalten. Es ändern sich nur das Ende
+  der Unique-ID und der Name; Verweise auf die alte `raw_*`-Unique-ID müssen angepasst werden. Langzeitstatistik gibt es
+  für 10112 erst ab jetzt (vorher ohne Einheit).
+* **Undokumentierte Rohwerte:** Register, die python-luxtronik mit unbekannter Funktion führt (Inputs 10352, 10353,
+  10410–10413, 10416, 10417, 10500–10502 und Holding 10060), gibt es als deaktivierte Diagnose-Sensoren `raw_<Adresse>`.
+  Sie werden nur gelesen (nie geschrieben) und selten abgefragt.
 * **Pool-Sperre und Leistungsbegrenzung:** Der Schalter für die Pool-Sperre (Register 10053) existiert nur mit gewähltem
   Pool. Die Leistungsbegrenzung besteht aus einer Auswahl für den Modus (keine / weich / hart, Register 10040) und einer
   Zahl für den Wert (0–30 kW, Register 10041).

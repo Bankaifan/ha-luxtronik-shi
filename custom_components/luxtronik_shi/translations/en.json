@@ -244,11 +244,11 @@
       "raw_10109": {
         "name": "Temperature: outside average"
       },
-      "raw_10110": {
+      "heat_source_input": {
         "name": "Temperature: heat source inlet"
       },
-      "raw_10112": {
-        "name": "Raw value: flow maximum (10112)"
+      "max_flow_temp": {
+        "name": "Temperature: flow maximum"
       },
       "heat_source_out": {
         "name": "Temperature: heat source outlet"

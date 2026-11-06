@@ -170,7 +170,7 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
     assert data["raw_10113"] is None
     assert data["dhw_limit"] is None
     assert data["heating_limit"] is None
-    assert data["raw_10112"] == 7
+    assert data["max_flow_temp"] == 0.7
     assert any(block.split for block in entry.runtime_data._blocks)
 
 
@@ -343,11 +343,12 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
-    from custom_components.luxtronik_shi.registers import ADDED_IN_0_4
+    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, RENAMED_KEYS
 
-    # everything from before 0.4.0, nothing that was added later
-    added = {reg.key for reg in ADDED_IN_0_4}
-    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added)
+    # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2).
+    # Renamed keys stay in the contract but have no entity of their own any more (see tests/test_migration.py).
+    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED)}
+    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added) - len(RENAMED_KEYS)
     assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
 
 
@@ -366,14 +367,14 @@ async def _setup_with(hass: HomeAssistant, shi: FakeSHI, features: list[str]) ->
 
 
 async def test_promoted_raw_values(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; keys stay raw_*."""
+    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; 10109 keeps its raw_* key."""
     entry = await _setup_with(hass, shi, ["mk1"])
     data = entry.runtime_data.data
     assert data["raw_10109"] == 0.5
-    assert data["raw_10110"] == 0.6
+    assert data["heat_source_input"] == 0.6
     assert data["heat_source_out"] == -1.0
     registry = er.async_get(hass)
-    entity = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10110"))
+    entity = registry.async_get(_entity_id(hass, entry, "sensor", "heat_source_input"))
     assert entity.disabled_by is None
     assert entity.unit_of_measurement == "°C"
 

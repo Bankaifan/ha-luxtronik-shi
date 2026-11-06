@@ -504,19 +504,20 @@ REGISTERS: tuple[Register, ...] = (
     ),
     _h("extra_dhw", 10071, "Extra", "Extra", platform="switch"),
     # --------------------------------------- formerly raw values, meaning from python-luxtronik
-    # Keys stay "raw_<address>" because they are part of the entity contract.
-    # Address 10110 is python-luxtronik "heat_source_input" (index 110, int16, 0.1 °C) and 10112 is
-    # "max_flow_temp" (index 112, uint16, 0.1 °C). A second key on the same address is not possible: the
-    # register map must stay unique per (kind, address), so these stay as they are.
+    # 10109 still carries its historic key ``raw_10109`` because it is part of the entity contract.
     _temp_in("raw_10109", 10109, "Temperatur: Außen Mittelwert", "Temperature: outside average", every=4),
+    # 10110 and 10112 were ``raw_10110`` and ``raw_10112`` up to 0.8.2; see RENAMED_KEYS.
+    # python-luxtronik: ``heat_source_input`` (index 110, CelsiusInt16, 0.1 °C).
     _temp_in(
-        "raw_10110", 10110, "Temperatur: Wärmequelle Eintritt", "Temperature: heat source inlet", every=2
+        "heat_source_input", 10110, "Temperatur: Wärmequelle Eintritt", "Temperature: heat source inlet", every=2
     ),
-    _s(
-        "raw_10112",
+    # python-luxtronik: ``max_flow_temp`` (index 112, CelsiusUInt16, 0.1 °C).
+    _temp_in(
+        "max_flow_temp",
         10112,
-        "Rohwert: Vorlauf Maximum (10112)",
-        "Raw value: flow maximum (10112)",
+        "Temperatur: Vorlauf Maximum",
+        "Temperature: flow maximum",
+        signed=False,
         diagnostic=True,
         enabled_default=False,
         every=4,
@@ -596,6 +597,14 @@ ADDED_IN_0_4: tuple[Register, ...] = (
 )
 REGISTERS = REGISTERS + ADDED_IN_0_4
 
+# Keys that were renamed with the owner's approval: old key -> new key (same platform, same address).
+# ``async_setup_entry`` moves the registry entries over, so the entity IDs stay. The old keys stay in the entity
+# contract fixture, and ``tests/test_contract.py`` accepts them as long as the new key exists.
+RENAMED_KEYS: dict[str, str] = {
+    "raw_10110": "heat_source_input",
+    "raw_10112": "max_flow_temp",
+}
+
 # Raw values whose meaning is not documented. Disabled by default; handy for
 # analysis and for reverse engineering of new firmware versions.
 RAW_INPUT_ADDRESSES: tuple[int, ...] = (
@@ -609,18 +618,46 @@ RAW_INPUT_ADDRESSES: tuple[int, ...] = (
     10361,
 )
 
-RAW_REGISTERS: tuple[Register, ...] = tuple(
-    Register(
+# Further undocumented values of python-luxtronik (``unknown_input_*`` and ``unknown_holding_60``, "function
+# unknown"), added after 0.8.2. They are polled rarely, because nobody knows what they mean yet, and entries
+# without an equipment option (created before 0.3.0) do not get them (see ``_LEGACY_EXCLUDED``).
+RAW_INPUT_ADDRESSES_ADDED: tuple[int, ...] = (
+    10352,
+    10353,
+    10410,
+    10411,
+    10412,
+    10413,
+    10416,
+    10417,
+    10500,
+    10501,
+    10502,
+)
+# Holding registers that only python-luxtronik lists as read-only and with unknown function. Read, never written.
+RAW_HOLDING_ADDRESSES_ADDED: tuple[int, ...] = (10060,)
+
+
+def _raw(address: int, kind: RegKind, every: int) -> Register:
+    return Register(
         key=f"raw_{address}",
         address=address,
-        kind="input",
+        kind=kind,
         name_de=f"Rohwert: {address}",
         name_en=f"Raw value: {address}",
         diagnostic=True,
         enabled_default=False,
-        every=4,
+        every=every,
     )
-    for address in RAW_INPUT_ADDRESSES
+
+
+_RAW_ADDED: tuple[Register, ...] = (
+    *(_raw(address, "input", 30) for address in RAW_INPUT_ADDRESSES_ADDED),
+    *(_raw(address, "holding", 30) for address in RAW_HOLDING_ADDRESSES_ADDED),
+)
+RAW_REGISTERS: tuple[Register, ...] = (
+    *(_raw(address, "input", 4) for address in RAW_INPUT_ADDRESSES),
+    *_RAW_ADDED,
 )
 
 # Capability flags (discrete inputs) – tell which parts the installation has.
@@ -675,7 +712,7 @@ ALL_REGISTERS: tuple[Register, ...] = REGISTERS + RAW_REGISTERS + CAPABILITIES
 
 # Keys of undocumented raw values (shown with a generic "Raw value: <address>" name).
 RAW_KEYS: frozenset[str] = frozenset(reg.key for reg in RAW_REGISTERS)
-_LEGACY_EXCLUDED: frozenset[str] = frozenset(reg.key for reg in ADDED_IN_0_4)
+_LEGACY_EXCLUDED: frozenset[str] = frozenset(reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED))
 
 # -------------------------------------------------------------- installation equipment
 # Optional parts of an installation. Registers of a part that is switched off in the options are

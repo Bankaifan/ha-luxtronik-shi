@@ -11,12 +11,37 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Action required
+- **Two keys of already released entities were renamed (with the owner's approval): `raw_10110` is now
+  `heat_source_input` and `raw_10112` is now `max_flow_temp`.** Your entities are kept: on start the integration moves
+  the registry entries to the new unique IDs, so entity IDs, history, customised names, areas and the enabled/disabled
+  state stay as they are. Only the name is new (*Temperature: heat source inlet*, *Temperature: flow maximum*) and the
+  unique ID ends with the new key. Check automations, templates or tools that look entities up by the old unique ID
+  `<entry_id>_raw_10110` / `<entry_id>_raw_10112`; entity IDs are unaffected.
+- `max_flow_temp` (10112) is now a temperature in °C (0.1 °C resolution, uint16, from python-luxtronik) instead of a
+  unitless raw number. If you had enabled it, the value changes from e.g. `600` to `60.0`, and Home Assistant starts
+  long-term statistics for it.
+
 ### Added
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
+- Undocumented raw values, all disabled by default and polled every 30th cycle: inputs 10352, 10353, 10410–10413, 10416,
+  10417 and 10500–10502 (`unknown_input_*` in python-luxtronik) and the read-only holding 10060
+  (`unknown_holding_60`), as `raw_<address>`. Their meaning is unknown, so they stay raw values. Entries created before
+  0.3.0 (no equipment option) do not get them, so their polling load stays the same.
+
+### Changed
+- **`raw_10110` renamed to `heat_source_input` and `raw_10112` to `max_flow_temp`** (python-luxtronik `heat_source_input`
+  and `max_flow_temp`). Registry migration at start-up keeps the entity IDs, see *Action required*. The old keys stay
+  in the entity contract fixture; `RENAMED_KEYS` in `registers.py` tells the contract test that they were renamed on
+  purpose.
 
 ### Tests
+- `tests/test_migration.py`: the renamed entities keep their entity ID, state, unit and disabled flag after the
+  migration (also for entries without equipment option and when the new unique ID already exists); the added raw
+  values are read, disabled and not polled by entries without equipment option. The contract test accepts a missing
+  key only if `RENAMED_KEYS` maps it to a key on the same platform.
 - Write and read-back test for the pool lock switch (`pool_block`, 10053) and the range limits of the power limit
   (`cfg_power_limit_mode` 10040, `cfg_power_limit` 10041). The registers were already exposed; ranges match
   python-luxtronik (`lock_swimming_pool` 0..1, `lpc_mode` 0..2, `pc_limit` 0..300 kW/10).
@@ -33,9 +58,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 - README (English and German): features and notes describe the writable entities of mixing circuits 2 and 3 with
   their ranges, the pool block, the power limit and the disabled status bits `heatpump_vd2_status`,
   `heatpump_zwe2_status` and `heatpump_zwe3_status`.
-- Code comment in `registers.py`: python-luxtronik `heat_source_input` (10110) and `max_flow_temp` (10112) are
-  already exposed as `raw_10110` and `raw_10112`; a second entity on the same address needs an alias mechanism
-  (separate decision).
+- README (English and German): notes on the renamed keys and on the added raw values.
 
 ## [0.8.2] – 2026-11-06
 

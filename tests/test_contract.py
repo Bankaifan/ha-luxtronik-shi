@@ -3,7 +3,8 @@
 Consumers such as the Heat Pump Optimizer address entities by entity ID. Home Assistant keeps an
 entity ID only as long as (platform, unique_id) stays the same. The unique ID is
 ``<entry_id>_<key>``, so every key in ``fixtures/entity_contract.json`` must keep existing on the
-same platform. New keys are fine; add them to the fixture with ``python tools/gen_contract.py``.
+same platform. A key may only disappear if ``RENAMED_KEYS`` maps it to a key that exists on the same platform (the
+integration moves the registry entry, see ``tests/test_migration.py``). New keys are fine; add them to the fixture with ``python tools/gen_contract.py``.
 Removing or renaming a key, or moving it to another platform, is a breaking change.
 """
 
@@ -17,6 +18,7 @@ from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
     CLIMATE_KEYS,
     DERIVED_SENSOR_KEYS,
+    RENAMED_KEYS,
     WATER_HEATER_KEYS,
 )
 
@@ -51,7 +53,7 @@ def test_no_contract_key_removed_or_moved():
         f"{platform}.{key}"
         for platform, keys in CONTRACT.items()
         for key in keys
-        if key not in current.get(platform, set())
+        if key not in current.get(platform, set()) and RENAMED_KEYS.get(key) not in current.get(platform, set())
     ]
     assert not broken, f"Entity contract broken (key removed, renamed or moved to another platform): {broken}"
 
@@ -65,3 +67,13 @@ def test_new_keys_are_registered_in_contract():
         if key not in CONTRACT.get(platform, [])
     ]
     assert not missing, f"Add new keys to tests/fixtures/entity_contract.json (tools/gen_contract.py): {missing}"
+
+
+def test_renamed_keys_are_consistent():
+    """Every rename keeps the old key in the contract, the new key on the same platform, and drops the old one."""
+    current = _current()
+    for old, new in RENAMED_KEYS.items():
+        platform = next(p for p, keys in CONTRACT.items() if old in keys)
+        assert new in current[platform], f"{old} -> {new}: new key missing on {platform}"
+        assert old not in current[platform], f"{old} is still defined next to its replacement {new}"
+        assert new not in RENAMED_KEYS, "chained renames are not supported"
