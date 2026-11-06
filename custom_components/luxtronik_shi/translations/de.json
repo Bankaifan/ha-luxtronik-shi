@@ -156,7 +156,6 @@
       "buffer_type": {
         "name": "Anlage: Puffertyp",
         "state": {
-          "unknown": "Unbekannt",
           "series": "Reihenpuffer",
           "separation": "Trennpuffer",
           "multi": "Multifunktionspuffer"

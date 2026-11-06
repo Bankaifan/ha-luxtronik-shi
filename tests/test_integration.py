@@ -86,6 +86,17 @@ async def test_config_flow_duplicate(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert result["reason"] == "already_configured"
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(0, "series"), (1, "separation"), (2, "multi"), (3, "unknown"), (65535, "unknown")],
+)
+async def test_buffer_type_mapping(hass: HomeAssistant, shi: FakeSHI, raw: int, expected: str) -> None:
+    """Register value = option index (python-luxtronik); anything outside 0..2 is unknown."""
+    shi.input[10202] = raw
+    entry = await _setup(hass, shi)
+    assert hass.states.get(_entity_id(hass, entry, "sensor", "buffer_type")).state == expected
+
+
 async def test_values(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = await _setup(hass, shi)
     assert entry.state is ConfigEntryState.LOADED

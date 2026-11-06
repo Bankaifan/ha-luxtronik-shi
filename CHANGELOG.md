@@ -12,6 +12,11 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Action required
+- **The options of `buffer_type` (10202) were shifted by one and are corrected.** They now match the
+  python-luxtronik source (`inputs.py`, index 202, since firmware 3.90.1): 0 = `series`, 1 = `separation`,
+  2 = `multi` (multifunction buffer); other values show as unknown. The reference installation (FW 3.92.3) reads 1,
+  so it now shows `separation` instead of `series`. Check automations and templates that compare with the old labels.
+  Key and unique ID are unchanged. The displayed value is still to be confirmed against the controller menu.
 - **Write ranges of nine settings now follow the python-luxtronik source (`holdings.py`), with the owner's approval.**
   The Home Assistant number, climate and water heater entities (and so the limits an optimizer reads from them)
   change as follows. Check automations and optimizers that rely on the old limits.

@@ -116,7 +116,10 @@ _OPERATING_MODES = (
     "external_source",
     "cooling",
 )
-_BUFFER_TYPES = ("unknown", "series", "separation", "multi")
+# Index = register value (python-luxtronik inputs.py index 202, since firmware 3.90.1: 0 series buffer,
+# 1 separation buffer, 2 multifunction buffer; range 0..2). Reference installation (FW 3.92.3) reads 1.
+# Values outside 0..2 are shown as unknown by the sensor.
+_BUFFER_TYPES = ("series", "separation", "multi")
 
 
 def _temp_in(key, address, de, en, *, signed=True, **kw) -> Register:
