@@ -79,6 +79,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
   their ranges, the pool block, the power limit and the disabled status bits `heatpump_vd2_status`,
   `heatpump_zwe2_status` and `heatpump_zwe3_status`.
 - README (English and German): notes on the renamed keys and on the added raw values.
+- New `docs/firmware-3.92.3-shi-analysis.md`: an independent decompilation of the controller firmware V3.92.3
+  that verifies the register map (signs, scaling model, writability, operating-mode set, fixed constants)
+  against the firmware itself, with code locations, as a source in the sense of the "no invented register
+  facts" rule. It also records open points for later decisions: the `_LEVELS` option order disagrees with
+  python-luxtronik `LevelMode`; 10060 is a writable room-temperature setpoint (`RBE_RT_Soll`), not an unknown
+  read-only value; and 10410/10416/10500–10502 are hour/time counters while 10412 has an unusual divisor.
 
 ## [0.8.2] – 2026-11-06
 
