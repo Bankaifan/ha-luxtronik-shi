@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -251,6 +253,37 @@ async def test_circulation_switch(hass: HomeAssistant, shi: FakeSHI) -> None:
     await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
     assert shi.holding_value(10070) == 1
     assert hass.states.get(entity_id).state == "on"
+
+
+async def test_pool_block_and_power_limit_write_readback(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Pool lock (python-luxtronik ``lock_swimming_pool``, index 53, 0/1) and power limit (index 40/41).
+
+    Ranges from python-luxtronik holdings.py: lpc_mode 0..2, pc_limit 0..300 (kW/10), lock_swimming_pool 0..1.
+    """
+    entry = await _setup(hass, shi)
+
+    pool = _entity_id(hass, entry, "switch", "pool_block")
+    await hass.services.async_call("switch", "turn_on", {"entity_id": pool}, blocking=True)
+    assert shi.holding_value(10053) == 1
+    assert hass.states.get(pool).state == "on"
+    await hass.services.async_call("switch", "turn_off", {"entity_id": pool}, blocking=True)
+    assert shi.holding_value(10053) == 0
+    assert hass.states.get(pool).state == "off"
+
+    limit = _entity_id(hass, entry, "number", "cfg_power_limit")
+    await hass.services.async_call("number", "set_value", {"entity_id": limit, "value": 30}, blocking=True)
+    assert shi.holding_value(10041) == 300
+    assert float(hass.states.get(limit).state) == 30.0
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call("number", "set_value", {"entity_id": limit, "value": 30.1}, blocking=True)
+    assert shi.holding_value(10041) == 300
+
+    select = _entity_id(hass, entry, "select", "cfg_power_limit_mode")
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": select, "option": "hard"}, blocking=True
+    )
+    assert shi.holding_value(10040) == 2
+    assert hass.states.get(select).state == "hard"
 
 
 async def test_unique_id_scheme(hass: HomeAssistant, shi: FakeSHI) -> None:

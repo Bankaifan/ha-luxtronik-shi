@@ -16,6 +16,11 @@ versioning follows [Semantic Versioning](https://semver.org/):
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
 
+### Tests
+- Write and read-back test for the pool lock switch (`pool_block`, 10053) and the range limits of the power limit
+  (`cfg_power_limit_mode` 10040, `cfg_power_limit` 10041). The registers were already exposed; ranges match
+  python-luxtronik (`lock_swimming_pool` 0..1, `lpc_mode` 0..2, `pc_limit` 0..300 kW/10).
+
 ### Documentation
 - README (English and German) reworked: banner and badges, a highlights section and table of contents, installation
   first, climate and water heater in one section, a new *Diagnostics* section, the YAML migration collapsed, and
