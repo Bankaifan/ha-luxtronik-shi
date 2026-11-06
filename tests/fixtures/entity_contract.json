@@ -118,6 +118,7 @@
     "mk3_flow_target",
     "operating_mode",
     "outside",
+    "outside_temp_average",
     "pool_status",
     "raw_10060",
     "raw_10109",

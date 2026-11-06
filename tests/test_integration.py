@@ -367,10 +367,10 @@ async def _setup_with(hass: HomeAssistant, shi: FakeSHI, features: list[str]) ->
 
 
 async def test_promoted_raw_values(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; 10109 keeps its raw_* key."""
+    """10109/10110 are signed temperatures (python-luxtronik), 10111 is new; 10109 is now outside_temp_average."""
     entry = await _setup_with(hass, shi, ["mk1"])
     data = entry.runtime_data.data
-    assert data["raw_10109"] == 0.5
+    assert data["outside_temp_average"] == 0.5
     assert data["heat_source_input"] == 0.6
     assert data["heat_source_out"] == -1.0
     registry = er.async_get(hass)

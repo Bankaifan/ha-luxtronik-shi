@@ -19,6 +19,7 @@ from custom_components.luxtronik_shi.registers import (
 from .fake_shi import FakeSHI
 
 OLD_ENTITY_IDS = {
+    "raw_10109": "sensor.waermepumpe_temperatur_aussen_mittelwert",
     "raw_10110": "sensor.waermepumpe_temperatur_waermequelle_eintritt",
     "raw_10112": "sensor.waermepumpe_rohwert_vorlauf_maximum_10112",
 }
@@ -77,12 +78,13 @@ async def test_renamed_entities_keep_their_entity_id(hass: HomeAssistant, shi: F
         assert migrated.disabled_by is None
         assert migrated.unit_of_measurement == "°C"
     # the entities deliver values under the old entity IDs; 10112 used to be a raw 7, now 0.7 °C
+    assert hass.states.get(OLD_ENTITY_IDS["raw_10109"]).state == "0.5"
     assert hass.states.get(OLD_ENTITY_IDS["raw_10110"]).state == "0.6"
     assert hass.states.get(OLD_ENTITY_IDS["raw_10112"]).state == "0.7"
     # no second entity was created next to the migrated ones
     unique_ids = [e.unique_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)]
     assert len(unique_ids) == len(set(unique_ids))
-    assert not [uid for uid in unique_ids if uid.endswith(("_raw_10110", "_raw_10112"))]
+    assert not [uid for uid in unique_ids if uid.endswith(("_raw_10109", "_raw_10110", "_raw_10112"))]
 
 
 async def test_migration_keeps_disabled_state(hass: HomeAssistant, shi: FakeSHI) -> None:

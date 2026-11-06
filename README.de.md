@@ -256,7 +256,8 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   `heatpump_zwe3_status` stammen aus python-luxtronik (Bit 1, 3 und 4 von Register 10000) und sind standardmäßig
   deaktiviert. VD2 und ZWE2 zeigen dieselben Bits wie *Verdichter 2* und *Zusatzheizung 2*; ZWE3 gibt es laut
   python-luxtronik ab Firmware 3.90.1.
-* **Umbenannte Rohwerte (10110, 10112):** `raw_10110` heißt jetzt `heat_source_input` (Wärmequelle Eintritt, °C) und
+* **Umbenannte Rohwerte (10109, 10110, 10112):** `raw_10109` heißt jetzt `outside_temp_average` (Außen Mittelwert, °C),
+  `raw_10110` heißt jetzt `heat_source_input` (Wärmequelle Eintritt, °C) und
   `raw_10112` heißt `max_flow_temp` (Vorlauf Maximum, °C, standardmäßig deaktiviert). Die Integration überträgt die
   vorhandenen Entitäten beim Start, Entity-IDs, Verlauf und Einstellungen bleiben erhalten. Es ändern sich nur das Ende
   der Unique-ID und der Name; Verweise auf die alte `raw_*`-Unique-ID müssen angepasst werden. Langzeitstatistik gibt es

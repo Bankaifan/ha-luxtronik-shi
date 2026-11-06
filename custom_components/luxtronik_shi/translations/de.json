@@ -241,7 +241,7 @@
       "fw_minor": {
         "name": "Firmware: Version Neben"
       },
-      "raw_10109": {
+      "outside_temp_average": {
         "name": "Temperatur: Außen Mittelwert"
       },
       "heat_source_input": {

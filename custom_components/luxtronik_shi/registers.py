@@ -504,9 +504,9 @@ REGISTERS: tuple[Register, ...] = (
     ),
     _h("extra_dhw", 10071, "Extra", "Extra", platform="switch"),
     # --------------------------------------- formerly raw values, meaning from python-luxtronik
-    # 10109 still carries its historic key ``raw_10109`` because it is part of the entity contract.
-    _temp_in("raw_10109", 10109, "Temperatur: Außen Mittelwert", "Temperature: outside average", every=4),
-    # 10110 and 10112 were ``raw_10110`` and ``raw_10112`` up to 0.8.2; see RENAMED_KEYS.
+    # 10109, 10110 and 10112 were ``raw_10109``, ``raw_10110`` and ``raw_10112`` up to 0.8.2; see RENAMED_KEYS.
+    # python-luxtronik: ``outside_temp_average`` (index 109, CelsiusInt16, 0.1 °C).
+    _temp_in("outside_temp_average", 10109, "Temperatur: Außen Mittelwert", "Temperature: outside average", every=4),
     # python-luxtronik: ``heat_source_input`` (index 110, CelsiusInt16, 0.1 °C).
     _temp_in(
         "heat_source_input", 10110, "Temperatur: Wärmequelle Eintritt", "Temperature: heat source inlet", every=2
@@ -601,6 +601,7 @@ REGISTERS = REGISTERS + ADDED_IN_0_4
 # ``async_setup_entry`` moves the registry entries over, so the entity IDs stay. The old keys stay in the entity
 # contract fixture, and ``tests/test_contract.py`` accepts them as long as the new key exists.
 RENAMED_KEYS: dict[str, str] = {
+    "raw_10109": "outside_temp_average",
     "raw_10110": "heat_source_input",
     "raw_10112": "max_flow_temp",
 }

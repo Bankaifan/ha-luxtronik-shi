@@ -12,11 +12,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Action required
-- **Two keys of already released entities were renamed (with the owner's approval): `raw_10110` is now
-  `heat_source_input` and `raw_10112` is now `max_flow_temp`.** Your entities are kept: on start the integration moves
+- **Three keys of already released entities were renamed (with the owner's approval): `raw_10109` is now
+  `outside_temp_average`, `raw_10110` is now `heat_source_input` and `raw_10112` is now `max_flow_temp`.** Your entities are kept: on start the integration moves
   the registry entries to the new unique IDs, so entity IDs, history, customised names, areas and the enabled/disabled
-  state stay as they are. Only the name is new (*Temperature: heat source inlet*, *Temperature: flow maximum*) and the
-  unique ID ends with the new key. Check automations, templates or tools that look entities up by the old unique ID
+  state stay as they are. Only the name is new for 10110 and 10112 (*Temperature: heat source inlet*, *Temperature:
+  flow maximum*; 10109 keeps *Temperature: outside average*) and the unique ID ends with the new key. Check
+  automations, templates or tools that look entities up by the old unique ID `<entry_id>_raw_10109` /
   `<entry_id>_raw_10110` / `<entry_id>_raw_10112`; entity IDs are unaffected.
 - `max_flow_temp` (10112) is now a temperature in °C (0.1 °C resolution, uint16, from python-luxtronik) instead of a
   unitless raw number. If you had enabled it, the value changes from e.g. `600` to `60.0`, and Home Assistant starts
@@ -32,8 +33,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
   0.3.0 (no equipment option) do not get them, so their polling load stays the same.
 
 ### Changed
-- **`raw_10110` renamed to `heat_source_input` and `raw_10112` to `max_flow_temp`** (python-luxtronik `heat_source_input`
-  and `max_flow_temp`). Registry migration at start-up keeps the entity IDs, see *Action required*. The old keys stay
+- **`raw_10109` renamed to `outside_temp_average`, `raw_10110` to `heat_source_input` and `raw_10112` to
+  `max_flow_temp`** (python-luxtronik `outside_temp_average`, `heat_source_input` and `max_flow_temp`). Registry migration at start-up keeps the entity IDs, see *Action required*. The old keys stay
   in the entity contract fixture; `RENAMED_KEYS` in `registers.py` tells the contract test that they were renamed on
   purpose.
 
