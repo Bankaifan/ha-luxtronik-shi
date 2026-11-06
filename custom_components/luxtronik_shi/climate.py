@@ -23,6 +23,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import LuxtronikConfigEntry
+from .compat import CLIMATE_NATIVE_TEMPERATURE
 from .coordinator import LuxtronikCoordinator
 from .registers import BY_KEY, CLIMATE_HEATING_KEY, encode_int16
 
@@ -45,7 +46,11 @@ class LuxtronikHeatingClimate(CoordinatorEntity[LuxtronikCoordinator], ClimateEn
 
     _attr_has_entity_name = True
     _attr_name = None  # the entity carries the name of the heating device
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # Old or new attribute names depending on the Home Assistant base class (see compat.py).
+    if CLIMATE_NATIVE_TEMPERATURE:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
@@ -72,15 +77,20 @@ class LuxtronikHeatingClimate(CoordinatorEntity[LuxtronikCoordinator], ClimateEn
             return None
         return HVACMode.OFF if _MODE_REG.options[value] == "off" else HVACMode.HEAT
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _current_temperature(self) -> float | None:
         """Flow temperature of the heat pump."""
         return self._data(_FLOW_REG)
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _target_temperature(self) -> float | None:
         """Heating setpoint read back from the heat pump."""
         return self._data(_SETPOINT_REG)
+
+    if CLIMATE_NATIVE_TEMPERATURE:
+        native_current_temperature = property(_current_temperature)
+        native_target_temperature = property(_target_temperature)
+    else:
+        current_temperature = property(_current_temperature)
+        target_temperature = property(_target_temperature)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
