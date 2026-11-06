@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.8.1] – 2026-11-06
+
 ### Fixed
 - Deprecation warnings on newer Home Assistant releases: the climate and water heater entities now use
   `_attr_native_temperature_unit`, `native_current_temperature` and `native_target_temperature` when the Home Assistant
@@ -195,7 +197,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.5.0...v0.6.0
