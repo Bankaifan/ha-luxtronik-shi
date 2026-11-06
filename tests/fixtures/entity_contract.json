@@ -44,7 +44,8 @@
     "cfg_mk3_offset",
     "cfg_mk3_setpoint",
     "cfg_overall_offset",
-    "cfg_power_limit"
+    "cfg_power_limit",
+    "cfg_room_setpoint"
   ],
   "select": [
     "cfg_dhw_level",
@@ -120,7 +121,6 @@
     "outside",
     "outside_temp_average",
     "pool_status",
-    "raw_10060",
     "raw_10109",
     "raw_10110",
     "raw_10112",

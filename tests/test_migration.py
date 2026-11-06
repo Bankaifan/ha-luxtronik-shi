@@ -139,16 +139,14 @@ async def test_new_installation_has_only_the_new_keys(hass: HomeAssistant, shi: 
 
 
 def test_added_raw_registers_come_from_python_luxtronik() -> None:
-    """Addresses of the ``unknown_input_*`` / ``unknown_holding_60`` definitions that had no key yet."""
+    """Addresses of the ``unknown_input_*`` definitions that had no key yet (10060 became cfg_room_setpoint)."""
     assert RAW_INPUT_ADDRESSES_ADDED == (10352, 10353, 10410, 10411, 10412, 10413, 10416, 10417, 10500, 10501, 10502)
-    assert RAW_HOLDING_ADDRESSES_ADDED == (10060,)
+    assert RAW_HOLDING_ADDRESSES_ADDED == ()
     by_key = {reg.key: reg for reg in ALL_REGISTERS}
     for address in RAW_INPUT_ADDRESSES_ADDED:
         reg = by_key[f"raw_{address}"]
         assert (reg.kind, reg.platform, reg.enabled_default, reg.diagnostic) == ("input", "sensor", False, True)
         assert reg.every >= 30
-    holding = by_key["raw_10060"]
-    assert (holding.kind, holding.platform, holding.enabled_default) == ("holding", "sensor", False)
 
 
 def test_added_raw_registers_not_polled_by_old_entries() -> None:
@@ -163,17 +161,13 @@ def test_added_raw_registers_not_polled_by_old_entries() -> None:
 async def test_added_raw_registers_are_read_and_disabled(hass: HomeAssistant, shi: FakeSHI) -> None:
     for address in RAW_INPUT_ADDRESSES_ADDED:
         shi.input[address] = address % 100
-    shi.holding[10060] = 5
     entry = _entry(hass, shi)
     await _setup(hass, entry)
 
     data = entry.runtime_data.data
     assert data["raw_10352"] == 52
     assert data["raw_10502"] == 2
-    assert data["raw_10060"] == 5
     registry = er.async_get(hass)
     for address in (*RAW_INPUT_ADDRESSES_ADDED, *RAW_HOLDING_ADDRESSES_ADDED):
         entity = registry.async_get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"))
         assert entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION
-    # reading raw_10060 never writes: only reads (function 3) hit that address
-    assert not [r for r in shi.requests if r[0] == 6 and r[1] == 10060]
