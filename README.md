@@ -152,16 +152,60 @@ The first two disappear by themselves when their condition ends.
 
 **Values changed after an outage:** if the controller was unreachable (e.g. restart or power cut, the SHI holding
 registers are volatile) and comes back with different values, a warning lists the old and new values. **This is a
-notice only: the integration never writes anything back.** The comparison uses the normal poll, no extra Modbus reads.
+notice only: the integration never writes anything back**, unless you turn on
+[restore after a device reset](#restore-after-a-device-reset-option). The comparison uses the normal poll, no extra Modbus reads.
 The issue disappears when the values match the pre-outage values again or when you dismiss it. The values from before
 the outage are kept in memory only, so an outage that spans a Home Assistant restart is not noticed.
+
+## Restore after a device reset (option)
+
+The SHI forgets every value set over Modbus when the controller restarts, and when its watchdog expires after 10
+minutes without any Modbus access (every read re-arms it, so this only happens while nothing polls). The holding registers
+then read their reset value. Measured on the reference installation (LWDV 91-1/3, firmware 3.92.3): after two
+controller reboots the heating mode read `off` (raw 0) instead of `setpoint`, and once the heating level read raw 0
+instead of 2.
+
+Under *Options*, **Restore values after a device reset** (off by default) makes the integration write such values back:
+
+* **Only its own values.** It remembers a value only after it was written through one of its own entities (number,
+  select, switch, climate, water heater) and read back unchanged. A failed write or a different read-back forgets the
+  key. The values are stored per entry in Home Assistant's storage (`.storage/luxtronik_shi.restore.<entry_id>`), so a
+  restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `off`,
+  offset 0) is remembered like any other write, so there is nothing left to restore for it.
+* **Only on evidence of a reset.** The values come from the normal poll; there are no extra reads. A reset is
+  assumed when, within the first full read cycle after the trigger,
+  * at least **two** remembered values that are not 0 read 0, or
+  * the connection was lost before (failed polls) and at least one remembered non-zero value reads 0, while at least
+    two values are remembered.
+* **Never over someone else's change.** A remembered value that reads a *different non-zero* value was changed by
+  another Modbus client or a person: it is forgotten (logged at info level) and never restored. Zeros without the
+  evidence above are treated the same way.
+* **No write loops.** Each key is restored once per detected reset, with read-back. A restore whose write fails or reads
+  back a different value forgets that key and is not retried. A reset detected again within 15 minutes of a restore is
+  not restored. Restored keys are logged at warning level.
+
+The [outage notice](#repair-issues) keeps working as before; with the option on it usually disappears with the next
+poll, because the values match again. *Download diagnostics* lists the remembered values.
+
+**Limits:**
+
+* If only **one** value is remembered and it reads 0, a reset cannot be told apart from someone setting it to its reset
+  value. It is not restored (and forgotten).
+* Without a connection outage before it, a **single** value reading 0 counts as an external change, even if the
+  controller reset it.
+* Only resets to 0 are recognised. If the controller resets a register to a non-zero default, that looks like an
+  external change and the value is forgotten, not restored. Which registers reset to 0 is measured only for heating
+  mode and heating level.
+* The detection uses the normal poll interval, so the restore comes one or two polls after the controller is back.
+* A restore writes to the heat pump without a user action. Do not turn the option on if another system (for example a
+  planner on its own Modbus connection) is meant to own these registers.
 
 ## Diagnostics
 
 Under *Settings → Devices & services → Luxtronik SHI*, the ⋮ menu of the entry offers **Download diagnostics**. It
 creates a file with the integration and Home Assistant
 version, the selected equipment and equipment flags, the firmware and the last polled register values (raw and
-decoded). Host address, MAC address and the entry's unique ID and title are redacted. The file is built from the last
+decoded) and, with the [restore option](#restore-after-a-device-reset-option) on, the remembered values. Host address, MAC address and the entry's unique ID and title are redacted. The file is built from the last
 poll, without extra Modbus reads. Please attach it to bug reports.
 
 ## Beta versions
@@ -228,7 +272,8 @@ those who deliberately stay on YAML, no longer used in production and not tested
 
 * **Values can fall back after a controller restart.** The SHI holding registers are volatile. After a power cut or
   a controller restart, values written through this integration (for example the heating or hot water block) can
-  return to the controller default, e.g. `off`. The integration does **not** write them back. If Home Assistant was
+  return to the controller default, e.g. `off`. By default the integration does **not** write them back; see
+  [restore after a device reset](#restore-after-a-device-reset-option) for the option that does. If Home Assistant was
   running during the outage, a [repair issue](#repair-issues) shows what changed. Check the block and mode entities
   after a power outage, or have your automation or planner write them again.
 * **Return / return target:** the published register list names 10100 "return target" and 10101 "return actual".

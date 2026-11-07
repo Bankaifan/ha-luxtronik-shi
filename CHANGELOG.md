@@ -49,6 +49,18 @@ versioning follows [Semantic Versioning](https://semver.org/):
   that set or read a level option.
 
 ### Added
+- **Restore after a device reset** (option, off by default, so existing installations behave as before). The SHI drops
+  every value set over Modbus when the controller reboots or its watchdog expires; measured on the reference
+  installation (LWDV 91-1/3, FW 3.92.3), heating mode (10000) read `off` instead of `setpoint` after two reboots and
+  heating level (10003) raw 0 instead of 2. With the option on, the integration remembers every value it wrote through
+  its own entities and read back unchanged (persisted per entry with Home Assistant's storage, so it survives a restart),
+  and writes them back with read-back once the normal poll shows evidence of a reset: at least two remembered non-zero
+  values reading 0, or a connection outage followed by such a zero while at least two values are remembered. A value
+  that reads a different non-zero value, or a lone zero without that evidence, is treated as an external change and
+  forgotten, never overwritten. A failed restore is not retried, and a reset seen again within 15 minutes of a restore
+  is not restored. Values set back to neutral (e.g. mode `off`) are remembered as such and so not restored. Diagnostics
+  list the remembered values. No extra polling, no new entities. See the README for the limits (one remembered value,
+  resets to non-zero defaults).
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
@@ -67,6 +79,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
   purpose.
 
 ### Tests
+- `tests/test_restore_after_reset.py`: reboot simulation with restore and read-back, external changes adopted and
+  forgotten (also during a reset), the single-register ambiguity, option off writes nothing and stores nothing, no
+  retry after a failed write or a wrong read-back, cooldown, restore from the store after a Home Assistant restart,
+  values set back to neutral through the select entities, diagnostics.
 - `tests/test_migration.py`: the renamed entities keep their entity ID, state, unit and disabled flag after the
   migration (also for entries without equipment option and when the new unique ID already exists); the added raw
   values are read, disabled and not polled by entries without equipment option. The contract test accepts a missing

@@ -159,16 +159,66 @@ Die ersten beiden verschwinden von selbst, sobald ihre Ursache weg ist.
 
 **Werte nach einem Ausfall geändert:** War die Regelung nicht erreichbar (z. B. Neustart oder Stromausfall, die
 SHI-Holding-Register sind flüchtig) und meldet sich mit anderen Werten zurück, zeigt eine Warnung die alten und neuen
-Werte. **Das ist nur ein Hinweis: Die Integration schreibt nie etwas zurück.** Verglichen wird mit der normalen Abfrage,
+Werte. **Das ist nur ein Hinweis: Die Integration schreibt nie etwas zurück**, außer du schaltest
+[Werte nach einem Geräte-Reset wiederherstellen](#werte-nach-einem-geräte-reset-wiederherstellen-option) ein. Verglichen wird mit der normalen Abfrage,
 ohne zusätzliche Modbus-Lesezugriffe. Der Hinweis verschwindet, wenn die Werte wieder denen vor dem Ausfall entsprechen,
 oder wenn du ihn schließt. Die Werte vor dem Ausfall liegen nur im Arbeitsspeicher; ein Ausfall, der einen Neustart von
 Home Assistant überdauert, wird deshalb nicht bemerkt.
+
+## Werte nach einem Geräte-Reset wiederherstellen (Option)
+
+Die SHI vergisst alle über Modbus gesetzten Werte, wenn die Regelung neu startet, und wenn ihr Watchdog nach 10
+Minuten ohne jeden Modbus-Zugriff abläuft (jeder Lesezugriff zieht ihn neu auf, das passiert also nur, solange niemand
+abfragt). Die
+Holding-Register lesen dann ihren Reset-Wert. Gemessen an der Referenzanlage (LWDV 91-1/3, Firmware 3.92.3): Nach zwei
+Neustarts der Regelung stand die Heizungs-Betriebsart auf `aus` (Rohwert 0) statt `Sollwert`, einmal auch die
+Heizungs-Stufe auf Rohwert 0 statt 2.
+
+Unter *Optionen* sorgt **Werte nach einem Geräte-Reset wiederherstellen** (standardmäßig aus) dafür, dass die
+Integration solche Werte zurückschreibt:
+
+* **Nur eigene Werte.** Gemerkt wird ein Wert erst, wenn er über eine Entität dieser Integration (Number, Select,
+  Switch, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Ein fehlgeschlagenes Schreiben oder
+  ein abweichender Rücklesewert löscht den Schlüssel. Die Werte liegen je Eintrag im Speicher von Home Assistant
+  (`.storage/luxtronik_shi.restore.<entry_id>`), die Wiederherstellung klappt also auch nach einem Neustart von Home
+  Assistant. Wer einen Wert auf seinen neutralen Wert zurücksetzt (z. B. Betriebsart `aus`, Offset 0), dem wird das
+  wie jedes andere Schreiben gemerkt – danach gibt es für diesen Wert nichts mehr wiederherzustellen.
+* **Nur bei Belegen für einen Reset.** Die Werte kommen aus der normalen Abfrage, es gibt keine zusätzlichen
+  Lesezugriffe. Ein Reset wird angenommen, wenn innerhalb des ersten vollständigen Lesezyklus nach dem Auslöser
+  * mindestens **zwei** gemerkte Werte, die nicht 0 sind, 0 lesen, oder
+  * vorher die Verbindung weg war (fehlgeschlagene Abfragen) und mindestens ein gemerkter Wert ungleich 0 jetzt 0
+    liest, wobei mindestens zwei Werte gemerkt sind.
+* **Nie über fremde Änderungen hinweg.** Liest ein gemerkter Wert einen *anderen Wert ungleich 0*, hat ihn ein anderer
+  Modbus-Client oder ein Mensch geändert: Er wird vergessen (Log-Level info) und nie wiederhergestellt. Nullen ohne
+  die Belege oben werden genauso behandelt.
+* **Keine Schreibschleifen.** Jeder Schlüssel wird pro erkanntem Reset einmal wiederhergestellt, mit Rücklesen.
+  Schlägt das Schreiben fehl oder liest es einen anderen Wert zurück, wird der Schlüssel vergessen und nicht erneut
+  versucht. Ein Reset, der innerhalb von 15 Minuten nach einer Wiederherstellung erneut erkannt wird, wird nicht
+  wiederhergestellt. Wiederhergestellte Schlüssel stehen mit Log-Level warning im Log.
+
+Der [Hinweis nach einem Ausfall](#reparaturhinweise) funktioniert wie bisher; mit eingeschalteter Option verschwindet er
+meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunterladen* listet die gemerkten Werte.
+
+**Grenzen:**
+
+* Ist nur **ein** Wert gemerkt und liest er 0, lässt sich ein Reset nicht davon unterscheiden, dass jemand ihn auf
+  seinen Reset-Wert gesetzt hat. Er wird nicht wiederhergestellt (und vergessen).
+* Ohne vorherigen Verbindungsausfall gilt ein **einzelner** Wert, der 0 liest, als fremde Änderung – auch wenn die
+  Regelung ihn zurückgesetzt hat.
+* Erkannt werden nur Resets auf 0. Setzt die Regelung ein Register auf einen Standardwert ungleich 0 zurück, sieht das
+  wie eine fremde Änderung aus; der Wert wird vergessen, nicht wiederhergestellt. Welche Register auf 0 zurückfallen,
+  ist nur für Heizungs-Betriebsart und Heizungs-Stufe gemessen.
+* Die Erkennung folgt dem normalen Abfrageintervall; die Wiederherstellung kommt also ein bis zwei Abfragen nach der
+  Rückkehr der Regelung.
+* Eine Wiederherstellung schreibt ohne Zutun auf die Wärmepumpe. Schalte die Option nicht ein, wenn ein anderes System
+  (etwa ein Planer mit eigener Modbus-Verbindung) für diese Register zuständig sein soll.
 
 ## Diagnose
 
 Unter *Einstellungen → Geräte & Dienste → Luxtronik SHI* bietet das ⋮-Menü des Eintrags **Diagnose herunterladen**.
 Die Datei enthält die Version von Integration und Home Assistant, die gewählte Ausstattung und die
-Ausstattungsmerkmale, die Firmware und die zuletzt abgefragten Registerwerte (roh und umgerechnet). Host-Adresse,
+Ausstattungsmerkmale, die Firmware, die zuletzt abgefragten Registerwerte (roh und umgerechnet) und bei eingeschalteter
+[Wiederherstellung](#werte-nach-einem-geräte-reset-wiederherstellen-option) die gemerkten Werte. Host-Adresse,
 MAC-Adresse sowie Unique-ID und Titel des Eintrags werden unkenntlich gemacht. Die Datei entsteht aus der letzten
 Abfrage, ohne zusätzliche Modbus-Lesezugriffe. Bitte an Fehlermeldungen anhängen.
 
@@ -237,8 +287,9 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
 
 * **Werte können nach einem Neustart der Regelung zurückfallen.** Die SHI-Holding-Register sind flüchtig. Nach
   Stromausfall oder Neustart der Regelung können über diese Integration geschriebene Werte, etwa die Heizungs- oder
-  Warmwassersperre, auf den Standardwert der Regelung zurückfallen, z. B. `aus`. Die Integration schreibt sie **nicht**
-  zurück. Lief Home Assistant während des Ausfalls, zeigt ein [Reparaturhinweis](#reparaturhinweise), was sich geändert
+  Warmwassersperre, auf den Standardwert der Regelung zurückfallen, z. B. `aus`. Standardmäßig schreibt die
+  Integration sie **nicht** zurück; die Option dafür steht unter
+  [Werte nach einem Geräte-Reset wiederherstellen](#werte-nach-einem-geräte-reset-wiederherstellen-option). Lief Home Assistant während des Ausfalls, zeigt ein [Reparaturhinweis](#reparaturhinweise), was sich geändert
   hat. Nach einem Stromausfall Sperren und Betriebsart prüfen oder Automatisierung bzw. Planer die Werte erneut
   schreiben lassen.
 * **Rücklauf / Rücklauf-Soll:** Die veröffentlichte Registerliste nennt 10100 „RL-Soll" und 10101 „RL-Ist". Gemessen an einer

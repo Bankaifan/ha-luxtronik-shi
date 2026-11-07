@@ -18,9 +18,11 @@ from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
     CONF_FEATURES,
+    CONF_RESTORE_AFTER_RESET,
     CONF_SCAN_INTERVAL,
     CONF_SLAVE,
     DEFAULT_PORT,
+    DEFAULT_RESTORE_AFTER_RESET,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
@@ -233,7 +235,7 @@ class LuxtronikConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class LuxtronikOptionsFlow(OptionsFlowWithReload):
-    """Options: polling interval and installation equipment."""
+    """Options: polling interval, installation equipment and restore after a device reset."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
@@ -242,9 +244,11 @@ class LuxtronikOptionsFlow(OptionsFlowWithReload):
                 data={
                     CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
                     CONF_FEATURES: _selected(user_input),
+                    CONF_RESTORE_AFTER_RESET: user_input[CONF_RESTORE_AFTER_RESET],
                 }
             )
         options = self.config_entry.options
+        restore = options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET)
         current = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         # Entries created before 0.3.0 have no equipment option and still show everything.
         selected = options.get(CONF_FEATURES, list(FEATURES))
@@ -254,6 +258,7 @@ class LuxtronikOptionsFlow(OptionsFlowWithReload):
                 {
                     vol.Required(CONF_SCAN_INTERVAL, default=current): _SCAN_INTERVAL,
                     **_equipment_schema(selected),
+                    vol.Required(CONF_RESTORE_AFTER_RESET, default=restore): bool,
                 }
             ),
         )

@@ -56,6 +56,7 @@
         "title": "Optionen",
         "data": {
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "restore_after_reset": "Werte nach einem Geräte-Reset wiederherstellen",
           "mk1": "Mischkreis 1",
           "mk2": "Mischkreis 2",
           "mk3": "Mischkreis 3",
@@ -64,7 +65,8 @@
           "room_unit": "Raumeinheit (Raumtemperatur)"
         },
         "data_description": {
-          "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt."
+          "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
+          "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur, wenn mindestens zwei davon gleichzeitig auf 0 fallen oder einer nach einem Verbindungsausfall. Von anderen geänderte Werte werden nie überschrieben. Standardmäßig aus."
         },
         "description": "Abgewählte Teile der Anlage werden nicht abgefragt und bekommen keine Entitäten. Ihre Entity-IDs bleiben reserviert und kommen beim Wiedereinschalten zurück."
       }

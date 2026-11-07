@@ -14,10 +14,13 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_RESTORE_AFTER_RESET,
+    DEFAULT_RESTORE_AFTER_RESET,
     DOMAIN,
     ISSUE_FIRMWARE_OLD,
     ISSUE_UNREACHABLE,
@@ -26,6 +29,8 @@ from .const import (
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
+    RESTORE_COOLDOWN,
+    STORE_VERSION,
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
@@ -35,6 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 
 MAX_GAP = 3  # registers that may be skipped inside one block read
 MAX_BLOCK = 40  # maximum registers per request
+WRITABLE_PLATFORMS = ("number", "select", "switch")
 
 
 @dataclass
@@ -72,6 +78,11 @@ def plan_blocks(registers: tuple[Register, ...] | list[Register]) -> list[Block]
                 current = Block(kind, every, reg.address, reg.width, [reg])
                 blocks.append(current)
     return blocks
+
+
+def restore_store_key(entry_id: str) -> str:
+    """Storage key of the values remembered for a restore after a device reset."""
+    return f"{DOMAIN}.restore.{entry_id}"
 
 
 class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -117,6 +128,19 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.climate_enabled_default = True
         # Same for the water heater entity.
         self.water_heater_enabled_default = True
+        # Restore after a device reset (option): raw values this integration wrote and read back, per key.
+        self.restore_enabled = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
+        self._restore_store: Store[dict[str, Any]] = Store(
+            hass, STORE_VERSION, restore_store_key(entry.entry_id)
+        )
+        self._remembered: dict[str, int] = {}
+        self._raw: dict[str, int] = {}  # last raw word read per holding key
+        self._fresh: set[str] = set()  # holding keys read in the current poll
+        # Comparison window: polls left until every remembered register was read once after the trigger.
+        self._window_left = 0
+        self._window_seen: set[str] = set()
+        self._window_outage = False
+        self._last_restore: datetime | None = None
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:
@@ -160,6 +184,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     # ------------------------------------------------------------------ reading
     async def _async_update_data(self) -> dict[str, Any]:
+        self._fresh = set()
         try:
             for block in self._blocks:
                 if self._tick % block.every == 0:
@@ -170,6 +195,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._tick += 1
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
+        await self._check_device_reset(recovered=recovered)
         self._check_outage_changes(recovered=recovered)
         self._update_firmware()
         return dict(self._values)
@@ -207,6 +233,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._values[reg.key] = bool(words[0])
         else:
             self._values[reg.key] = decode(reg, words)  # type: ignore[arg-type]
+            if reg.kind == "holding":
+                self._raw[reg.key] = int(words[0])
+                self._fresh.add(reg.key)
         self._missing.discard(reg.key)
 
     def _mark_missing(self, reg: Register) -> None:
@@ -214,6 +243,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("Register %s (%s %s) nicht vorhanden", reg.key, reg.kind, reg.address)
         self._missing.add(reg.key)
         self._values[reg.key] = None
+        self._raw.pop(reg.key, None)
 
     def _update_firmware(self) -> None:
         platform, major, minor = (self._values.get(k) for k in ("fw_platform", "fw_major", "fw_minor"))
@@ -356,12 +386,166 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     # ------------------------------------------------------------------ writing
     async def async_write(self, reg: Register, raw: int) -> None:
-        """Write a holding register and read the value back."""
+        """Write a holding register and read the value back.
+
+        With the restore option on, the value is remembered once the read-back matches what was written
+        (also a neutral value such as mode ``off``, which then leaves nothing to restore). A failed write or a
+        different read-back forgets the key: the intended value is unknown, so it is never restored.
+        """
         if reg.kind != "holding":
             raise HomeAssistantError(f"Register {reg.key} ist nicht beschreibbar")
         try:
             await self.client.write_register(reg.address, raw)
             await self._read_single(reg)
         except (ModbusCommError, ModbusIllegalAddress) as err:
+            await self._remember(reg.key, None)
             raise HomeAssistantError(f"Schreiben von {reg.key} fehlgeschlagen: {err}") from err
+        await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
         self.async_set_updated_data(dict(self._values))
+
+    # ------------------------------------------------------------------ restore after a device reset
+    async def async_load_remembered(self) -> None:
+        """Load the remembered values (option on) or delete them (option off), before the first poll."""
+        if not self.restore_enabled:
+            await self._restore_store.async_remove()
+            return
+        data = await self._restore_store.async_load() or {}
+        values = data.get("values") or {}
+        writable = {
+            r.key for r in self.registers if r.kind == "holding" and r.platform in WRITABLE_PLATFORMS
+        }
+        # Keys of equipment that was switched off are dropped: their values may be stale when it comes back.
+        self._remembered = {
+            k: v
+            for k, v in values.items()
+            if k in writable and isinstance(v, int) and not isinstance(v, bool)
+        }
+        if self._remembered != values:
+            await self._save()
+
+    @property
+    def remembered(self) -> dict[str, int]:
+        """Raw values that would be restored after a device reset (read only)."""
+        return dict(self._remembered)
+
+    async def _save(self) -> None:
+        await self._restore_store.async_save({"values": dict(self._remembered)})
+
+    async def _remember(self, key: str, raw: int | None) -> None:
+        if not self.restore_enabled or self._remembered.get(key) == raw:
+            return
+        if raw is None:
+            self._remembered.pop(key)
+        else:
+            self._remembered[key] = raw
+        await self._save()
+
+    def _reg(self, key: str) -> Register:
+        return next(r for r in self.registers if r.key == key)
+
+    async def _check_device_reset(self, *, recovered: bool) -> None:
+        """Re-apply remembered values when the evidence shows that the device reset them (option on).
+
+        * A remembered register that reads a different non-zero value was changed by someone else: forgotten.
+        * Registers whose non-zero remembered value reads 0 are collected until every remembered register was
+          read once (settings are only read every few polls). A reset is assumed when at least two of them
+          read 0, or when a communication outage came first and at least two keys are remembered. Otherwise
+          the zeros count as external changes and are forgotten.
+        No extra Modbus reads: the values come from the normal poll.
+        """
+        if not self.restore_enabled or not self._remembered:
+            self._window_left = 0
+            return
+        changed = False
+        for key, remembered in list(self._remembered.items()):
+            current = self._raw.get(key)
+            if key in self._fresh and current not in (None, 0, remembered):
+                del self._remembered[key]
+                changed = True
+                _LOGGER.info(
+                    "%s: %s was changed outside this integration (%s -> %s) and will not be restored",
+                    self.config_entry.title, key, remembered, current,
+                )
+        zeros = any(
+            self._raw.get(k) == 0 and v != 0 for k, v in self._remembered.items() if k in self._fresh
+        )
+        if self._window_left == 0 and (recovered or zeros):
+            self._window_left = max((self._reg(k).every for k in self._remembered), default=1)
+            self._window_seen = set()
+            self._window_outage = recovered
+        elif recovered:
+            self._window_outage = True
+        if self._window_left > 0:
+            self._window_seen |= self._fresh & self._remembered.keys()
+            self._window_left -= 1
+            if self._window_left == 0 or self._remembered.keys() <= self._window_seen:
+                self._window_left = 0
+                changed |= await self._decide_reset()
+        if changed:
+            await self._save()
+
+    async def _decide_reset(self) -> bool:
+        """End of a comparison window: restore or forget the zeros. Returns whether the store changed."""
+        title = self.config_entry.title
+        pending = {
+            k: v
+            for k, v in self._remembered.items()
+            if k in self._window_seen and self._raw.get(k) == 0 and v != 0
+        }
+        if not pending:
+            return False
+        reset = len(pending) >= 2 or (self._window_outage and len(self._remembered) >= 2)
+        now = dt_util.utcnow()
+        if reset and self._last_restore is not None:
+            if (now - self._last_restore).total_seconds() < RESTORE_COOLDOWN:
+                _LOGGER.warning(
+                    "%s: device reset again within %s minutes of the last restore; not restoring %s again, "
+                    "these values are forgotten",
+                    title, RESTORE_COOLDOWN // 60, ", ".join(sorted(pending)),
+                )
+                reset = False
+        if not reset:
+            for key in pending:
+                del self._remembered[key]
+            _LOGGER.info(
+                "%s: %s read 0 without evidence of a device reset; treated as changed outside this "
+                "integration and will not be restored",
+                title, ", ".join(sorted(pending)),
+            )
+            return True
+        self._last_restore = now
+        restored: list[str] = []
+        failed: list[str] = []
+        lost = False  # connection lost: the remaining keys are not tried either
+        for key, raw in pending.items():
+            if lost:
+                failed.append(key)
+                continue
+            reg = self._reg(key)
+            try:
+                await self.client.write_register(reg.address, raw)
+                await self._read_single(reg)
+            except ModbusCommError:
+                lost = True
+                failed.append(key)
+                continue
+            except ModbusIllegalAddress:
+                failed.append(key)
+                continue
+            (restored if self._raw.get(key) == raw else failed).append(key)
+        if restored:
+            _LOGGER.warning(
+                "%s: device reset detected, restored %s", title,
+                ", ".join(f"{k}={pending[k]}" for k in sorted(restored)),
+            )
+        if not failed:
+            return False
+        for key in failed:
+            del self._remembered[key]
+        _LOGGER.warning(
+            "%s: device reset detected, could not restore %s (write failed or read back a different value); "
+            "they are forgotten and not retried",
+            title, ", ".join(sorted(failed)),
+        )
+        return True
+

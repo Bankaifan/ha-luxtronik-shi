@@ -7,6 +7,7 @@ DOMAIN = "luxtronik_shi"
 CONF_SLAVE = "slave"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_FEATURES = "features"
+CONF_RESTORE_AFTER_RESET = "restore_after_reset"
 
 DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
@@ -28,6 +29,13 @@ OUTAGE_WATCH_KEYS = {
     "cfg_heating_mode": "heating mode",
     "cfg_dhw_mode": "hot water mode",
 }
+
+# Restore after a device reset (option, off by default). The SHI drops every value set over Modbus when the
+# controller reboots or its watchdog expires; the holding registers then read their reset value 0.
+DEFAULT_RESTORE_AFTER_RESET = False
+STORE_VERSION = 1
+# A device reset detected again within this time after a restore is not restored again (no write loops).
+RESTORE_COOLDOWN = 900  # seconds
 
 MANUFACTURER = "alpha innotec / Luxtronik"
 MODEL = "Smart Home Interface (Modbus/TCP)"
