@@ -46,7 +46,7 @@ INPUT = {
     10162: 0,
     10163: 0,
     10201: 0,
-    10202: 2,
+    10202: 1,  # separation buffer (python-luxtronik BufferType: 0 series, 1 separation, 2 multi-function)
     10203: 20,
     10204: 15,
     10205: 0,

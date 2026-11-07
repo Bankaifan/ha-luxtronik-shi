@@ -61,3 +61,24 @@ def test_blocks_cover_every_register_exactly_once():
             assert reg.address + reg.width <= block.start + block.count
             assert reg.kind == block.kind
             assert reg.every == block.every
+
+
+def test_buffer_type_options_follow_python_luxtronik():
+    # python-luxtronik BufferType: 0 series, 1 separation, 2 multifunction. The raw value is the index; an extra
+    # leading option shifted every value by one (a separation buffer showed as "series").
+    assert BY_KEY["buffer_type"].options == ("series", "separation", "multi")
+
+
+def test_raw_meanings_keep_key_and_stay_disabled():
+    # Rule 3: a meaning needs a source; the key stays raw_<address> and the entity stays disabled diagnostics.
+    from custom_components.luxtronik_shi.registers import RAW_KEYS, RAW_MEANINGS
+
+    for address, meaning in RAW_MEANINGS.items():
+        reg = BY_KEY[f"raw_{address}"]
+        assert reg.source and reg.source.startswith("proven:")
+        assert reg.name_de == meaning["name_de"] and reg.name_en == meaning["name_en"]
+        assert not reg.enabled_default and reg.diagnostic
+        assert reg.key not in RAW_KEYS
+    assert BY_KEY["raw_10113"].scale == 0.1 and BY_KEY["raw_10113"].dtype == "int16"
+    assert decode(BY_KEY["raw_10113"], [253]) == 25.3
+    assert BY_KEY["raw_10500"].source is None and BY_KEY["raw_10500"].key in RAW_KEYS  # still open

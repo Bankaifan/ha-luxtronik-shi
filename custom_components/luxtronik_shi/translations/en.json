@@ -158,7 +158,6 @@
       "buffer_type": {
         "name": "System: buffer tank type",
         "state": {
-          "unknown": "Unknown",
           "series": "Series buffer",
           "separation": "Separation buffer",
           "multi": "Multi-function buffer"
@@ -266,6 +265,36 @@
       },
       "energy_th_pool": {
         "name": "Energy: thermal"
+      },
+      "raw_10113": {
+        "name": "Flow: heating target (calculated)"
+      },
+      "raw_10350": {
+        "name": "Output: VBO"
+      },
+      "raw_10351": {
+        "name": "Output: FP1"
+      },
+      "raw_10354": {
+        "name": "Output: heating circulation pump (HUP)"
+      },
+      "raw_10355": {
+        "name": "Output: DHW pump (BUP)"
+      },
+      "raw_10356": {
+        "name": "Output: circulation pump (ZIP)"
+      },
+      "raw_10360": {
+        "name": "Input: EVU"
+      },
+      "raw_10361": {
+        "name": "Input: EVU 2"
+      },
+      "raw_10352": {
+        "name": "Output: FP2"
+      },
+      "raw_10353": {
+        "name": "Output: FP3"
       },
       "raw": {
         "name": "Raw value: {address}"

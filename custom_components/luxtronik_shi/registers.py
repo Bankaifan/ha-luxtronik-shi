@@ -47,6 +47,8 @@ class Register:
     config: bool = False
     # Enumerations: the raw value is the index into this tuple (select and enum sensors).
     options: tuple[str, ...] | None = None
+    # Where the register facts come from (shown in docs/registers.md). ``None`` = no source recorded (open).
+    source: str | None = None
 
     @property
     def width(self) -> int:
@@ -120,7 +122,11 @@ _OPERATING_MODES = (
     "external_source",
     "cooling",
 )
-_BUFFER_TYPES = ("unknown", "series", "separation", "multi")
+# Buffer tank type (input 10202). The raw value is the index: 0 series, 1 separation, 2 multi-function buffer
+# (python-luxtronik ``BufferType``, inputs.py index 202; confirmed on the reference installation, a separation
+# buffer, which reads raw 1). Up to 0.10.1 the tuple started with "unknown", which shifted every value by one
+# (a separation buffer showed as "series"). Values outside 0..2 read as unknown (no state).
+_BUFFER_TYPES = ("series", "separation", "multi")
 
 
 def _temp_in(key, address, de, en, *, signed=True, **kw) -> Register:
@@ -251,6 +257,7 @@ REGISTERS: tuple[Register, ...] = (
         options=_BUFFER_TYPES,
         diagnostic=True,
         every=120,
+        source="python-luxtronik inputs.py (BufferType); measured",
     ),
     _s(
         "switching_lock_minutes",
@@ -666,13 +673,41 @@ RAW_INPUT_ADDRESSES_ADDED: tuple[int, ...] = (
 RAW_HOLDING_ADDRESSES_ADDED: tuple[int, ...] = ()
 
 
+# Raw values whose meaning is proven by the firmware (V3.92.3, bin/Controller; function addresses in
+# docs/firmware-3.92.3-register-meanings.md) and confirmed by a measurement on the reference installation where the
+# equipment exists. They keep the key ``raw_<address>`` and stay disabled by default (diagnostic); only the display
+# name, unit and scale are filled in. Other raw values stay open.
+RAW_MEANINGS: dict[int, dict] = {
+    # t0/0x67: Sollwert_TRL_HZ + MovingAverage::spread (0x0019ac68). Wire value in 0.1 degC (INT16, divisor 1).
+    10113: {
+        "name_de": "Vorlauf: Soll Heizen (berechnet)",
+        "name_en": "Flow: heating target (calculated)",
+        "dtype": "int16",
+        **_TEMP,
+        "scale": 0.1,
+        "source": "proven: firmware 0x0019ac68 (return target + moving average of flow-return spread); measured",
+    },
+    # Digital outputs of the controller (0 = off, 1 = on). Variable names are those of the firmware (0x0008bef8).
+    10350: {"name_de": "Ausgang: VBO", "name_en": "Output: VBO", "source": "proven: firmware VBOout (t0/0x45); measured: runs with the compressor"},
+    10351: {"name_de": "Ausgang: FP1", "name_en": "Output: FP1", "source": "proven: firmware FP1out (t0/0x6d); measured: follows the heating pump"},
+    10352: {"name_de": "Ausgang: FP2", "name_en": "Output: FP2", "source": "proven: firmware FP2out (t0/0x4c); not measured (no second circuit)"},
+    10353: {"name_de": "Ausgang: FP3", "name_en": "Output: FP3", "source": "proven: firmware FP3out (t0/0x4d); not measured (no third circuit)"},
+    10354: {"name_de": "Ausgang: Heizungsumwälzpumpe (HUP)", "name_en": "Output: heating circulation pump (HUP)", "source": "proven: firmware HUPout (t0/0x20); measured"},
+    10355: {"name_de": "Ausgang: Brauchwasserumwälzpumpe (BUP)", "name_en": "Output: DHW pump (BUP)", "source": "proven: firmware BUPout (t0/0x44); measured"},
+    10356: {"name_de": "Ausgang: Zirkulationspumpe (ZIP)", "name_en": "Output: circulation pump (ZIP)", "source": "proven: firmware ZIPout (t0/0x48); measured"},
+    # Digital inputs (0 = off, 1 = on), firmware 0x0009833c.
+    10360: {"name_de": "Eingang: EVU", "name_en": "Input: EVU", "source": "proven: firmware EVUin (t0/0x2a); measured: 1 while the utility lock is released"},
+    10361: {"name_de": "Eingang: EVU 2", "name_en": "Input: EVU 2", "source": "proven: firmware EVU2in (t0/0x2b); measured: 0 on the reference installation"},
+}
+
+
 def _raw(address: int, kind: RegKind, every: int) -> Register:
+    meaning = RAW_MEANINGS.get(address, {})
     return Register(
         key=f"raw_{address}",
         address=address,
         kind=kind,
-        name_de=f"Rohwert: {address}",
-        name_en=f"Raw value: {address}",
+        **{"name_de": f"Rohwert: {address}", "name_en": f"Raw value: {address}", **meaning},
         diagnostic=True,
         enabled_default=False,
         every=every,
@@ -739,7 +774,8 @@ REGISTERS = tuple(replace(reg, diagnostic=True) if reg.key in _SECONDARY_KEYS el
 ALL_REGISTERS: tuple[Register, ...] = REGISTERS + RAW_REGISTERS + CAPABILITIES
 
 # Keys of undocumented raw values (shown with a generic "Raw value: <address>" name).
-RAW_KEYS: frozenset[str] = frozenset(reg.key for reg in RAW_REGISTERS)
+# Raw values without a known meaning (they share the generic "Raw value: <address>" entity name).
+RAW_KEYS: frozenset[str] = frozenset(reg.key for reg in RAW_REGISTERS if reg.address not in RAW_MEANINGS)
 _LEGACY_EXCLUDED: frozenset[str] = frozenset(reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED))
 
 # -------------------------------------------------------------- installation equipment
