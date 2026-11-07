@@ -567,3 +567,14 @@ async def test_write_ranges_follow_source(
                 "number", "set_value", {"entity_id": entity_id, "value": value}, blocking=True
             )
         assert shi.holding_value(address) == before
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(0, "series"), (1, "separation"), (2, "multi"), (3, "unknown"), (0x7FFF, "unknown")],
+)
+async def test_buffer_type_mapping(hass: HomeAssistant, shi: FakeSHI, raw: int, expected: str) -> None:
+    """Raw 0 series, 1 separation, 2 multi-function (python-luxtronik BufferType); other values have no state."""
+    shi.input[10202] = raw
+    entry = await _setup(hass, shi)
+    assert hass.states.get(_entity_id(hass, entry, "sensor", "buffer_type")).state == expected

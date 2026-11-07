@@ -47,6 +47,8 @@ class Register:
     config: bool = False
     # Enumerations: the raw value is the index into this tuple (select and enum sensors).
     options: tuple[str, ...] | None = None
+    # Where the register facts come from (shown in docs/registers.md). ``None`` = no source recorded (open).
+    source: str | None = None
 
     @property
     def width(self) -> int:
@@ -120,7 +122,11 @@ _OPERATING_MODES = (
     "external_source",
     "cooling",
 )
-_BUFFER_TYPES = ("unknown", "series", "separation", "multi")
+# Buffer tank type (input 10202). The raw value is the index: 0 series, 1 separation, 2 multi-function buffer
+# (python-luxtronik ``BufferType``, inputs.py index 202; confirmed on the reference installation, a separation
+# buffer, which reads raw 1). Up to 0.10.1 the tuple started with "unknown", which shifted every value by one
+# (a separation buffer showed as "series"). Values outside 0..2 read as unknown (no state).
+_BUFFER_TYPES = ("series", "separation", "multi")
 
 
 def _temp_in(key, address, de, en, *, signed=True, **kw) -> Register:
@@ -251,6 +257,7 @@ REGISTERS: tuple[Register, ...] = (
         options=_BUFFER_TYPES,
         diagnostic=True,
         every=120,
+        source="python-luxtronik inputs.py (BufferType); measured",
     ),
     _s(
         "switching_lock_minutes",
@@ -666,8 +673,22 @@ RAW_INPUT_ADDRESSES_ADDED: tuple[int, ...] = (
 RAW_HOLDING_ADDRESSES_ADDED: tuple[int, ...] = ()
 
 
+# Meanings of raw values that were derived from a measurement on the reference installation (LWDV 91-1/3,
+# FW 3.92.3), not from a vendor source. They are NOT promoted to named registers: the name, scale and value table
+# stay open, the entity stays ``raw_<address>`` and disabled by default. Method and evidence:
+# docs/firmware-3.92.3-register-meanings.md.
+RAW_SOURCES: dict[int, str] = {
+    10350: "derived: follows the Luxtronik additional circulation pump (ZUP) output, not separable from the compressor",
+    10351: "derived: follows the heating circulation pump output (0/1)",
+    10354: "derived: follows the heating circulation pump output (0/1), identical to 10351",
+    10355: "derived: follows the DHW recirculation pump output (0/1)",
+    10356: "derived: follows the DHW charging pump output (0/1)",
+}
+
+
 def _raw(address: int, kind: RegKind, every: int) -> Register:
     return Register(
+        source=RAW_SOURCES.get(address),
         key=f"raw_{address}",
         address=address,
         kind=kind,

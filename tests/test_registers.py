@@ -61,3 +61,21 @@ def test_blocks_cover_every_register_exactly_once():
             assert reg.address + reg.width <= block.start + block.count
             assert reg.kind == block.kind
             assert reg.every == block.every
+
+
+def test_buffer_type_options_follow_python_luxtronik():
+    # python-luxtronik BufferType: 0 series, 1 separation, 2 multifunction. The raw value is the index; an extra
+    # leading option shifted every value by one (a separation buffer showed as "series").
+    assert BY_KEY["buffer_type"].options == ("series", "separation", "multi")
+
+
+def test_derived_raw_meanings_are_only_documented_not_named():
+    # Rule 3: derived meanings stay raw_<address> (disabled, no scale/unit) and carry a "derived:" source.
+    from custom_components.luxtronik_shi.registers import RAW_SOURCES
+
+    for address, text in RAW_SOURCES.items():
+        reg = BY_KEY[f"raw_{address}"]
+        assert text.startswith("derived:")
+        assert reg.source == text
+        assert reg.scale == 1.0 and reg.unit is None and not reg.enabled_default
+    assert BY_KEY["raw_10113"].source is None  # still open: no measurement explains it

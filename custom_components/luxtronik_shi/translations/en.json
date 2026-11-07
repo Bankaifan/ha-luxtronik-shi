@@ -158,7 +158,6 @@
       "buffer_type": {
         "name": "System: buffer tank type",
         "state": {
-          "unknown": "Unknown",
           "series": "Series buffer",
           "separation": "Separation buffer",
           "multi": "Multi-function buffer"
