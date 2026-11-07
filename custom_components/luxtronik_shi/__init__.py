@@ -21,7 +21,7 @@ from .const import (
 )
 from .coordinator import LuxtronikCoordinator, restore_store_key
 from .modbus_client import LuxtronikModbusClient
-from .registers import CLIMATE_KEYS, RENAMED_KEYS, WATER_HEATER_KEYS, active_registers
+from .registers import CLIMATE_KEYS, REMOVED_KEYS, RENAMED_KEYS, WATER_HEATER_KEYS, active_registers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,9 +62,19 @@ async def async_migrate_renamed_keys(hass: HomeAssistant, entry: ConfigEntry) ->
     await er.async_migrate_entries(hass, entry.entry_id, _migrate)
 
 
+def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the registry entries of entities that no longer exist (``REMOVED_KEYS``)."""
+    registry = er.async_get(hass)
+    obsolete = {f"{entry.entry_id}_{key}" for key in REMOVED_KEYS}
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.platform == DOMAIN and entity.unique_id in obsolete:
+            registry.async_remove(entity.entity_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -> bool:
     """Set up one heat pump."""
     await async_migrate_renamed_keys(hass, entry)
+    async_remove_obsolete_entities(hass, entry)
     client = LuxtronikModbusClient(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_SLAVE])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     if scan_interval > MAX_SCAN_INTERVAL:

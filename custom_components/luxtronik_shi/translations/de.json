@@ -195,16 +195,88 @@
         }
       },
       "heating_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Deaktiviert",
+          "no_request": "Keine Anforderung",
+          "requested": "Angefordert",
+          "running": "Läuft",
+          "unknown_4": "Unbekannt (4)",
+          "unknown_5": "Unbekannt (5)",
+          "unknown_6": "Unbekannt (6)",
+          "unknown_7": "Unbekannt (7)",
+          "unknown_8": "Unbekannt (8)",
+          "unknown_9": "Unbekannt (9)",
+          "unknown_10": "Unbekannt (10)",
+          "unknown_11": "Unbekannt (11)",
+          "unknown_12": "Unbekannt (12)",
+          "unknown_13": "Unbekannt (13)",
+          "unknown_14": "Unbekannt (14)",
+          "unknown_15": "Unbekannt (15)"
+        }
       },
       "hot_water_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Deaktiviert",
+          "no_request": "Keine Anforderung",
+          "requested": "Angefordert",
+          "running": "Läuft",
+          "unknown_4": "Unbekannt (4)",
+          "unknown_5": "Unbekannt (5)",
+          "unknown_6": "Unbekannt (6)",
+          "unknown_7": "Unbekannt (7)",
+          "unknown_8": "Unbekannt (8)",
+          "unknown_9": "Unbekannt (9)",
+          "unknown_10": "Unbekannt (10)",
+          "unknown_11": "Unbekannt (11)",
+          "unknown_12": "Unbekannt (12)",
+          "unknown_13": "Unbekannt (13)",
+          "unknown_14": "Unbekannt (14)",
+          "unknown_15": "Unbekannt (15)"
+        }
       },
       "cooling_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Deaktiviert",
+          "no_request": "Keine Anforderung",
+          "requested": "Angefordert",
+          "running": "Läuft",
+          "unknown_4": "Unbekannt (4)",
+          "unknown_5": "Unbekannt (5)",
+          "unknown_6": "Unbekannt (6)",
+          "unknown_7": "Unbekannt (7)",
+          "unknown_8": "Unbekannt (8)",
+          "unknown_9": "Unbekannt (9)",
+          "unknown_10": "Unbekannt (10)",
+          "unknown_11": "Unbekannt (11)",
+          "unknown_12": "Unbekannt (12)",
+          "unknown_13": "Unbekannt (13)",
+          "unknown_14": "Unbekannt (14)",
+          "unknown_15": "Unbekannt (15)"
+        }
       },
       "pool_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Deaktiviert",
+          "no_request": "Keine Anforderung",
+          "requested": "Angefordert",
+          "running": "Läuft",
+          "unknown_4": "Unbekannt (4)",
+          "unknown_5": "Unbekannt (5)",
+          "unknown_6": "Unbekannt (6)",
+          "unknown_7": "Unbekannt (7)",
+          "unknown_8": "Unbekannt (8)",
+          "unknown_9": "Unbekannt (9)",
+          "unknown_10": "Unbekannt (10)",
+          "unknown_11": "Unbekannt (11)",
+          "unknown_12": "Unbekannt (12)",
+          "unknown_13": "Unbekannt (13)",
+          "unknown_14": "Unbekannt (14)",
+          "unknown_15": "Unbekannt (15)"
+        }
       },
       "energy_el_total": {
         "name": "Energie: Strom gesamt"
@@ -232,15 +304,6 @@
       },
       "hours_dhw": {
         "name": "Betriebsstunden"
-      },
-      "fw_platform": {
-        "name": "Firmware: Plattform"
-      },
-      "fw_major": {
-        "name": "Firmware: Version Haupt"
-      },
-      "fw_minor": {
-        "name": "Firmware: Version Neben"
       },
       "outside_temp_average": {
         "name": "Temperatur: Außen Mittelwert"
@@ -299,8 +362,11 @@
       "raw": {
         "name": "Rohwert: {address}"
       },
+      "firmware_version": {
+        "name": "Firmware-Version"
+      },
       "cop": {
-        "name": "COP"
+        "name": "COP (10 min)"
       },
       "cop_heating": {
         "name": "COP gesamt"
@@ -649,17 +715,17 @@
       "water_heater_dhw": {
         "state": {
           "no_influence": "Keine Vorgabe",
-          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
-          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
-          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+          "setpoint": "Sollwert",
+          "offset": "Anhebung",
+          "level": "Stufe"
         },
         "state_attributes": {
           "operation_mode": {
             "state": {
               "no_influence": "Keine Vorgabe",
-              "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
-              "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
-              "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+              "setpoint": "Sollwert",
+              "offset": "Anhebung",
+              "level": "Stufe"
             }
           },
           "setpoint_active": {

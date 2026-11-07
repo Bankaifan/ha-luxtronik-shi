@@ -62,10 +62,12 @@ from .registers import (
     AREAS,
     BY_KEY,
     CONTROL_MODES,
+    FIRMWARE_PARTS,
     SETPOINT_GROUPS,
     Register,
     area_of,
     decode,
+    firmware_version,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -348,11 +350,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._remembered_dirty = True
 
     def _update_firmware(self) -> None:
-        platform, major, minor = (self._values.get(k) for k in ("fw_platform", "fw_major", "fw_minor"))
-        if None in (platform, major, minor) or self._main_device_id is None:
+        version = firmware_version(self._values)
+        if version is None or self._main_device_id is None:
             return
-        self._update_firmware_issue(int(major), int(minor))
-        version = f"{major}.{minor} (Plattform {platform})"
+        major, minor = (int(self._values[k]) for k in FIRMWARE_PARTS[:2])
+        self._update_firmware_issue(major, minor)
         if version != self._sw_version:
             self._sw_version = version
             dr.async_get(self.hass).async_update_device(self._main_device_id, sw_version=version)

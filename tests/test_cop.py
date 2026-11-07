@@ -9,8 +9,7 @@ from homeassistant.helpers import entity_registry as er
 from custom_components.luxtronik_shi.registers import (
     COP_MAX_PLAUSIBLE,
     COP_MIN_ELECTRIC_ENERGY_KWH,
-    COP_MIN_ELECTRIC_POWER_W,
-    instantaneous_cop,
+    WindowedCop,
     overall_cop,
 )
 
@@ -32,29 +31,83 @@ def _state(hass: HomeAssistant, entry, key: str) -> str:
 # ------------------------------------------------------------------ pure functions
 
 
-def test_instantaneous_normal_value() -> None:
-    assert instantaneous_cop(1200, 500) == pytest.approx(2.4)
+def _run(cop: WindowedCop, samples, start=0.0, step=30.0):
+    """Feed (thermal W, electric W) samples at a fixed step and return the list of results."""
+    return [cop.add(start + i * step, th, el) for i, (th, el) in enumerate(samples)]
 
 
-@pytest.mark.parametrize(
-    ("thermal", "electric"),
-    [
-        (None, 500),
-        (1200, None),
-        (1200, 0),  # division by zero
-        (1200, COP_MIN_ELECTRIC_POWER_W - 100),  # below threshold
-        (-800, 500),  # defrost: negative thermal power
-        (0, 500),
-        (1200 * 100, 500),  # implausibly high
-    ],
-)
-def test_instantaneous_unknown(thermal, electric) -> None:
-    assert instantaneous_cop(thermal, electric) is None
+def test_window_steady_state_is_the_energy_ratio() -> None:
+    result = _run(WindowedCop(), [(4800, 1200)] * 20)
+    assert result[-1] == pytest.approx(4.0)
 
 
-def test_instantaneous_upper_limit() -> None:
-    assert instantaneous_cop(COP_MAX_PLAUSIBLE * 1000, 1000) == pytest.approx(COP_MAX_PLAUSIBLE)
-    assert instantaneous_cop(COP_MAX_PLAUSIBLE * 1000 + 1, 1000) is None
+def test_window_hides_the_start_spike() -> None:
+    # Measured pattern after a compressor start: thermal power is already high while electric power is small.
+    start = [(8000, 1000), (6600, 1500), (5800, 1800)]
+    steady = [(5000, 1200)] * 20
+    # the old per-sample quotient showed 8.0 here
+    assert _run(WindowedCop(), start + steady)[0] is None
+    result = _run(WindowedCop(), start + steady)
+    assert all(v is None or v <= 6.0 for v in result)
+    assert result[-1] == pytest.approx(5000 / 1200, rel=0.02)
+
+
+def test_window_unknown_until_enough_energy() -> None:
+    result = _run(WindowedCop(), [(4800, 1200)] * 10)
+    # 1200 W for 30 s are 10 Wh: 60 Wh need 6 intervals, i.e. the 7th sample
+    assert result[:6] == [None] * 6
+    assert result[6] == pytest.approx(4.0)
+
+
+def test_window_smooths_the_100_w_resolution() -> None:
+    # electric power flips between 1100 W and 1200 W, thermal between 4700 W and 4800 W
+    samples = [(4700, 1100), (4800, 1200)] * 15
+    result = [v for v in _run(WindowedCop(), samples) if v is not None]
+    assert max(result) - min(result) < 0.05
+
+
+def test_window_forgets_after_the_window_and_stays_unknown_when_idle() -> None:
+    cop = WindowedCop()
+    _run(cop, [(4800, 1200)] * 20)
+    idle = _run(cop, [(0, 0)] * 40, start=600.0)
+    assert idle[0] is not None  # a stopped compressor does not blank the value at once
+    assert idle[-1] is None  # but 10 minutes later the window is empty
+
+
+
+def test_window_does_not_bridge_a_gap() -> None:
+    # samples 200 s apart (failed polls in between): no interval is interpolated, nothing to divide
+    assert _run(WindowedCop(), [(4800, 1200)] * 20, step=200.0)[-1] is None
+
+
+@pytest.mark.parametrize("bad", [(None, 500), (1200, None), (None, None)])
+def test_window_missing_value_breaks_continuity(bad) -> None:
+    cop = WindowedCop()
+    _run(cop, [(4800, 1200)] * 20)
+    cop.add(600.0, *bad)
+    # the sample after the missing one starts a new chain: no interval over the hole (570 s -> 630 s)
+    cop.add(630.0, 9600, 1200)
+    value = cop.add(660.0, 4800, 1200)
+    # 18 segments of 40 Wh / 10 Wh (ratio 4) from 60 s to 570 s plus 630 s -> 660 s: 60 Wh / 10 Wh
+    assert value == pytest.approx((18 * 40 + 60) / (18 * 10 + 10))
+
+
+def test_window_defrost_inside_a_run_counts() -> None:
+    cop = WindowedCop()
+    run = [(4800, 1200)] * 16 + [(-3000, 1000)] * 4 + [(4800, 1200)] * 4
+    plain = _run(WindowedCop(), [(4800, 1200)] * 24)[-1]
+    with_defrost = _run(cop, run)[-1]
+    assert with_defrost < plain
+
+
+def test_window_long_defrost_is_unknown() -> None:
+    result = _run(WindowedCop(), [(-3000, 1000)] * 24)
+    assert result[-1] is None  # net thermal energy negative
+
+
+def test_window_upper_limit() -> None:
+    assert _run(WindowedCop(), [(COP_MAX_PLAUSIBLE * 1000 + 1000, 1000)] * 24)[-1] is None
+    assert _run(WindowedCop(), [(COP_MAX_PLAUSIBLE * 1000, 1000)] * 24)[-1] == pytest.approx(COP_MAX_PLAUSIBLE)
 
 
 def test_overall_normal_value() -> None:
@@ -83,9 +136,18 @@ def test_overall_unknown(thermal, electric, previous) -> None:
 # ------------------------------------------------------------------ entities
 
 
-async def test_cop_entities_with_simulated_values(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def _run_entity(hass, entry, freezer, polls: int) -> None:
+    for _ in range(polls):
+        freezer.tick(30)
+        await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+
+async def test_cop_entities_with_simulated_values(hass: HomeAssistant, shi: FakeSHI, freezer) -> None:
     entry = await _setup(hass, shi)
-    # 10300 = 12 -> 1200 W thermal, 10301 = 5 -> 500 W electric
+    # 10300 = 12 -> 1200 W thermal, 10301 = 5 -> 500 W electric; the window needs 60 Wh = 7.2 minutes at 500 W
+    assert _state(hass, entry, "cop") == "unknown"
+    await _run_entity(hass, entry, freezer, 30)
     assert float(_state(hass, entry, "cop")) == pytest.approx(2.4)
     # heating: 15.0 kWh thermal / 10.0 kWh electric; hot water: 7.0 / 5.0
     assert float(_state(hass, entry, "cop_heating")) == pytest.approx(1.5)
@@ -111,23 +173,27 @@ def test_cop_sources_are_existing_registers_and_add_none() -> None:
         assert sensor.electric in BY_KEY
 
 
-async def test_instantaneous_cop_unknown_without_electric_power(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_cop_entity_ignores_a_start_spike_and_goes_unknown_when_idle(
+    hass: HomeAssistant, shi: FakeSHI, freezer
+) -> None:
+    shi.input[10300] = 0
+    shi.input[10301] = 0
     entry = await _setup(hass, shi)
-    shi.input[10301] = 0  # compressor off
-    await _refresh(hass, entry)
     assert _state(hass, entry, "cop") == "unknown"
-    shi.input[10301] = 1  # 100 W, below the threshold
-    await _refresh(hass, entry)
+    shi.input[10300] = 80  # 8000 W thermal while electric power is still 1000 W: per-sample COP 8.0
+    shi.input[10301] = 10
+    await _run_entity(hass, entry, freezer, 1)
     assert _state(hass, entry, "cop") == "unknown"
-    shi.input[10301] = 5
-    await _refresh(hass, entry)
-    assert float(_state(hass, entry, "cop")) == pytest.approx(2.4)
-
-
-async def test_instantaneous_cop_unknown_during_defrost(hass: HomeAssistant, shi: FakeSHI) -> None:
-    entry = await _setup(hass, shi)
-    shi.input[10300] = 0xFFF8  # -800 W (int16)
-    await _refresh(hass, entry)
+    shi.input[10300] = 50
+    shi.input[10301] = 12
+    for _ in range(20):
+        await _run_entity(hass, entry, freezer, 1)
+        state = _state(hass, entry, "cop")
+        assert state == "unknown" or float(state) < 6.0
+    assert float(_state(hass, entry, "cop")) == pytest.approx(5000 / 1200, rel=0.05)
+    shi.input[10300] = 0
+    shi.input[10301] = 0
+    await _run_entity(hass, entry, freezer, 40)  # 20 minutes of standstill
     assert _state(hass, entry, "cop") == "unknown"
 
 

@@ -74,8 +74,8 @@ that is already set up.
 |---|---|
 | Temperatures | flow, return, heat source inlet/outlet, outside average, return target/limit/minimum, return external, outside, room (room unit only), heating/hot water limit temperatures, hot water (actual, target, min, max), mixing circuits 1–3 (flow, target, min, max; disabled by default for circuits 2 and 3) |
 | Power & energy | electric and thermal power, minimum electric power, electric/thermal energy counters (total, heating, hot water, cooling, pool), operating hours |
-| Calculated COP | **COP** (thermal / electric power, main device) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when electric power is below 200 W, values are zero, negative or implausible, or a counter was reset |
-| Status | operating mode as text (heating, hot water, pool / solar, utility lockout, defrost, no request, heating from external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status, connection |
+| Calculated COP | **COP (10 min)** (energy ratio of the last 10 minutes from thermal and electric power, main device; unknown while less than 60 Wh of electric energy are in the window, i.e. when the compressor is stopped or just started) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when values are missing, negative or implausible, or a counter was reset |
+| Status | operating mode as text (heating, hot water, pool / solar, utility lockout, defrost, no request, heating from external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status as text (disabled, no request, requested, running; other values as *Unknown (n)*), connection |
 | **Climate / water heater** | heating circuit (auto / heat, setpoint 15–75 °C) and hot water (no influence / setpoint / offset / level, setpoint 30–75 °C), see below |
 | **Write: numbers** | **heating curve offset** (−20 … +20 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
 | **Write: selects** | mode (no influence / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (normal / increased / increased step 2 / decreased); power limit mode (none / soft / hard) |
@@ -142,7 +142,7 @@ Like the menus of the Luxtronik controller, the entities are split into devices:
 
 | Device | Content |
 |---|---|
-| **<name>** (heat pump) | temperatures (flow, return, outside, heat source), status and operating mode, compressor/auxiliary heater, power, COP, total energy and compressor hours, power limit, system values, firmware, equipment flags, raw values |
+| **<name>** (heat pump) | temperatures (flow, return, outside, heat source), status and operating mode, compressor/auxiliary heater, power, COP, total energy and compressor hours, power limit, system values, firmware version (one text sensor, e.g. 3.92.3), equipment flags, raw values |
 | **<name> Heating** | climate entity, mode, setpoint, heating curve offset, level, overall heating, block, mixing circuits 1–3, heating energy, hours and COP |
 | **<name> Hot water** | water heater entity, temperatures, mode, setpoint, offset, level, block, circulation pump, extra hot water, hot water energy, hours and COP |
 | **<name> Cooling** / **<name> Pool** | only when cooling or a pool is selected in the equipment; Cooling holds the cooling entities of the mixing circuits, Pool the pool block, status and energy |

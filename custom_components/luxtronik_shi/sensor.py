@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import DERIVED_SENSORS, DerivedSensor, Register, instantaneous_cop, overall_cop
+from .registers import (
+    DERIVED_SENSORS,
+    FIRMWARE_SENSOR_KEY,
+    DerivedSensor,
+    Register,
+    WindowedCop,
+    firmware_version,
+    overall_cop,
+)
 
 
 async def async_setup_entry(
@@ -24,6 +34,7 @@ async def async_setup_entry(
         LuxtronikSensor(coordinator, reg) for reg in coordinator.registers if reg.platform == "sensor"
     )
     async_add_entities(LuxtronikCopSensor(coordinator, sensor) for sensor in DERIVED_SENSORS)
+    async_add_entities([LuxtronikFirmwareSensor(coordinator)])
 
 
 class LuxtronikSensor(LuxtronikEntity, SensorEntity):
@@ -55,7 +66,8 @@ class LuxtronikSensor(LuxtronikEntity, SensorEntity):
 class LuxtronikCopSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
     """COP calculated from registers that are read anyway (no extra Modbus traffic).
 
-    Unknown instead of a number whenever the inputs are missing, zero, negative or implausible.
+    The power based COP is the energy ratio of a trailing window (see ``WindowedCop``), the overall values the
+    ratio of the energy counters. Unknown instead of a number whenever the inputs are missing or implausible.
     """
 
     _attr_has_entity_name = True
@@ -69,6 +81,7 @@ class LuxtronikCopSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
         self._attr_translation_key = sensor.key
         self._attr_device_info = coordinator.device_info_for(sensor.key)
         self._previous: tuple[float, float] | None = None
+        self._window = WindowedCop()
         self._attr_native_value = None
         self._recalculate()
 
@@ -77,7 +90,7 @@ class LuxtronikCopSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
         thermal = data.get(self._sensor.thermal)
         electric = data.get(self._sensor.electric)
         if not self._sensor.cumulative:
-            self._attr_native_value = instantaneous_cop(thermal, electric)
+            self._attr_native_value = self._window.add(dt_util.utcnow().timestamp(), thermal, electric)
             return
         self._attr_native_value = overall_cop(thermal, electric, self._previous)
         if thermal is not None and electric is not None:
@@ -86,3 +99,21 @@ class LuxtronikCopSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
     def _handle_coordinator_update(self) -> None:
         self._recalculate()
         super()._handle_coordinator_update()
+
+
+class LuxtronikFirmwareSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
+    """Firmware version of the heat pump as one text, e.g. ``3.92.3`` (the three version registers joined)."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: LuxtronikCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{FIRMWARE_SENSOR_KEY}"
+        self._attr_device_info = coordinator.device_info_for(FIRMWARE_SENSOR_KEY)
+        self._attr_translation_key = FIRMWARE_SENSOR_KEY
+
+    @property
+    def native_value(self) -> str | None:
+        """The version, ``None`` until all three parts have been read."""
+        return firmware_version(self.coordinator.data or {})

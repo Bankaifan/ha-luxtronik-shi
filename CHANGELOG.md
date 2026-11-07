@@ -11,6 +11,51 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.12.0] – 2026-11-07
+
+### Action required
+- **The three firmware entities are gone** (owner-approved exception to the entity contract): `fw_platform`,
+  `fw_major` and `fw_minor` ("Firmware: platform / major version / minor version"). They are replaced by one
+  diagnostic sensor, `firmware_version` ("Firmware version", e.g. `3.92.3`). The integration deletes the old registry
+  entries at the next start. Remove them from dashboards and automations; nothing else uses them.
+- **The COP sensor is now a 10 minute value** (key and entity ID unchanged, name "COP (10 min)"). It is unknown
+  for the first minutes of a compressor run and 10 minutes after it stopped, instead of showing single readings. Check
+  automations that expect a value at every moment.
+- **The status sensors (heating, hot water, cooling, pool) report text** instead of 0 to 3: `disabled`, `no_request`,
+  `requested`, `running` (shown translated). Automations and templates that compare with numbers must use these
+  keys. A value outside 0 to 3 is `unknown_<n>` ("Unknown (<n>)").
+
+### Changed
+- **COP over a time window.** The old per-reading quotient (thermal power / electric power) showed spikes of 6 to 10
+  right after a compressor start (history of 2026-11-06/07: 8.0, 6.3, 9.3, 10.3), jumped between neighbouring ratios
+  of whole numbers (4.32 / 4.37, both powers have a resolution of 100 W) and was unknown whenever the electric power
+  was below 200 W. The COP is now the energy ratio of the last 10 minutes (integral of thermal power / integral of
+  electric power, from the samples already polled; no extra Modbus reads). It is unknown while the window holds less
+  than 60 Wh of electric energy (compressor stopped, or the first 2 to 4 minutes of a run, where the thermal power
+  register still ramps up) and when the result is not between 0 and 12. Gaps of more than 150 s (failed polls) and
+  missing values are not interpolated. Defrost inside a run counts: negative thermal power lowers the COP, as it
+  does in reality. The limits are design choices of this integration, not register facts. COP overall (energy
+  counters) is unchanged.
+- **Status of heating, hot water, cooling and pool as text.** Values from python-luxtronik `ModeStatus`
+  (inputs 10003, 10004, 10006, 10007; range 0 to 3): 0 disabled, 1 no request, 2 requested, 3 running. German and
+  English texts.
+- **Water heater operations have short, capitalised labels**: *No influence / Keine Vorgabe*, *Setpoint / Sollwert*,
+  *Offset / Anhebung*, *Level / Stufe* (the mode selects keep their long explanations). Keys and values are
+  unchanged. The labels were added in 0.10.0 together with the rename of `off`; an installation still on 0.9 or older
+  shows the raw keys.
+
+### Fixed
+- **The firmware version was read in the wrong order.** Registers 10400, 10401 and 10402 are major, minor and patch
+  (python-luxtronik `version`; the reference installation reads 3 / 92 / 3). The code treated 10401 and 10402 as
+  major and minor, so the device showed "92.3 (Plattform 3)" and the *firmware outdated* repair issue could never
+  appear. The device now shows `3.92.3` and the issue compares major and minor correctly.
+
+### Tests
+- `tests/test_cop.py`: the window (steady state, start spike, minimum energy, 100 W resolution, idle, gap, missing
+  value, defrost, upper limit) and the entity over simulated time.
+- `tests/test_entity_polish.py`: status texts including unknown values and translations, the single firmware entity,
+  removal of the old registry entries, firmware issue order, water heater labels, no `off` operation.
+
 ## [0.11.0] – 2026-11-07
 
 ### Action required
@@ -442,7 +487,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.9.0...v0.10.0

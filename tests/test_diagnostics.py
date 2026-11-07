@@ -41,7 +41,8 @@ async def test_diagnostics(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert set(diag["features"]["capability_flags"]) == {
         "mk1", "mk2", "mk3", "cooling", "pool", "room_unit"
     }
-    assert set(diag["firmware"]) == {"fw_platform", "fw_major", "fw_minor"}
+    assert set(diag["firmware"]) == {"fw_version_major", "fw_version_minor", "fw_version_patch", "version"}
+    assert diag["firmware"]["version"] == "3.92.3"
     assert diag["config_entry"]["data"][CONF_HOST] == REDACTED
     assert diag["config_entry"]["data"][CONF_MAC] == REDACTED
 
