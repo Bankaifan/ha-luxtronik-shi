@@ -1,0 +1,101 @@
+blueprint:
+  name: "Luxtronik SHI: block while a signal is on / sperren, solange ein Signal an ist"
+  description: >-
+    EN: Switches the chosen block switches of the heat pump on while a signal is on (for example a high price,
+    a utility signal or a schedule) and releases them when it goes off. Optionally releases after a maximum time.
+    After a Home Assistant restart the blocks are set again if the signal is on; nothing is released at start.
+    Do not combine with a planner that writes the same blocks (the last write wins).
+    DE: Schaltet die gewählten Sperren der Wärmepumpe ein, solange ein Signal an ist (z. B. hoher Preis, EVU-Signal
+    oder Zeitplan), und gibt sie frei, wenn es ausgeht. Optional Freigabe nach einer Höchstdauer. Nach einem
+    Neustart von Home Assistant werden die Sperren bei aktivem Signal erneut gesetzt; beim Start wird nichts
+    freigegeben. Nicht zusammen mit einem Planer verwenden, der dieselben Sperren schreibt (der letzte Schreibvorgang gewinnt).
+  domain: automation
+  source_url: https://github.com/Bankaifan/ha-luxtronik-shi/blob/main/blueprints/automation/luxtronik_shi/block_while_signal.yaml
+  input:
+    signal:
+      name: Signal / Signal
+      description: "EN: Blocks while this is on. DE: Sperrt, solange dies an ist."
+      selector:
+        entity:
+          domain: [binary_sensor, input_boolean, switch, schedule]
+    blocks:
+      name: Block switches / Sperren
+      description: "EN: The block switches of the heat pump (heating, hot water, cooling, pool). DE: Die Sperr-Schalter der Wärmepumpe."
+      selector:
+        entity:
+          filter:
+            - integration: luxtronik_shi
+              domain: switch
+          multiple: true
+    release:
+      name: Release when the signal goes off / Freigeben, wenn das Signal ausgeht
+      default: true
+      selector:
+        boolean: {}
+    max_minutes:
+      name: Maximum block time in minutes, 0 = no limit / Höchstdauer in Minuten, 0 = unbegrenzt
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 720
+          unit_of_measurement: min
+          mode: box
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  blocks: !input blocks
+  release: !input release
+  max_minutes: !input max_minutes
+
+triggers:
+  - trigger: state
+    entity_id: !input signal
+    to: "on"
+    id: "on"
+  - trigger: state
+    entity_id: !input signal
+    to: "off"
+    id: "off"
+  - trigger: homeassistant
+    event: start
+    id: "start"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: ["off"]
+          - condition: template
+            value_template: "{{ release }}"
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: !input blocks
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: ["on"]
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: ["start"]
+                  - condition: state
+                    entity_id: !input signal
+                    state: "on"
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: !input blocks
+          - if:
+              - condition: template
+                value_template: "{{ max_minutes | int(0) > 0 }}"
+            then:
+              - delay:
+                  minutes: "{{ max_minutes | int(0) }}"
+              - action: switch.turn_off
+                target:
+                  entity_id: !input blocks

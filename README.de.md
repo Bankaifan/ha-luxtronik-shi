@@ -338,6 +338,8 @@ Ausfall zählen.
 
 ## Diagnose
 
+Siehe auch [Dashboards und Blueprints](docs/dashboard.de.md): fertige Dashboards (Übersicht, Energie, Sperren und Netz, Steuerung, Diagnose), Blueprints und ein Generator für die eigenen Entity-IDs.
+
 Unter *Einstellungen → Geräte & Dienste → Luxtronik SHI* bietet das ⋮-Menü des Eintrags **Diagnose herunterladen**.
 Die Datei enthält die Version von Integration und Home Assistant, die gewählte Ausstattung und die
 Ausstattungsmerkmale, die Firmware, die zuletzt abgefragten Registerwerte (roh und umgerechnet) und bei eingeschalteter

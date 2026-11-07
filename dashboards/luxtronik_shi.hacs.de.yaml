@@ -1,0 +1,49 @@
+# Luxtronik SHI, optionale Ansicht mit HACS-Karten, erzeugt mit tools/gen_dashboard.py. Nicht von Hand ändern.
+# Braucht die HACS-Karte apexcharts-card (https://github.com/RomRider/apexcharts-card).
+# Die Ansicht neben der Hauptansicht ins Dashboard einfügen (Rohkonfigurations-Editor).
+
+title: Wärmepumpe
+views:
+- type: sections
+  path: luxtronik_charts
+  title: Diagramme (HACS)
+  icon: mdi:chart-line
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Temperaturen
+      icon: mdi:thermometer
+    - type: custom:apexcharts-card
+      header:
+        show: true
+        title: Temperaturen
+        show_states: true
+      graph_span: 24h
+      span:
+        end: hour
+      series:
+      - entity: sensor.warmepumpe_temperatur_vorlauf
+      - entity: sensor.warmepumpe_temperatur_rucklauf
+      - entity: sensor.warmepumpe_temperatur_aussen
+      - entity: sensor.warmepumpe_warmwasser_temperatur
+    - type: markdown
+      content: Braucht die HACS-Karte apexcharts-card.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Leistung und COP
+      icon: mdi:flash
+    - type: custom:apexcharts-card
+      header:
+        show: true
+        title: Leistung und COP
+        show_states: true
+      graph_span: 24h
+      span:
+        end: hour
+      series:
+      - entity: sensor.warmepumpe_leistung_elektrisch
+      - entity: sensor.warmepumpe_leistung_thermisch
+      - entity: sensor.warmepumpe_cop
