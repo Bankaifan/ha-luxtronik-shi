@@ -137,6 +137,9 @@ Entries created before 0.3.0 keep all entities until the equipment is saved ther
 * **Block reads** instead of one request per value. If the device rejects a block read (e.g. because a register in
   the gap does not exist), the integration falls back to single reads automatically.
 * **Tiered polling**: measurements every cycle (default 30 s), counters and settings less often, firmware rarely.
+* **At most every 5 minutes** (10–300 s): the SHI drops every value set over it after 10 minutes without any Modbus
+  access ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). An existing entry with a longer
+  interval polls every 300 s and logs a warning; saving the options once stores the new value.
 
 ## Repair issues
 
@@ -168,7 +171,8 @@ instead of 2.
 
 Under *Options*, **Restore values after a device reset** (off by default) makes the integration write such values back:
 
-* **Only its own values, and only settings.** It remembers a value only after it was written through one of its own
+* **Its own values, plus a one-time snapshot at switch-on, and only settings.** It remembers a value after it was
+  written through one of its own
   entities (number, select, climate, water heater) and read back unchanged. Only the **mode, level, offset and setpoint**
   of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint are
   remembered (`RESTORE_KEYS` in `const.py`). Blocks (heating, hot water, cooling, pool), circulation, extra hot water
@@ -184,11 +188,12 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   does not revert them.
 * **Adopting the current values once.** When the option is switched on (in the options, or on the first setup with
   it on), the first full read cycle is taken as a snapshot and remembered as if written by the integration: every
-  mode, level and offset of the allow-list that reads non-zero, and a setpoint only if its circuit's mode reads
-  `setpoint` (an unset setpoint reads its boot default, and restoring that would make the SHI own it). The adopted
-  keys are logged. This happens once; a restart or reload with the option still on does not adopt again.
-* **Needs an update interval of at most 540 seconds.** The options refuse the restore option above that, well inside
-  the 600 s watchdog; an entry that has both anyway runs with the option off (warning in the log).
+  mode, level and offset of the allow-list that reads non-zero (never `0x7FFF`), and a setpoint only if its circuit's
+  mode reads `setpoint`. The adopted keys are logged. This happens once; a restart or reload with the option still on
+  does not adopt again. Adopted values may have been set by another client; they are restored like your own. Who set
+  a value cannot be read over Modbus, so the mode filter only makes it likely that a setpoint was meant: an adopted
+  setpoint can also be a boot default or a controller parameter. After a reset in which that parameter changed, the
+  adopted value is written back over the change, and from then on the SHI owns it.
 * **Only after an outage.** The controller reverts the SHI values for exactly two reasons: a reboot, which drops the
   connection, and 10 minutes without any Modbus access
   ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). So a reset is only considered after

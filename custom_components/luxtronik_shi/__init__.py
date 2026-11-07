@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 
-from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL, DOMAIN, STORE_VERSION
+from .const import (
+    CONF_FEATURES,
+    CONF_SCAN_INTERVAL,
+    CONF_SLAVE,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MAX_SCAN_INTERVAL,
+    STORE_VERSION,
+)
 from .coordinator import LuxtronikCoordinator, restore_store_key
 from .modbus_client import LuxtronikModbusClient
 from .registers import CLIMATE_KEYS, RENAMED_KEYS, WATER_HEATER_KEYS, active_registers
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -55,6 +67,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
     await async_migrate_renamed_keys(hass, entry)
     client = LuxtronikModbusClient(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_SLAVE])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    if scan_interval > MAX_SCAN_INTERVAL:
+        # Entries from before the 5 minute limit keep their stored option (no options migration exists); the
+        # coordinator polls at the maximum. Saving the options once stores the new value.
+        _LOGGER.warning(
+            "%s: update interval %d s is longer than the maximum of %d s (SHI watchdog); polling every %d s",
+            entry.title, scan_interval, MAX_SCAN_INTERVAL, MAX_SCAN_INTERVAL,
+        )
+        scan_interval = MAX_SCAN_INTERVAL
     # Entries created before 0.3.0 have no equipment option: keep every entity.
     registers = active_registers(entry.options.get(CONF_FEATURES))
     coordinator = LuxtronikCoordinator(hass, entry, client, scan_interval, registers)

@@ -144,6 +144,10 @@ Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung 
   in der Lücke fehlt), liest die Integration automatisch einzeln weiter.
 * **Abgestufte Abfrageintervalle**: Messwerte jeden Zyklus (Standard 30 s), Zähler und Einstellungen seltener, Firmware
   fast nie.
+* **Höchstens alle 5 Minuten** (10–300 s): Die SHI verwirft alle über sie gesetzten Werte nach 10 Minuten ohne jeden
+  Modbus-Zugriff ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein bestehender
+  Eintrag mit längerem Intervall fragt alle 300 s ab und schreibt eine Warnung ins Log; einmal die Optionen speichern
+  übernimmt den neuen Wert.
 
 ## Reparaturhinweise
 
@@ -177,7 +181,8 @@ Heizungs-Stufe auf Rohwert 0 statt 2.
 Unter *Optionen* sorgt **Werte nach einem Geräte-Reset wiederherstellen** (standardmäßig aus) dafür, dass die
 Integration solche Werte zurückschreibt:
 
-* **Nur eigene Werte, und nur Einstellungen.** Gemerkt wird ein Wert erst, wenn er über eine Entität dieser
+* **Eigene Werte plus eine einmalige Momentaufnahme beim Einschalten, und nur Einstellungen.** Gemerkt wird ein
+  Wert, wenn er über eine Entität dieser
   Integration (Number, Select, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Gemerkt werden
   nur **Betriebsart, Stufe, Offset und Sollwert** jedes Kreises (Heizung, Warmwasser, Mischkreise 1–3 Heizen und
   Kühlen, gesamt) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Sperren (Heizung, Warmwasser, Kühlung, Pool),
@@ -196,12 +201,13 @@ Integration solche Werte zurückschreibt:
 * **Einmalige Übernahme der aktuellen Werte.** Wird die Option eingeschaltet (in den Optionen oder bei der ersten
   Einrichtung mit eingeschalteter Option), dient der erste vollständige Lesezyklus als Momentaufnahme und wird gemerkt,
   als hätte die Integration ihn geschrieben: jede Betriebsart, Stufe und jeder Offset der Liste, die nicht 0 lesen,
-  und ein Sollwert nur, wenn die Betriebsart seines Kreises `Sollwert` liest (ein nie gesetzter Sollwert liest seinen
-  Startwert, und ihn wiederherzustellen würde ihn der SHI unterstellen). Die übernommenen Schlüssel stehen im Log. Das
-  passiert einmal; ein Neustart oder Neuladen bei weiter eingeschalteter Option übernimmt nichts erneut.
-* **Erfordert ein Aktualisierungsintervall von höchstens 540 Sekunden.** Darüber lehnen die Optionen die
-  Wiederherstellung ab, deutlich unter dem 600-Sekunden-Watchdog; ein Eintrag, der beides trotzdem hat, läuft mit
-  ausgeschalteter Option (Warnung im Log).
+  (nie `0x7FFF`), und ein Sollwert nur, wenn die Betriebsart seines Kreises `Sollwert` liest. Die übernommenen
+  Schlüssel stehen im Log. Das passiert einmal; ein Neustart oder Neuladen bei weiter eingeschalteter Option übernimmt
+  nichts erneut. Übernommene Werte kann auch ein anderer Client gesetzt haben; sie werden wie deine eigenen
+  wiederhergestellt. Wer einen Wert gesetzt hat, lässt sich über Modbus nicht lesen, der Filter auf die Betriebsart
+  macht also nur wahrscheinlich, dass ein Sollwert gewollt war: Ein übernommener Sollwert kann auch ein Startwert oder
+  ein Parameter der Regelung sein. Hat sich dieser Parameter bei einem Reset geändert, wird der übernommene Wert über
+  die Änderung hinweg zurückgeschrieben, und ab dann gehört er der SHI.
 * **Nur nach einem Ausfall.** Die Regelung setzt die SHI-Werte aus genau zwei Gründen zurück: bei einem Neustart, der
   die Verbindung trennt, und nach 10 Minuten ganz ohne Modbus-Zugriff
   ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein Reset kommt deshalb nur in Frage

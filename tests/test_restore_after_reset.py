@@ -897,35 +897,24 @@ async def test_no_relearning_without_a_non_zero_mode(hass: HomeAssistant, shi: F
     assert coordinator.learned == {"cfg_dhw_setpoint": 450}
 
 
-# ---------------------------------------------------------------- long scan interval refused
+# ---------------------------------------------------------------- maximum scan interval (5 minutes)
 
 
-async def test_options_flow_refuses_restore_at_long_interval(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """Review q12: above 540 s the watchdog could expire between polls; the option is refused."""
+async def test_options_flow_caps_scan_interval_at_300(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """The SHI watchdog drops SHI values after 600 s without access, so polls at most every 300 s."""
+    import voluptuous as vol
     from homeassistant.data_entry_flow import FlowResultType
 
     entry = await _setup(hass, shi, restore=False)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"scan_interval": 600, "restore_after_reset": True}
-    )
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"restore_after_reset": "restore_scan_interval"}
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"scan_interval": 540, "restore_after_reset": True}
-    )
+    with pytest.raises(vol.Invalid):
+        await hass.config_entries.options.async_configure(result["flow_id"], {"scan_interval": 301})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"scan_interval": 300})
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
-    assert entry.runtime_data.restore_enabled
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"scan_interval": 600, "restore_after_reset": False}
-    )
-    assert result["type"] is FlowResultType.CREATE_ENTRY  # a long interval alone is fine
 
 
-async def test_setup_with_long_interval_treats_restore_as_off(
-    hass: HomeAssistant, shi: FakeSHI, hass_storage, caplog: pytest.LogCaptureFixture
+async def test_longer_stored_interval_is_clamped_with_a_warning(
+    hass: HomeAssistant, shi: FakeSHI, caplog: pytest.LogCaptureFixture
 ) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -934,18 +923,16 @@ async def test_setup_with_long_interval_treats_restore_as_off(
         data={CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1},
         options={"scan_interval": 600, "restore_after_reset": True},
     )
-    key = restore_store_key(entry.entry_id)
-    hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": {"values": {"cfg_heating_mode": 1}}}
     entry.add_to_hass(hass)
     with caplog.at_level(logging.WARNING):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-    coordinator = entry.runtime_data
-    assert not coordinator.restore_enabled
-    assert "the option is treated as off" in caplog.text
-    await _write(entry, "cfg_dhw_mode", 1)
-    assert coordinator.remembered == {}
-    assert hass_storage[key]["data"] == {"values": {"cfg_heating_mode": 1}}  # kept, not deleted
+    assert entry.runtime_data.update_interval.total_seconds() == 300
+    assert entry.options["scan_interval"] == 600  # stored option kept (no options migration)
+    assert entry.runtime_data.restore_enabled
+    assert "update interval 600 s is longer than the maximum of 300 s" in caplog.text
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["data_schema"]({})["scan_interval"] == 300  # the form offers the maximum
 
 
 # ---------------------------------------------------------------- adopt the device values when switched on
@@ -1001,3 +988,31 @@ async def test_option_off_adopts_and_stores_nothing(hass: HomeAssistant, shi: Fa
     assert entry.runtime_data.remembered == {}
     assert restore_store_key(entry.entry_id) not in hass_storage
     assert [r for r in shi.requests if r[0] == 6] == []
+
+
+async def test_7fff_is_never_adopted(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """A2: 0x7FFF means "not available"; it is not adopted (modes) and a setpoint at 0x7FFF is not either."""
+    shi.holding.update({MODE: 0x7FFF, DHW_MODE: 1, DHW_SETPOINT: 0x7FFF, LEVEL: 2})
+    entry = await _setup(hass, shi)
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_heating_level": 2}
+
+
+async def test_old_store_without_marker_keeps_its_values(hass: HomeAssistant, shi: FakeSHI, hass_storage) -> None:
+    """A5: a store from before adoption (values, no marker) keeps its remembered values; only other keys are
+    adopted, once."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="WP",
+        unique_id=f"127.0.0.1:{shi.port}:1",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1},
+        options={"scan_interval": 30, "restore_after_reset": True},
+    )
+    key = restore_store_key(entry.entry_id)
+    old = {"cfg_heating_mode": 0, "cfg_heating_offset": 0}  # written as `off` / 0: never adopted by themselves
+    hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": {"values": old}}
+    shi.holding.update({DHW_MODE: 1})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data.remembered == {**old, "cfg_dhw_mode": 1, "cfg_dhw_setpoint": 400}
+    assert hass_storage[key]["data"]["adopted"] is True

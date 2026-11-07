@@ -12,6 +12,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ## [Unreleased]
 
 ### Action required
+- **Update intervals longer than 5 minutes are reduced to 5 minutes (300 s).** The SHI drops every value set over it
+  after 10 minutes without Modbus access, even with the restore option off, so the options now allow 10–300 s. An
+  existing entry with a longer interval polls every 300 s and logs a warning; its stored option is kept until you save
+  the options once.
 - **Write ranges of nine settings now follow the python-luxtronik source (`holdings.py`), with the owner's approval.**
   The Home Assistant number, climate and water heater entities (and so the limits an optimizer reads from them)
   change as follows. Check automations and optimizers that rely on the old limits.
@@ -70,8 +74,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
   - **Adopts the current device values once when the option is switched on** (options flow or first setup): every
     allow-listed mode, level and offset that reads non-zero, and a setpoint only if its circuit's mode is
     `setpoint` (an unset setpoint reads its boot default). Logged; not repeated on restart or reload.
-  - The option needs an update interval of at most 540 s: the options flow refuses it above that, and an entry that
-    has both anyway runs with the option off (warning). The in-session gap is measured with a monotonic clock.
+  - Adopted values may have been set by another client and are restored like the integration's own. Who set a value
+    cannot be read over Modbus, so an adopted setpoint can also be a boot default or a controller parameter; after a
+    reset in which that parameter changed it is written back over the change, and the SHI then owns it.
+  - The in-session gap is measured with a monotonic clock.
   - The reconnect signal rests on an **assumption not yet measured** on the reference installation: the SHI keeps the
     TCP connection open between polls. If reconnects happen on 3 of the last 5 polls, reconnects stop counting as an
     outage for the session (warning once). More than 600 s since the previous successful poll also counts as an
@@ -114,7 +120,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   registers still open). The README cites it.
 
 ### Tests
-- `tests/test_restore_after_reset.py` (reset detection v2, second review): the option refused above 540 s in the options flow and off at setup, a wall-clock step is no gap, an unseen room setpoint blocks the restore, no relearning without a non-zero mode, adoption (owner case, setpoint with its mode off, no second adoption after a reload, switching on in the options, option off); (first review): relearning after a real reboot and not when a mode did not revert, the reconnect guard, an unavailable remembered key is dropped, an unseen key blocks the restore, 0x7FFF is never a reset value, a zero setpoint after an outage, the watchdog between two polls of a long interval, learned values exempt from the age limit, a deterministic lock test; zeros without an outage are external, a partial revert restores nothing, a single remembered mode is restored after an outage, a network blip with unchanged values does nothing, a blip with one external change is forgotten, a reconnect without a failed poll counts as an outage, setpoint reset values are learned, required and persisted; setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
+- `tests/test_restore_after_reset.py` (reset detection v2, third review): the options flow caps the interval at 300 s, a longer stored interval is clamped with a warning, 0x7FFF is never adopted, an old store without the adoption marker keeps its values; (second review): a wall-clock step is no gap, an unseen room setpoint blocks the restore, no relearning without a non-zero mode, adoption (owner case, setpoint with its mode off, no second adoption after a reload, switching on in the options, option off); (first review): relearning after a real reboot and not when a mode did not revert, the reconnect guard, an unavailable remembered key is dropped, an unseen key blocks the restore, 0x7FFF is never a reset value, a zero setpoint after an outage, the watchdog between two polls of a long interval, learned values exempt from the age limit, a deterministic lock test; zeros without an outage are external, a partial revert restores nothing, a single remembered mode is restored after an outage, a network blip with unchanged values does nothing, a blip with one external change is forgotten, a reconnect without a failed poll counts as an outage, setpoint reset values are learned, required and persisted; setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
   external changes; blocks and extra hot water are never remembered or restored, the allow-list only
   names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
   skipped, a write whose read-back differs is not remembered, the group rule across windows, modes restored last and skipped after a failed value of their circuit, a lone zero forgets its circuit's mode, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no

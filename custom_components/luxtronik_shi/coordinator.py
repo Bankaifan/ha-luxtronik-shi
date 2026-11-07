@@ -30,7 +30,6 @@ from .const import (
     ISSUE_VALUES_CHANGED,
     LAST_POLL_SAVE_INTERVAL,
     MANUFACTURER,
-    MAX_RESTORE_SCAN_INTERVAL,
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
@@ -149,17 +148,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Same for the water heater entity.
         self.water_heater_enabled_default = True
         # Restore after a device reset (option): raw values this integration wrote and read back, per key.
-        restore = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
-        # The options flow refuses the option above MAX_RESTORE_SCAN_INTERVAL; an entry that has both anyway
-        # (edited or older) runs with the option off. Its store is kept, not deleted.
-        self._restore_refused = restore and scan_interval > MAX_RESTORE_SCAN_INTERVAL
-        if self._restore_refused:
-            _LOGGER.warning(
-                "%s: restore after a device reset needs an update interval of at most %d s (set: %d s); "
-                "the option is treated as off",
-                entry.title, MAX_RESTORE_SCAN_INTERVAL, scan_interval,
-            )
-        self.restore_enabled = restore and not self._restore_refused
+        self.restore_enabled = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
         self._restore_store: Store[dict[str, Any]] = Store(
             hass, STORE_VERSION, restore_store_key(entry.entry_id)
         )
@@ -476,8 +465,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_load_remembered(self) -> None:
         """Load the remembered values (option on) or delete them (option off), before the first poll."""
         if not self.restore_enabled:
-            if not self._restore_refused:
-                await self._restore_store.async_remove()
+            await self._restore_store.async_remove()
             return
         data = await self._restore_store.async_load() or {}
         # Adopt the device values once when the option is switched on (no store yet, or one from before).
@@ -648,8 +636,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Option switched on: remember what the device holds now, once, as if written by this integration.
 
         Runs on the first successful poll after setup, which reads every block. Modes, levels and offsets are
-        adopted when they read non-zero. A setpoint is adopted only if its circuit's mode is `setpoint`: an
-        unset setpoint reads its boot default, and restoring that would make the SHI own it.
+        adopted when they read non-zero (never 0x7FFF). A setpoint is adopted only if its circuit's mode is
+        `setpoint`. That only makes it likely that the setpoint was meant: who set a value cannot be read over
+        Modbus, so an adopted setpoint can also be a boot default or a controller parameter. After a reset in
+        which that parameter changed, the adopted value is written back over the change, and the SHI then
+        owns it.
+        Adopted values may have been set by another client; they are restored like this integration's own.
         """
         adopted: dict[str, int] = {}
         for key in sorted(self._restorable()):

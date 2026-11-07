@@ -13,7 +13,9 @@ DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
 DEFAULT_SCAN_INTERVAL = 30  # seconds, base cycle
 MIN_SCAN_INTERVAL = 10
-MAX_SCAN_INTERVAL = 600
+# At most 5 minutes: the SHI watchdog drops every value set over the SHI after 600 s without Modbus access
+# (docs/firmware-3.92.3-shi-analysis.md, "SHI watchdog"), so a longer interval could lose them between polls.
+MAX_SCAN_INTERVAL = 300
 
 # Repair issues (issue #24)
 # First firmware with the circulation pump and extra hot water registers (README note on the features).
@@ -34,10 +36,6 @@ OUTAGE_WATCH_KEYS = {
 # controller reboots or its watchdog expires; the holding registers then read their reset value 0.
 DEFAULT_RESTORE_AFTER_RESET = False
 STORE_VERSION = 1
-# The restore option needs polls well inside the SHI watchdog (600 s): at longer scan intervals the watchdog
-# may expire between two polls, every poll would count as an outage and "polling continuously" would never
-# hold.
-MAX_RESTORE_SCAN_INTERVAL = 540  # seconds
 # SHI watchdog: without any Modbus access for this long the SHI discards every value set over it
 # (docs/firmware-3.92.3-shi-analysis.md, section "SHI watchdog"). A longer gap since the last successful poll,
 # e.g. a Home Assistant downtime, counts like an observed communication outage for the reset detection.
