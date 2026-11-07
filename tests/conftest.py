@@ -22,8 +22,10 @@ def no_poll_failure_tolerance(monkeypatch: pytest.MonkeyPatch) -> None:
 
     ``tests/test_poll_tolerance.py`` sets it back on and tests it.
     """
-    from custom_components.luxtronik_shi import coordinator
-
+    try:
+        from custom_components.luxtronik_shi import coordinator
+    except ImportError:  # tests that load tools/ by path and never touch the integration
+        return
     monkeypatch.setattr(coordinator, "POLL_FAILURES_TOLERATED", 0)
 
 
