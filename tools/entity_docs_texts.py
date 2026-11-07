@@ -51,8 +51,8 @@ SOURCE_LEGEND = {
         "python-luxtronik (Bouni/python-luxtronik, `luxtronik/definitions/{inputs,holdings}.py`, `datatypes.py`)",
     ),
     "FW": (
-        "[firmware analysis](firmware-3.92.3-shi-analysis.md) of V3.92.3 (English)",
-        "[Firmware-Analyse](firmware-3.92.3-shi-analysis.md) von V3.92.3 (englisch)",
+        "[firmware analysis](firmware-3.92.3-shi-analysis.md) and [register meanings](firmware-3.92.3-register-meanings.md) of V3.92.3 (English)",
+        "[Firmware-Analyse](firmware-3.92.3-shi-analysis.md) und [Registerbedeutungen](firmware-3.92.3-register-meanings.md) von V3.92.3 (englisch)",
     ),
     "M": (
         "measurement on the reference installation (LWDV 91-1/3, firmware 3.92.3), documented in the README or CHANGELOG",
@@ -156,8 +156,8 @@ SECTIONS: tuple[Section, ...] = (
         "the same moment. It is always above 1, because the heat includes what is taken from the environment, and "
         "it depends on the operating point: a small difference between source and heating water gives a high "
         "COP, a large one a low COP. A COP of 4.2 means 1 kW of electricity delivers 4.2 kW of heat. The "
-        "instantaneous COP of this integration is calculated from two sensors that are read anyway, so it needs "
-        "no extra Modbus traffic. Both power registers have a **resolution of 100 W**, so a quotient at low "
+        "COP sensor of this integration is calculated from two sensors that are read anyway, so it needs "
+        "no extra Modbus traffic, and it is a value over the last 10 minutes, not an instant value. Both power registers have a **resolution of 100 W**, so a quotient at low "
         "power is mostly rounding noise; that is why the COP is shown as *unknown* instead of a number in the "
         "cases listed at the sensor. During **defrost** the heat pump takes heat from the heating system "
         "and the thermal power turns negative. Sources: WEB ([Leistungszahl](#sources)), INT, PL.",
@@ -165,8 +165,9 @@ SECTIONS: tuple[Section, ...] = (
         "Moment aufgenommene elektrische Leistung. Sie liegt immer über 1, weil die Wärme auch die der "
         "Umwelt entzogene enthält, und hängt vom Betriebspunkt ab: Ein kleiner Unterschied zwischen "
         "Wärmequelle und Heizwasser ergibt eine hohe, ein großer eine niedrige Leistungszahl. Eine COP von 4,2 "
-        "heißt: 1 kW Strom liefern 4,2 kW Wärme. Die Momentan-COP dieser Integration wird aus zwei ohnehin "
-        "gelesenen Sensoren berechnet und verursacht keinen zusätzlichen Modbus-Verkehr. Beide "
+        "heißt: 1 kW Strom liefern 4,2 kW Wärme. Die COP dieser Integration wird aus zwei ohnehin "
+        "gelesenen Sensoren berechnet, verursacht keinen zusätzlichen Modbus-Verkehr und ist ein Wert über die "
+        "letzten 10 Minuten, kein Augenblickswert. Beide "
         "Leistungsregister haben eine **Auflösung von 100 W**, daher ist ein Quotient bei kleiner Leistung "
         "überwiegend Rundungsrauschen; deshalb zeigt die COP in den beim Sensor genannten Fällen *unbekannt "
         "statt einer Zahl. Beim **Abtauen** entzieht die Wärmepumpe der Heizungsanlage Wärme, und die "
@@ -422,12 +423,15 @@ SECTIONS: tuple[Section, ...] = (
         "Raw values",
         "Rohwerte",
         "**Background.** Registers whose meaning nobody has established are exposed as `raw_<address>` "
-        "diagnostic sensors: **disabled by default**, read only (never written), polled rarely, shown as the "
-        "plain 16-bit number. They exist for analysis and reverse engineering. Do not build automations on "
+        "diagnostic sensors. A few have a meaning proven by the firmware since 0.11.0 (10113, 10350 to 10356, 10360 "
+        "and 10361): they keep the key `raw_<address>` and only have a name, unit and scale. All of them are **disabled by default**, read only (never written), polled rarely, shown as the "
+        "plain number (10113 is scaled to degrees). They exist for analysis and reverse engineering. Do not build automations on "
         "them. Sources: PL, FW.",
         "**Hintergrund.** Register, deren Bedeutung niemand geklärt hat, gibt es als Diagnose-Sensoren "
-        "`raw_<Adresse>`: **standardmäßig deaktiviert**, nur lesend (nie geschrieben), selten abgefragt, als "
-        "einfache 16-Bit-Zahl. Sie dienen der Analyse und dem Reverse Engineering. Baue keine Automationen "
+        "`raw_<Adresse>`. Einige haben seit 0.11.0 eine von der Firmware belegte Bedeutung (10113, 10350 bis 10356, "
+        "10360 und 10361): Sie behalten den Schlüssel `raw_<Adresse>` und haben nur Name, Einheit und Skalierung. "
+        "Alle sind **standardmäßig deaktiviert**, nur lesend (nie geschrieben), selten abgefragt, als "
+        "einfache Zahl (10113 ist in Grad skaliert). Sie dienen der Analyse und dem Reverse Engineering. Baue keine Automationen "
         "darauf. Quellen: PL, FW.",
     ),
 )

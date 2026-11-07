@@ -99,9 +99,6 @@ def _translations(lang: str) -> dict:
 
 def _text(entity: Entity) -> texts.Entry:
     entry = entries.ENTRIES.get(entity.key)
-    alternative = entries.ALTERNATIVES.get(entity.key)
-    if alternative is not None and hasattr(registers, alternative[0]):
-        entry = alternative[1]
     if entry is None and entity.reg is not None and entity.key in registers.RAW_KEYS:
         en, de, src = entries.RAW_TEXT.get(entity.reg.address, entries.RAW_DEFAULT)
         entry = texts.Entry("raw", en, de, src)

@@ -120,13 +120,23 @@ _add("electric_power_min", "power",
      "Minimale vorhergesagte elektrische Leistungsaufnahme. Wie die Regelung sie vorhersagt und für welchen "
      "Zustand, ist nicht dokumentiert (ungeklärt). ", "PL")
 _add("cop", "power",
-     "Instantaneous COP: `compressor_thermal_power` divided by `electric_power`. Shown as *unknown* when a value "
-     "is missing, electric power is below the minimum, thermal power is zero or negative (for example defrost), "
-     "or the result is implausibly high. The limits are a design choice of the integration, not a register fact.",
-     "Momentan-COP: `compressor_thermal_power` geteilt durch `electric_power`. Wird als *unbekannt* gezeigt, wenn "
-     "ein Wert fehlt, die elektrische Leistung unter dem Minimum liegt, die thermische Leistung null oder "
-     "negativ ist (zum Beispiel beim Abtauen) oder das Ergebnis unplausibel hoch ist. Die Grenzen sind eine "
-     "Festlegung der Integration, kein Registerfakt.", "INT")
+     "COP over the last 10 minutes: thermal energy divided by electrical energy, both integrated from the "
+     "two power sensors over a trailing window. A window instead of one quotient, because both registers "
+     "have a resolution of 100 W and are not sampled at the same instant, which made the instantaneous "
+     "ratio jump (8.0 or more right after a compressor start). Shown as *unknown* while the window holds "
+     "too little electrical energy (compressor off or just started), after a gap in the readings, and "
+     "when the result is not plausible, which includes a net thermal energy that is not positive (a long "
+     "defrost). Defrost inside a run counts, it is real consumption. The window and limits are a design "
+     "choice of the integration, not a register fact.",
+     "COP der letzten 10 Minuten: Wärmeenergie geteilt durch elektrische Energie, beide aus den zwei "
+     "Leistungssensoren über ein mitlaufendes Fenster aufsummiert. Ein Fenster statt eines einzelnen "
+     "Quotienten, weil beide Register 100 W Auflösung haben und nicht im selben Augenblick abgetastet "
+     "werden; das ließ den Momentanwert springen (8,0 oder mehr direkt nach dem Verdichterstart). Wird als "
+     "*unbekannt* gezeigt, solange das Fenster zu wenig elektrische Energie enthält (Verdichter aus oder "
+     "gerade gestartet), nach einer Lücke in den Messwerten und wenn das Ergebnis nicht plausibel ist, "
+     "wozu eine nicht positive Netto-Wärmeenergie gehört (langes Abtauen). Abtauen innerhalb eines Laufs "
+     "zählt, es ist echter Verbrauch. Fenster und Grenzen sind eine Festlegung der Integration, kein "
+     "Registerfakt.", "INT")
 
 # ------------------------------------------------------------------ energy
 _energy = {
@@ -212,32 +222,28 @@ _add("heatpump_zwe2_status", "status",
 _add("heatpump_zwe3_status", "status",
      "ZWE3 is active. Bit 4. Needs firmware 3.90.1 or later.",
      "ZWE3 ist aktiv. Bit 4. Braucht Firmware 3.90.1 oder neuer.", "PL")
+_STATUS_EN = (" Reported as text, not as a number (the table shows the assignment); a value outside 0 to 3 is "
+              "`unknown_<n>` and nothing is known about it.")
+_STATUS_DE = (" Wird als Text gemeldet, nicht als Zahl (die Tabelle zeigt die Zuordnung); ein Wert außerhalb von 0 "
+              "bis 3 ist `unknown_<n>`, darüber ist nichts bekannt.")
 _add("heating_status", "status",
-     "State of heating as a request: disabled, no request, requested but not yet running, running.",
+     "State of heating as a request: disabled, no request, requested but not yet running, running." + _STATUS_EN,
      "Zustand des Heizens als Anforderung: deaktiviert, keine Anforderung, angefordert aber noch nicht laufend, "
-     "laufend.", "PL",
-     "0 = disabled, 1 = no request, 2 = requested, 3 = running",
-     "0 = deaktiviert, 1 = keine Anforderung, 2 = angefordert, 3 = laufend")
+     "laufend." + _STATUS_DE, "PL")
 _add("hot_water_status", "status",
-     "State of hot water as a request: disabled, no request, requested but not yet running, running.",
+     "State of hot water as a request: disabled, no request, requested but not yet running, running." + _STATUS_EN,
      "Zustand des Warmwassers als Anforderung: deaktiviert, keine Anforderung, angefordert aber noch nicht "
-     "laufend, laufend.", "PL",
-     "0 = disabled, 1 = no request, 2 = requested, 3 = running",
-     "0 = deaktiviert, 1 = keine Anforderung, 2 = angefordert, 3 = laufend")
+     "laufend, laufend." + _STATUS_DE, "PL")
 _add("cooling_status", "status",
      "State of cooling as a request: disabled, no request, requested but not yet running, running. Needs "
-     "*cooling* in the equipment.",
+     "*cooling* in the equipment." + _STATUS_EN,
      "Zustand des Kühlens als Anforderung: deaktiviert, keine Anforderung, angefordert aber noch nicht laufend, "
-     "laufend. Braucht *Kühlung* in der Ausstattung.", "PL",
-     "0 = disabled, 1 = no request, 2 = requested, 3 = running",
-     "0 = deaktiviert, 1 = keine Anforderung, 2 = angefordert, 3 = laufend")
+     "laufend. Braucht *Kühlung* in der Ausstattung." + _STATUS_DE, "PL")
 _add("pool_status", "status",
      "State of pool heating as a request: disabled, no request, requested but not yet running, running. Needs "
-     "*pool* in the equipment.",
+     "*pool* in the equipment." + _STATUS_EN,
      "Zustand der Pool-Heizung als Anforderung: deaktiviert, keine Anforderung, angefordert aber noch nicht "
-     "laufend, laufend. Braucht *Pool* in der Ausstattung.", "PL",
-     "0 = disabled, 1 = no request, 2 = requested, 3 = running",
-     "0 = deaktiviert, 1 = keine Anforderung, 2 = angefordert, 3 = laufend")
+     "laufend, laufend. Braucht *Pool* in der Ausstattung." + _STATUS_DE, "PL")
 _add("error_number", "status",
      "Current error code of the controller. 0 means no error. The meaning of each code is listed in "
      "python-luxtronik (`Errorcode` in `datatypes.py`, for example 701 low pressure, 703 frost protection, "
@@ -405,10 +411,14 @@ _add("cfg_overall_level", "overall",
 
 # ------------------------------------------------------------------ system
 _add("buffer_type", "system",
-     "Type of the buffer tank configured in the controller (see the background above). The assignment of the "
-     "values is the one in the table.",
-     "Typ des in der Regelung eingestellten Pufferspeichers (siehe Hintergrund oben). Die Zuordnung der Werte "
-     "steht in der Tabelle.", "PL")
+     "Type of the buffer tank configured in the controller (see the background above): raw value 0 series buffer, "
+     "1 separation buffer (*Trennpuffer*), 2 multi-function buffer, as in python-luxtronik `BufferType`. Any other "
+     "raw value has no state. Versions before 0.11.0 shifted the assignment by one and showed a separation buffer "
+     "as a series buffer.",
+     "Typ des in der Regelung eingestellten Pufferspeichers (siehe Hintergrund oben): Rohwert 0 Reihenpuffer, "
+     "1 Trennpuffer, 2 Multifunktionspuffer, wie in python-luxtronik `BufferType`. Jeder andere Rohwert hat "
+     "keinen Zustand. Vor Version 0.11.0 war die Zuordnung um eins verschoben, ein Trennpuffer wurde als "
+     "Reihenpuffer angezeigt.", "PL, M")
 _add("switching_lock_minutes", "system",
      "Minimum off time before the heat pump may start again (*Schaltspielsperre*), in minutes. The reference "
      "firmware returns the constant 20.",
@@ -417,21 +427,6 @@ _add("switching_lock_minutes", "system",
 _add("min_runtime_minutes", "system",
      "Minimum runtime of the heat pump, in minutes. The reference firmware returns the constant 20.",
      "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20.", "PL, FW")
-_add("fw_platform", "system",
-     "First number of the firmware version. On the reference installation the three registers read 3, 92 and 3: "
-     "firmware V3.92.3.",
-     "Erste Zahl der Firmware-Version. An der Referenzanlage lesen die drei Register 3, 92 und 3: Firmware "
-     "V3.92.3.", "FW, OBS")
-_add("fw_major", "system",
-     "Second number of the firmware version (92 on the reference installation). The integration needs 92 or "
-     "newer for the circulation pump and extra hot water; with older firmware it raises a repair issue.",
-     "Zweite Zahl der Firmware-Version (92 an der Referenzanlage). Die Integration braucht 92 oder neuer für "
-     "Zirkulationspumpe und Extra-Warmwasser; bei älterer Firmware erzeugt sie einen Reparaturhinweis.",
-     "FW, OBS")
-_add("fw_minor", "system",
-     "Third number of the firmware version (3 on the reference installation).",
-     "Dritte Zahl der Firmware-Version (3 an der Referenzanlage).", "FW, OBS")
-
 _caps = {
     "cap_heating": ("heating", "Heizen"),
     "cap_hot_water": ("hot water", "Warmwasser"),
@@ -496,12 +491,6 @@ for _n in (1, 2, 3):
 
 # ------------------------------------------------------------------ raw values (template per address)
 RAW_TEXT: dict[int, tuple[str, str, str]] = {
-    10113: ("Unknown input register, function not analysed.", "Unbekanntes Eingangsregister, Funktion nicht "
-            "analysiert.", "PL"),
-    10352: ("Unknown input register, function not analysed.", "Unbekanntes Eingangsregister, Funktion nicht "
-            "analysiert.", "PL"),
-    10353: ("Unknown input register, function not analysed.", "Unbekanntes Eingangsregister, Funktion nicht "
-            "analysiert.", "PL"),
     10410: ("High word of a 32-bit counter with the divisor 3600 on the wire (an hour counter). Together with "
             "10411. Meaning open.",
             "Oberes Wort eines 32-Bit-Zählers mit dem Teiler 3600 (ein Stundenzähler). Zusammen mit 10411. "
@@ -537,11 +526,56 @@ RAW_DEFAULT = (
     "PL",
 )
 
+# ------------------------------------------------------------------ raw values with a proven meaning (RAW_MEANINGS)
+# The keys stay ``raw_<address>`` and the entities stay disabled diagnostics; only the name, unit and scale changed.
+# Source for all of them: docs/firmware-3.92.3-register-meanings.md (firmware names, grades, measurements).
+_add("raw_10113", "raw",
+     "Calculated flow target of the heating in 0.1 degC (the wire value 253 means 25.3 degC): the return target plus "
+     "the moving average of the flow minus return spread. Proven by the firmware (the formula), the unit is "
+     "inferred from the return target 10101, which is also in 0.1 degC. Measured: 253 with a return target of 20.0 "
+     "and an average spread of 5.3 K. Disabled by default.",
+     "Berechneter Vorlauf-Sollwert des Heizens in 0,1 °C (der Rohwert 253 bedeutet 25,3 °C): Rücklauf-Sollwert plus "
+     "gleitender Mittelwert der Differenz Vorlauf minus Rücklauf. Von der Firmware belegt (die Formel), die Einheit "
+     "ist aus dem Rücklauf-Sollwert 10101 abgeleitet, der ebenfalls in 0,1 °C steht. Gemessen: 253 bei einem "
+     "Rücklauf-Sollwert von 20,0 und einer mittleren Spreizung von 5,3 K. Standardmäßig deaktiviert.", "FW, M")
 
-# ------------------------------------------------------------------ text that depends on the code state
-# Keys that exist only on a branch that is not merged yet. Describing them here keeps the page correct the moment
-# that branch lands; until then ``tests/test_entity_docs.py`` does not count them as stale.
-FORWARD_KEYS: frozenset[str] = frozenset({"firmware_version"})
+_OUT_EN = ("Digital output of the controller, 0 off and 1 on; firmware variable `{var}` (item `{item}`), proven by the "
+           "firmware. {meas} Disabled by default.")
+_OUT_DE = ("Digitaler Ausgang der Regelung, 0 aus und 1 an; Firmware-Variable `{var}` (Item `{item}`), von der "
+           "Firmware belegt. {meas} Standardmäßig deaktiviert.")
+for _addr, _var, _item, _en, _de in (
+    (10350, "VBOout", "t0/0x45", "Measured: coincides with the compressor runs.",
+     "Gemessen: deckt sich mit den Verdichterläufen."),
+    (10351, "FP1out", "t0/0x6d", "Measured: follows the heating circulation pump.",
+     "Gemessen: folgt der Heizungsumwälzpumpe."),
+    (10352, "FP2out", "t0/0x4c", "Not measured (the reference installation has no second circuit).",
+     "Nicht gemessen (die Referenzanlage hat keinen zweiten Kreis)."),
+    (10353, "FP3out", "t0/0x4d", "Not measured (the reference installation has no third circuit).",
+     "Nicht gemessen (die Referenzanlage hat keinen dritten Kreis)."),
+    (10354, "HUPout", "t0/0x20", "Heating circulation pump (HUP). Measured; identical to 10351 on the reference "
+     "installation.", "Heizungsumwälzpumpe (HUP). Gemessen; an der Referenzanlage identisch mit 10351."),
+    (10355, "BUPout", "t0/0x44", "DHW pump (BUP). Measured.", "Brauchwasserumwälzpumpe (BUP). Gemessen."),
+    (10356, "ZIPout", "t0/0x48", "Circulation pump (ZIP). Measured: pulses of 2 minutes.",
+     "Zirkulationspumpe (ZIP). Gemessen: Pulse von 2 Minuten."),
+):
+    _add(f"raw_{_addr}", "raw", _OUT_EN.format(var=_var, item=_item, meas=_en),
+         _OUT_DE.format(var=_var, item=_item, meas=_de), "FW, M")
+    del _en, _de
+_add("raw_10360", "raw",
+     "Digital input EVU (utility lock), 0 or 1; firmware variable `EVUin` (item `t0/0x2a`), the name is proven. "
+     "Measured: constant 1 while the native `evu_unlocked` of the Luxtronik integration is on, so 1 most likely means "
+     "released (inferred from that single state). Disabled by default.",
+     "Digitaler Eingang EVU (EVU-Sperre), 0 oder 1; Firmware-Variable `EVUin` (Item `t0/0x2a`), der Name ist "
+     "belegt. Gemessen: konstant 1, solange das native `evu_unlocked` der Luxtronik-Integration an ist; 1 heißt "
+     "also wahrscheinlich freigegeben (aus diesem einen Zustand abgeleitet). Standardmäßig deaktiviert.", "FW, M")
+_add("raw_10361", "raw",
+     "Digital input EVU 2, 0 or 1; firmware variable `EVU2in` (item `t0/0x2b`), the name is proven. Measured: "
+     "constant 0 on the reference installation (the native `evu2` is off), so no statement about the other state. "
+     "Disabled by default.",
+     "Digitaler Eingang EVU 2, 0 oder 1; Firmware-Variable `EVU2in` (Item `t0/0x2b`), der Name ist belegt. "
+     "Gemessen: konstant 0 an der Referenzanlage (das native `evu2` ist aus), über den anderen Zustand ist also "
+     "nichts bekannt. Standardmäßig deaktiviert.", "FW, M")
+
 _add("firmware_version", "system",
      "Firmware version of the controller as text, for example `3.92.3`, composed of the registers 10400, 10401 and "
      "10402 (they read 3, 92 and 3 on the reference installation). Unknown until all three are read. The three "
@@ -550,32 +584,4 @@ _add("firmware_version", "system",
      "Firmware-Version der Regelung als Text, zum Beispiel `3.92.3`, zusammengesetzt aus den Registern 10400, 10401 "
      "und 10402 (sie lesen an der Referenzanlage 3, 92 und 3). Unbekannt, bis alle drei gelesen sind. Die drei "
      "Register haben keine eigenen Entitäten. Die Integration braucht 3.92 oder neuer für Zirkulationspumpe und "
-     "Extra-Warmwasser; bei älterer Firmware erzeugt sie einen Reparaturhinweis.", "FW, OBS")
-
-# An entry that replaces the one above as soon as ``registers.<attribute>`` exists.
-ALTERNATIVES: dict[str, tuple[str, Entry]] = {
-    "cop": (
-        "WindowedCop",
-        Entry(
-            "power",
-            "COP over the last 10 minutes: thermal energy divided by electrical energy, both integrated from the "
-            "two power sensors over a trailing window. A window instead of one quotient, because both registers "
-            "have a resolution of 100 W and are not sampled at the same instant, which made the instantaneous "
-            "ratio jump (8.0 or more right after a compressor start). Shown as *unknown* while the window holds "
-            "too little electrical energy (compressor off or just started), after a gap in the readings, and "
-            "when the result is not plausible, which includes a net thermal energy that is not positive (a long "
-            "defrost). Defrost inside a run counts, it is real consumption. The window and limits are a design "
-            "choice of the integration, not a register fact.",
-            "COP der letzten 10 Minuten: Wärmeenergie geteilt durch elektrische Energie, beide aus den zwei "
-            "Leistungssensoren über ein mitlaufendes Fenster aufsummiert. Ein Fenster statt eines einzelnen "
-            "Quotienten, weil beide Register 100 W Auflösung haben und nicht im selben Augenblick abgetastet "
-            "werden; das ließ den Momentanwert springen (8,0 oder mehr direkt nach dem Verdichterstart). Wird als "
-            "*unbekannt* gezeigt, solange das Fenster zu wenig elektrische Energie enthält (Verdichter aus oder "
-            "gerade gestartet), nach einer Lücke in den Messwerten und wenn das Ergebnis nicht plausibel ist, "
-            "wozu eine nicht positive Netto-Wärmeenergie gehört (langes Abtauen). Abtauen innerhalb eines Laufs "
-            "zählt, es ist echter Verbrauch. Fenster und Grenzen sind eine Festlegung der Integration, kein "
-            "Registerfakt.",
-            "INT",
-        ),
-    ),
-}
+     "Extra-Warmwasser; bei älterer Firmware erzeugt sie einen Reparaturhinweis.", "PL, M")

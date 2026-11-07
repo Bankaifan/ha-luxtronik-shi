@@ -53,7 +53,7 @@ def test_every_current_entity_is_in_the_contract_and_described():
 def test_no_explanation_for_an_unknown_key():
     known = {entity.key for entity in gen.collect()}
     removed = set(getattr(gen.registers, "REMOVED_KEYS", ()))  # entities that no longer exist may keep their text
-    stale = sorted(set(gen.entries.ENTRIES) - known - removed - gen.entries.FORWARD_KEYS)
+    stale = sorted(set(gen.entries.ENTRIES) - known - removed)
     assert not stale, f"tools/entity_docs_entries.py describes keys that no entity has: {stale}"
 
 
