@@ -16,6 +16,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   with the HACS card apexcharts-card): overview, energy, locks and grid, control, diagnostics and an automation
   view. Built-in cards only; entity IDs are predicted or, with `tools/gen_dashboard.py --registry ...`, looked up in
   your entity registry. See `docs/dashboard.md`. The visual rendering in a browser was not checked.
+  Written for 0.12.0: one *Firmware version* tile, "COP (10 min)", status sensors as text.
 - **Three blueprints** (`blueprints/automation/luxtronik_shi/`): block while a signal is on, trigger with
   hysteresis, notify about problems. They select entities with an integration filter.
 

@@ -46,4 +46,4 @@ views:
       series:
       - entity: sensor.warmepumpe_power_electric
       - entity: sensor.warmepumpe_power_thermal
-      - entity: sensor.warmepumpe_cop
+      - entity: sensor.warmepumpe_cop_10_min
