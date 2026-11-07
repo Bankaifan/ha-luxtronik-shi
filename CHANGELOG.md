@@ -50,11 +50,20 @@ versioning follows [Semantic Versioning](https://semver.org/):
   major and minor, so the device showed "92.3 (Plattform 3)" and the *firmware outdated* repair issue could never
   appear. The device now shows `3.92.3` and the issue compares major and minor correctly.
 
+### Documentation
+- **Entity reference** ([docs/entities.md](docs/entities.md), German: [docs/entities.de.md](docs/entities.de.md)):
+  every entity sorted by topic with key, unit, value range, meaning and pitfalls, plus short background on heat
+  pumps (heating curve, hysteresis, buffer tank, COP and JAZ, defrost, Legionella protection). The page is generated
+  by `tools/gen_entity_docs.py` from the register map, the platforms and the translations, so the list cannot go
+  stale; the prose is in `tools/entity_docs_texts.py` and `tools/entity_docs_entries.py`. Linked from both READMEs.
+
 ### Tests
 - `tests/test_cop.py`: the window (steady state, start spike, minimum energy, 100 W resolution, idle, gap, missing
   value, defrost, upper limit) and the entity over simulated time.
 - `tests/test_entity_polish.py`: status texts including unknown values and translations, the single firmware entity,
   removal of the old registry entries, firmware issue order, water heater labels, no `off` operation.
+- `tests/test_entity_docs.py`: both pages match the generator, every key of the entity contract is documented, every
+  entity has an explanation and no explanation belongs to an unknown key.
 
 ## [0.11.0] – 2026-11-07
 

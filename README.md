@@ -82,6 +82,9 @@ that is already set up.
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
 
+**Every entity explained:** the [entity reference](docs/entities.md) (also in [German](docs/entities.de.md)) lists each
+entity by topic with key, unit, value range, meaning and pitfalls, plus short background on how heat pumps work.
+
 Mixing circuits 2 and 3 have the same writable entities as circuit 1 (mode, setpoint, offset, level, and the cooling mode,
 setpoint and offset), and all write ranges follow python-luxtronik holdings.py: heating setpoint 20–65 °C and
 offset −5 … +5 K, cooling setpoint 5–25 °C and offset −5 … +5 K. Circuit 1 has the same ranges. They only
@@ -372,6 +375,7 @@ those who deliberately stay on YAML, no longer used in production and not tested
 * Not contained in python-luxtronik and therefore only backed by observation: the equipment registers (discrete
   inputs 10000–10011), firmware major/minor version (10401/10402, matches the version shown on the controller) and
   the interpretation of 10404/10406/10408 as operating hours.
+* Every entity explained (generated from the code): [docs/entities.md](docs/entities.md).
 * Complete table of all registers (type, address, data type, scale, unit, range): [docs/registers.md](docs/registers.md).
 
 ## Notes and limitations
