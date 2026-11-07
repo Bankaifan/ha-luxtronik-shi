@@ -169,7 +169,7 @@ Home Assistant überdauert, wird deshalb nicht bemerkt.
 
 Die SHI vergisst alle über Modbus gesetzten Werte, wenn die Regelung neu startet, und wenn ihr Watchdog nach 10
 Minuten ohne jeden Modbus-Zugriff abläuft (jeder Lesezugriff zieht ihn neu auf, das passiert also nur, solange niemand
-abfragt). Die
+abfragt; siehe [SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Die
 Holding-Register lesen dann ihren Reset-Wert. Gemessen an der Referenzanlage (LWDV 91-1/3, Firmware 3.92.3): Nach zwei
 Neustarts der Regelung stand die Heizungs-Betriebsart auf `aus` (Rohwert 0) statt `Sollwert`, einmal auch die
 Heizungs-Stufe auf Rohwert 0 statt 2.
@@ -187,7 +187,10 @@ Integration solche Werte zurückschreibt:
   Lesezugriffe. Ein Reset wird angenommen, wenn innerhalb des ersten vollständigen Lesezyklus nach dem Auslöser
   * mindestens **zwei** gemerkte Werte, die nicht 0 sind, 0 lesen, oder
   * vorher die Verbindung weg war (fehlgeschlagene Abfragen) und mindestens ein gemerkter Wert ungleich 0 jetzt 0
-    liest, wobei mindestens zwei Werte gemerkt sind.
+    liest, wobei mindestens zwei Werte gemerkt sind. Eine Lücke von mehr als 10 Minuten seit der letzten
+    erfolgreichen Abfrage, etwa ein langer Stillstand von Home Assistant, zählt als solcher Ausfall, weil der Watchdog
+    dann abgelaufen ist. Die Zeit der letzten erfolgreichen Abfrage wird mit den Werten gespeichert, höchstens einmal
+    pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein.
 * **Nie über fremde Änderungen hinweg.** Liest ein gemerkter Wert einen *anderen Wert ungleich 0*, hat ihn ein anderer
   Modbus-Client oder ein Mensch geändert: Er wird vergessen (Log-Level info) und nie wiederhergestellt. Nullen ohne
   die Belege oben werden genauso behandelt.

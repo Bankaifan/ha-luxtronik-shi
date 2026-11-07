@@ -60,6 +60,26 @@ Verified directly from the constructor arguments, no deviation from the current 
   `10122` = `300` (30.0 °C, DHW minimum; confirmed live: `30.0`), `10203`/`10204` = `20` (minutes),
   firmware version registers `10400`/`10401`/`10402` = `3`/`92`/`3` → **V3.92.3**.
 
+## SHI watchdog
+
+Recorded from the reverse engineering of 2026-11-07 (function addresses only, no code):
+
+- `SmartHomeInterface::Monitor` is a `Tick_t` task that runs **once per second**. Evidence: the hwclock counter
+  86400 in `FUN_0047e7d4`.
+- Its counter counts to **600**, i.e. **10 minutes** (tick at `0x000dff50`).
+- The re-arm at `0x000de744` is called at the start of the SHI dispatcher `FUN_000d9298`, so **every Modbus access
+  resets the counter, a pure read included**. While an integration polls, the watchdog does not expire.
+- On expiry, `0x00186120` calls `GDI::reloadIfSetBy` (`0x000882f0`) for the SHI source, which **discards every value
+  last set over the SHI**; the holding registers then read their reset value.
+- **Reboots have the same effect.** The Home Assistant history of the reference installation shows the reset on
+  2026-11-05 19:15 and 2026-11-06 13:16. At those times the separate port-8889 integration dropped as well, so these
+  were controller reboots, not watchdog expiries. Measured after them: heating mode (10000) read raw 0 instead of 1,
+  and on 2026-11-05 heating level (10003) read raw 0 instead of 2.
+- **Open:** the reset value of every holding register other than 10000 and 10003.
+
+The integration uses these facts for the optional *restore after a device reset*: `SHI_WATCHDOG_TIMEOUT` in
+`const.py` is the 600 s above.
+
 ## Open questions / proposed follow-ups
 
 1. **Level option order (`_LEVELS`).** The firmware proves the level feature has one *increase* and one

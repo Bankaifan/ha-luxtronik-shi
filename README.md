@@ -160,7 +160,8 @@ the outage are kept in memory only, so an outage that spans a Home Assistant res
 ## Restore after a device reset (option)
 
 The SHI forgets every value set over Modbus when the controller restarts, and when its watchdog expires after 10
-minutes without any Modbus access (every read re-arms it, so this only happens while nothing polls). The holding registers
+minutes without any Modbus access (every read re-arms it, so this only happens while nothing polls; see
+[SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). The holding registers
 then read their reset value. Measured on the reference installation (LWDV 91-1/3, firmware 3.92.3): after two
 controller reboots the heating mode read `off` (raw 0) instead of `setpoint`, and once the heating level read raw 0
 instead of 2.
@@ -176,7 +177,10 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   assumed when, within the first full read cycle after the trigger,
   * at least **two** remembered values that are not 0 read 0, or
   * the connection was lost before (failed polls) and at least one remembered non-zero value reads 0, while at least
-    two values are remembered.
+    two values are remembered. A gap of more than 10 minutes since the last successful poll, for example a long Home
+    Assistant downtime, counts as such an outage, because the watchdog has then expired. The time of the last
+    successful poll is stored with the values, at most once a minute and on unload; to make up for that, the gap must
+    exceed 11 minutes.
 * **Never over someone else's change.** A remembered value that reads a *different non-zero* value was changed by
   another Modbus client or a person: it is forgotten (logged at info level) and never restored. Zeros without the
   evidence above are treated the same way.

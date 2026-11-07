@@ -25,11 +25,13 @@ from .const import (
     ISSUE_FIRMWARE_OLD,
     ISSUE_UNREACHABLE,
     ISSUE_VALUES_CHANGED,
+    LAST_POLL_SAVE_INTERVAL,
     MANUFACTURER,
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
     RESTORE_COOLDOWN,
+    SHI_WATCHDOG_TIMEOUT,
     STORE_VERSION,
     UNREACHABLE_AFTER,
 )
@@ -141,6 +143,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._window_seen: set[str] = set()
         self._window_outage = False
         self._last_restore: datetime | None = None
+        # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
+        self._last_poll: datetime | None = None
+        self._last_poll_saved: datetime | None = None
+        self._gap_checked = False
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:
@@ -195,7 +201,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._tick += 1
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
-        await self._check_device_reset(recovered=recovered)
+        await self._check_device_reset(recovered=recovered or self._watchdog_gap())
+        await self._save_last_poll()
         self._check_outage_changes(recovered=recovered)
         self._update_firmware()
         return dict(self._values)
@@ -410,6 +417,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._restore_store.async_remove()
             return
         data = await self._restore_store.async_load() or {}
+        try:
+            self._last_poll_saved = datetime.fromisoformat(data["last_poll"])
+        except (KeyError, TypeError, ValueError):
+            self._last_poll_saved = None
         values = data.get("values") or {}
         writable = {
             r.key for r in self.registers if r.kind == "holding" and r.platform in WRITABLE_PLATFORMS
@@ -421,15 +432,51 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if k in writable and isinstance(v, int) and not isinstance(v, bool)
         }
         if self._remembered != values:
-            await self._save()
+            await self._save(self._last_poll_saved)
 
     @property
     def remembered(self) -> dict[str, int]:
         """Raw values that would be restored after a device reset (read only)."""
         return dict(self._remembered)
 
-    async def _save(self) -> None:
-        await self._restore_store.async_save({"values": dict(self._remembered)})
+    async def _save(self, last_poll: datetime | None = None) -> None:
+        """Persist the remembered values and the time of the last successful poll."""
+        last_poll = last_poll or self._last_poll or self._last_poll_saved
+        data: dict[str, Any] = {"values": dict(self._remembered)}
+        if last_poll is not None:
+            data["last_poll"] = last_poll.isoformat()
+            self._last_poll_saved = last_poll
+        await self._restore_store.async_save(data)
+
+    def _watchdog_gap(self) -> bool:
+        """First poll after setup: was the SHI left without any access longer than its watchdog allows?"""
+        if self._gap_checked or not self.restore_enabled:
+            return False
+        self._gap_checked = True
+        if self._last_poll_saved is None:
+            return False
+        gap = (dt_util.utcnow() - self._last_poll_saved).total_seconds()
+        if gap <= SHI_WATCHDOG_TIMEOUT + LAST_POLL_SAVE_INTERVAL:
+            return False
+        _LOGGER.info(
+            "%s: no successful poll for %d s (SHI watchdog %d s); treated like a communication outage",
+            self.config_entry.title, gap, SHI_WATCHDOG_TIMEOUT,
+        )
+        return True
+
+    async def _save_last_poll(self) -> None:
+        """Remember the time of this successful poll, written at most every LAST_POLL_SAVE_INTERVAL."""
+        if not self.restore_enabled:
+            return
+        self._last_poll = dt_util.utcnow()
+        saved = self._last_poll_saved
+        if saved is None or (self._last_poll - saved).total_seconds() >= LAST_POLL_SAVE_INTERVAL:
+            await self._save()
+
+    async def async_save_last_poll(self) -> None:
+        """Write the exact time of the last successful poll (on unload, so a restart measures the gap)."""
+        if self.restore_enabled and self._last_poll is not None:
+            await self._save()
 
     async def _remember(self, key: str, raw: int | None) -> None:
         if not self.restore_enabled or self._remembered.get(key) == raw:

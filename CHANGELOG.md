@@ -61,6 +61,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
   is not restored. Values set back to neutral (e.g. mode `off`) are remembered as such and so not restored. Diagnostics
   list the remembered values. No extra polling, no new entities. See the README for the limits (one remembered value,
   resets to non-zero defaults).
+  A gap of more than the SHI watchdog time (600 s, plus the 60 s save interval) since the last successful poll, e.g. a
+  long Home Assistant downtime, counts like an observed outage. The time of the last successful poll is stored with the
+  values, at most once a minute and on unload.
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
@@ -78,8 +81,14 @@ versioning follows [Semantic Versioning](https://semver.org/):
   in the entity contract fixture; `RENAMED_KEYS` in `registers.py` tells the contract test that they were renamed on
   purpose.
 
+### Documentation
+- `docs/firmware-3.92.3-shi-analysis.md`: new section *SHI watchdog* (10-minute watchdog, re-armed by every Modbus
+  access, discards the SHI values on expiry; reboot evidence from the reference installation; reset values of other
+  registers still open). The README cites it.
+
 ### Tests
-- `tests/test_restore_after_reset.py`: reboot simulation with restore and read-back, external changes adopted and
+- `tests/test_restore_after_reset.py`: watchdog gap after a Home Assistant restart (over 600 s counts as an outage,
+  a short restart does not), the last-poll time is written at most once a minute; reboot simulation with restore and read-back, external changes adopted and
   forgotten (also during a reset), the single-register ambiguity, option off writes nothing and stores nothing, no
   retry after a failed write or a wrong read-back, cooldown, restore from the store after a Home Assistant restart,
   values set back to neutral through the select entities, diagnostics.

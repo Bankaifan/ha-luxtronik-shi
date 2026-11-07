@@ -87,6 +87,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         entry.runtime_data.async_delete_issues()
+        await entry.runtime_data.async_save_last_poll()
         await entry.runtime_data.client.close()
     return unloaded
 
