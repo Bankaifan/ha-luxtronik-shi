@@ -195,7 +195,8 @@ REGISTERS: tuple[Register, ...] = (
     _s("outside", 10108, "Temperatur: Außen", "Temperature: outside", dtype="int16", scale=0.1, **_TEMP),
     _s("dhw", 10120, "Temperatur", "Temperature", dtype="int16", scale=0.1, **_TEMP),
     _s("dhw_target", 10121, "Soll", "Target", scale=0.1, every=2, **_TEMP),
-    _temp_in("dhw_min", 10122, "Minimum", "Minimum", every=10),
+    # Fixed firmware constant (300 = 30.0 degC, SHI analysis), not a measurement: disabled for new installations.
+    _temp_in("dhw_min", 10122, "Minimum", "Minimum", every=10, enabled_default=False),
     _temp_in("dhw_max", 10123, "Maximum", "Maximum", every=10),
     _temp_in("dhw_limit", 10124, "Grenztemperatur", "Limit temperature", every=10),
     # mixing circuits (flow actual / target / minimum / maximum)
@@ -275,6 +276,7 @@ REGISTERS: tuple[Register, ...] = (
         "System: switching lock time",
         unit="min",
         diagnostic=True,
+        enabled_default=False,  # fixed firmware constant (20), not a measurement
         every=30,
     ),
     _s(
@@ -284,6 +286,7 @@ REGISTERS: tuple[Register, ...] = (
         "System: minimum runtime",
         unit="min",
         diagnostic=True,
+        enabled_default=False,  # fixed firmware constant (20), not a measurement
         every=30,
     ),
     _s(

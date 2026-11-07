@@ -80,7 +80,8 @@ that is already set up.
 | **Write: numbers** | **heating curve offset** (−20 … +20 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
 | **Write: selects** | mode (no influence / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (normal / increased / increased step 2 / decreased); power limit mode (none / soft / hard) |
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water* |
-| Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
+| Pumps and I/O | **pump heating (HUP), hot water (BUP), circulation (ZIP)** running, outputs **VBO** and **FP1** (FP2 and FP3 disabled by default; not measured), inputs **EVU** and **EVU 2** as a level (disabled by default). Read from the same registers as the matching `raw_` sensors, which stay as they are. For EVU only the name is proven by the firmware analysis; that level 1 means *released* is inferred from one measured state, so the sensors show the level, not "locked". The operating mode *utility lockout* reports the lock itself |
+| Diagnostic | buffer tank type, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default). The switching lock, minimum runtime and minimum hot water temperature are fixed firmware constants and disabled by default for new installations |
 
 **Every entity explained:** the [entity reference](docs/entities.md) (also in [German](docs/entities.de.md)) lists each
 entity by topic with key, unit, value range, meaning and pitfalls, plus short background on how heat pumps work.
@@ -171,9 +172,21 @@ Entries created before 0.3.0 keep all entities until the equipment is saved ther
 * **Block reads** instead of one request per value. If the device rejects a block read (e.g. because a register in
   the gap does not exist), the integration falls back to single reads automatically.
 * **Tiered polling**: measurements every cycle (default 30 s), counters and settings less often, firmware rarely.
+* **Only what is used:** registers of *disabled* entities are not read. Enabling an entity reads its register at
+  once and includes it in the following polls. Whatever the integration needs itself stays in the poll even if the
+  entity is disabled: firmware, the control values compared after an outage, everything the restore and the reset
+  detection use, the inputs of the COP sensors, the equipment flags and the sources of the climate, water heater and
+  status bit entities.
 * **At most every 5 minutes** (10–300 s): the SHI drops every value set over it after 10 minutes without any Modbus
   access ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). An existing entry with a longer
   interval polls every 300 s and logs a warning; saving the options once stores the new value.
+
+## Energy dashboard
+
+The counters **Energy: electric total** (`energy_el_total`) and **Energy: thermal total** (`energy_th_total`) are in
+kWh with the state class `total_increasing`, so Home Assistant accepts them as they are: add the electric counter
+under *Settings → Dashboards → Energy → Individual devices*. The counters for heating, hot
+water, cooling and pool are built the same way. The counters have a resolution of 0.1 kWh.
 
 ## Repair issues
 
@@ -314,7 +327,10 @@ reconnects and the time of the last one, and whether reconnects still count as a
 Under *Settings → Devices & services → Luxtronik SHI*, the ⋮ menu of the entry offers **Download diagnostics**. It
 creates a file with the integration and Home Assistant
 version, the selected equipment and equipment flags, the firmware and the last polled register values (raw and
-decoded) and, with the [restore option](#restore-after-a-device-reset-option) on, the remembered values. Host address, MAC address and the entry's unique ID and title are redacted. The file is built from the last
+decoded) and, with the [restore option](#restore-after-a-device-reset-option) on, the remembered values. A
+*polling* section shows the poll interval, the duration of the last poll, the number of polls and failed polls,
+the failures in a row, the time of the last success and failure and the registers that are not polled
+(disabled entities). It comes from memory, not from the heat pump. Host address, MAC address and the entry's unique ID and title are redacted. The file is built from the last
 poll, without extra Modbus reads. Please attach it to bug reports.
 
 ## Beta versions

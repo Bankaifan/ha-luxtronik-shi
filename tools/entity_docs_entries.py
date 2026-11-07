@@ -90,9 +90,11 @@ _add("dhw_target", "dhw_temps",
      "Warmwasser-Sollwerts. Die Zahl Sollwert ändert sie nur in der Betriebsart `setpoint`.", "PL")
 _add("dhw_min", "dhw_temps",
      "Minimum adjustable hot water temperature. On the reference firmware the register returns a constant, "
-     "30.0 °C, which is also the lower limit of the setpoint number.",
+     "30.0 °C (a fixed firmware constant, not a measurement), which is also the lower limit of the setpoint number. "
+     "Disabled by default for new installations.",
      "Niedrigste einstellbare Warmwassertemperatur. In der Referenz-Firmware liefert das Register eine Konstante, "
-     "30,0 °C; das ist auch die Untergrenze der Zahl Sollwert.", "PL, FW")
+     "30,0 °C (eine feste Firmware-Konstante, kein Messwert); das ist auch die Untergrenze der Zahl Sollwert. Für "
+     "neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _add("dhw_max", "dhw_temps",
      "Maximum adjustable hot water temperature, as reported by the controller.",
      "Höchste einstellbare Warmwassertemperatur laut Regelung.", "PL")
@@ -421,12 +423,16 @@ _add("buffer_type", "system",
      "Reihenpuffer angezeigt.", "PL, M")
 _add("switching_lock_minutes", "system",
      "Minimum off time before the heat pump may start again (*Schaltspielsperre*), in minutes. The reference "
-     "firmware returns the constant 20.",
+     "firmware returns the constant 20 (a fixed value, not a measurement). Disabled by default for new "
+     "installations.",
      "Mindest-Ausschaltzeit, bevor die Wärmepumpe wieder starten darf (*Schaltspielsperre*), in Minuten. Die "
-     "Referenz-Firmware liefert die Konstante 20.", "PL, FW")
+     "Referenz-Firmware liefert die Konstante 20 (ein fester Wert, kein Messwert). Für neue Installationen "
+     "standardmäßig deaktiviert.", "PL, FW")
 _add("min_runtime_minutes", "system",
-     "Minimum runtime of the heat pump, in minutes. The reference firmware returns the constant 20.",
-     "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20.", "PL, FW")
+     "Minimum runtime of the heat pump, in minutes. The reference firmware returns the constant 20 (a fixed value, "
+     "not a measurement). Disabled by default for new installations.",
+     "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20 (ein fester Wert, "
+     "kein Messwert). Für neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _caps = {
     "cap_heating": ("heating", "Heizen"),
     "cap_hot_water": ("hot water", "Warmwasser"),

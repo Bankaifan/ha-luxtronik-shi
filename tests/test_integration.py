@@ -602,3 +602,18 @@ async def test_named_raw_values_decode(hass: HomeAssistant, shi: FakeSHI) -> Non
     data = entry.runtime_data.data
     assert data["raw_10113"] == 25.3
     assert data["raw_10354"] == 1
+
+
+async def test_default_name_follows_the_language(hass: HomeAssistant, shi: FakeSHI) -> None:
+    from custom_components.luxtronik_shi.config_flow import default_name
+
+    assert default_name("de") == "Wärmepumpe"
+    assert default_name("de-AT") == "Wärmepumpe"
+    assert default_name("en") == "Heat pump"
+    assert default_name("fr") == "Heat pump"
+    for language, expected in (("en", "Heat pump"), ("de", "Wärmepumpe")):
+        hass.config.language = language
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        name = next(key for key in result["data_schema"].schema if key == "name")
+        assert name.default() == expected
+        hass.config_entries.flow.async_abort(result["flow_id"])

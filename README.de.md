@@ -83,7 +83,8 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 | **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
 | **Schreiben: Auswahl** | Betriebsart (Keine Vorgabe / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt); Modus der Leistungsbegrenzung (keine / weich / hart) |
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser* |
-| Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
+| Pumpen und Ein-/Ausgänge | **Pumpe Heizung (HUP), Warmwasser (BUP), Zirkulation (ZIP)** läuft, Ausgänge **VBO** und **FP1** (FP2 und FP3 standardmäßig deaktiviert; nicht gemessen), Eingänge **EVU** und **EVU 2** als Pegel (standardmäßig deaktiviert). Gelesen aus denselben Registern wie die passenden `raw_`-Sensoren, die unverändert bleiben. Bei EVU ist nur der Name durch die Firmware-Analyse belegt; dass Pegel 1 *freigegeben* heißt, ist aus einem gemessenen Zustand abgeleitet, die Sensoren zeigen deshalb den Pegel, nicht „gesperrt“. Die Betriebsart *EVU-Sperre* meldet die Sperre selbst |
+| Diagnose | Puffertyp, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert). Schaltspielsperre, Mindestlaufzeit und minimale Warmwassertemperatur sind feste Firmware-Konstanten und für neue Installationen standardmäßig deaktiviert |
 
 **Jede Entität erklärt:** Die [Entitäten-Referenz](docs/entities.de.md) (auch auf [Englisch](docs/entities.md)) listet jede
 Entität nach Thema mit Schlüssel, Einheit, Wertebereich, Bedeutung und Fallstricken, dazu kurze Hintergründe zur
@@ -181,10 +182,22 @@ Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung 
   in der Lücke fehlt), liest die Integration automatisch einzeln weiter.
 * **Abgestufte Abfrageintervalle**: Messwerte jeden Zyklus (Standard 30 s), Zähler und Einstellungen seltener, Firmware
   fast nie.
+* **Nur, was gebraucht wird:** Register *deaktivierter* Entitäten werden nicht gelesen. Wird eine Entität
+  aktiviert, liest die Integration ihr Register sofort und nimmt es in die folgenden Abfragen auf. Was die
+  Integration selbst braucht, bleibt auch bei deaktivierter Entität in der Abfrage: Firmware, die nach einem Ausfall
+  verglichenen Steuerwerte, alles, was Wiederherstellung und Reset-Erkennung nutzen, die Eingänge der COP-Sensoren,
+  die Ausstattungsmerkmale und die Quellen der Climate-, Water-Heater- und Statusbit-Entitäten.
 * **Höchstens alle 5 Minuten** (10–300 s): Die SHI verwirft alle über sie gesetzten Werte nach 10 Minuten ohne jeden
   Modbus-Zugriff ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein bestehender
   Eintrag mit längerem Intervall fragt alle 300 s ab und schreibt eine Warnung ins Log; einmal die Optionen speichern
   übernimmt den neuen Wert.
+
+## Energie-Dashboard
+
+Die Zähler **Energie: Strom gesamt** (`energy_el_total`) und **Energie: Wärme gesamt** (`energy_th_total`) sind in
+kWh mit der Zustandsklasse `total_increasing` und gehen damit unverändert in Home Assistant: den Stromzähler unter
+*Einstellungen → Dashboards → Energie → Einzelne Geräte* eintragen. Die Zähler für Heizen, Warmwasser,
+Kühlen und Pool sind genauso aufgebaut. Die Zähler lösen mit 0,1 kWh auf.
 
 ## Reparaturhinweise
 
@@ -345,7 +358,10 @@ Ausfall zählen.
 Unter *Einstellungen → Geräte & Dienste → Luxtronik SHI* bietet das ⋮-Menü des Eintrags **Diagnose herunterladen**.
 Die Datei enthält die Version von Integration und Home Assistant, die gewählte Ausstattung und die
 Ausstattungsmerkmale, die Firmware, die zuletzt abgefragten Registerwerte (roh und umgerechnet) und bei eingeschalteter
-[Wiederherstellung](#werte-nach-einem-geräte-reset-wiederherstellen-option) die gemerkten Werte. Host-Adresse,
+[Wiederherstellung](#werte-nach-einem-geräte-reset-wiederherstellen-option) die gemerkten Werte. Ein Abschnitt *polling* zeigt das Abfrageintervall, die Dauer der letzten Abfrage, die Zahl
+der Abfragen und der fehlgeschlagenen, die Fehlschläge in Folge, den Zeitpunkt des letzten Erfolgs und Fehlers sowie
+die Register, die nicht abgefragt werden (deaktivierte Entitäten). Er stammt aus dem Speicher, nicht von der
+Wärmepumpe. Host-Adresse,
 MAC-Adresse sowie Unique-ID und Titel des Eintrags werden unkenntlich gemacht. Die Datei entsteht aus der letzten
 Abfrage, ohne zusätzliche Modbus-Lesezugriffe. Bitte an Fehlermeldungen anhängen.
 
