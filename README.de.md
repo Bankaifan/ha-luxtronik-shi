@@ -144,6 +144,10 @@ Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung 
   in der Lücke fehlt), liest die Integration automatisch einzeln weiter.
 * **Abgestufte Abfrageintervalle**: Messwerte jeden Zyklus (Standard 30 s), Zähler und Einstellungen seltener, Firmware
   fast nie.
+* **Höchstens alle 5 Minuten** (10–300 s): Die SHI verwirft alle über sie gesetzten Werte nach 10 Minuten ohne jeden
+  Modbus-Zugriff ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein bestehender
+  Eintrag mit längerem Intervall fragt alle 300 s ab und schreibt eine Warnung ins Log; einmal die Optionen speichern
+  übernimmt den neuen Wert.
 
 ## Reparaturhinweise
 
@@ -177,10 +181,13 @@ Heizungs-Stufe auf Rohwert 0 statt 2.
 Unter *Optionen* sorgt **Werte nach einem Geräte-Reset wiederherstellen** (standardmäßig aus) dafür, dass die
 Integration solche Werte zurückschreibt:
 
-* **Nur eigene Werte, und nur Einstellungen.** Gemerkt wird ein Wert erst, wenn er über eine Entität dieser
+* **Eigene Werte plus eine einmalige Momentaufnahme beim Einschalten, und nur Einstellungen.** Gemerkt wird ein
+  Wert, wenn er über eine Entität dieser
   Integration (Number, Select, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Gemerkt werden
   nur **Betriebsart, Stufe, Offset und Sollwert** jedes Kreises (Heizung, Warmwasser, Mischkreise 1–3 Heizen und
-  Kühlen, gesamt) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Sperren (Heizung, Warmwasser, Kühlung, Pool),
+  Kühlen) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Die Gesamt-Gruppe (`cfg_overall_*`, 10065–10067)
+  bleibt außen vor: Ihre Bedeutung ist nicht belegt (an der Referenzanlage fiel 10065 etwa 2 s nach einem Schreiben auf
+  `aus` zurück, und python-luxtronik kennt für die Gesamt-Betriebsart keinen Sollwert). Sperren (Heizung, Warmwasser, Kühlung, Pool),
   Zirkulation, Warmwasser-Extra und die Leistungsbegrenzung werden **nie** wiederhergestellt: Die gehören live einem
   Optimierer wie dem Heat Pump Optimizer, und eine Sperre nach langem Stillstand wieder zu setzen, würde die
   Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Die Betriebsarten und Sollwerte der Liste (etwa
@@ -190,59 +197,86 @@ Integration solche Werte zurückschreibt:
   (`.storage/luxtronik_shi.restore.<entry_id>`), die Wiederherstellung klappt also auch nach einem Neustart von Home
   Assistant. Wer einen Wert auf seinen neutralen Wert zurücksetzt (z. B. Betriebsart `aus`, Offset 0), dem wird das
   wie jedes andere Schreiben gemerkt – danach gibt es für diesen Wert nichts mehr wiederherzustellen.
-* **Nur bei Belegen für einen Reset.** Die Werte kommen aus der normalen Abfrage, es gibt keine zusätzlichen
-  Lesezugriffe. Ein Reset wird angenommen, wenn innerhalb des ersten vollständigen Lesezyklus nach dem Auslöser
-  * mindestens **zwei** gemerkte Werte, die nicht 0 sind, 0 lesen, oder
-  * vorher die Verbindung weg war (fehlgeschlagene Abfragen) und mindestens ein gemerkter Wert ungleich 0 jetzt 0
-    liest, wobei mindestens zwei Werte gemerkt sind. Eine Lücke von mehr als 10 Minuten seit der letzten
-    erfolgreichen Abfrage, etwa ein langer Stillstand von Home Assistant, zählt als solcher Ausfall, weil der Watchdog
-    dann abgelaufen ist. Die Zeit der letzten erfolgreichen Abfrage wird mit den Werten gespeichert, höchstens einmal
-    pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein. Gemerkte Werte, die älter
-    als 24 Stunden sind (seit der letzten erfolgreichen Abfrage), werden beim Start der Integration verworfen; aus
-    ihnen wird nichts wiederhergestellt.
-* **Sollwerte kommen mit dem Reset zurück.** Ein Reset setzt Sollwerte nicht auf 0: Die Regelung stellt
-  sie auf ihren gespeicherten oder festen Standardwert zurück, Betriebsarten, Stufen und Sperren lesen dagegen 0
-  ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Bestätigen die Belege oben einen
-  Reset, gehört ein gemerkter Sollwert, der im selben Lesezyklus einen anderen Wert ungleich 0 liest,
-  zum Reset und wird mit seinem Kreis wiederhergestellt: erst die Werte, die Betriebsart zuletzt. Beispiel:
-  Warmwasser-Betriebsart `Sollwert` mit 54 °C und Heizungs-Betriebsart `Offset` mit Offset 0 – nach einem Neustart
-  kommen beide Betriebsarten und die 54 °C zurück; eine Betriebsart, die `aus` war, bleibt `aus`.
-* **Fremde Änderungen werden respektiert, soweit sie erkennbar sind.** Ohne Belege für einen Reset gilt: Liest ein
-  gemerkter Wert einen *anderen Wert ungleich 0*, wurde er außerhalb dieser Integration geändert, etwa von einem
-  anderen Modbus-Client: Er wird vergessen (Log-Level info) und nicht wiederhergestellt. Für Betriebsarten und Stufen
-  mit einem anderen Wert ungleich 0 gilt das immer, ebenso für Offsets (deren Reset-Wert ist nicht belegt). Ein
-  Sollwert, der 0 liest, ist nie ein Reset (0 liegt außerhalb jedes Sollwertbereichs) und gilt ebenfalls als fremde
-  Änderung. Nullen ohne die Belege oben werden genauso behandelt. Betriebsart, Sollwert, Offset und Stufe
-  eines Kreises bilden eine Gruppe: Sobald einer davon fremd geändert wurde, wird auch die Betriebsart dieses Kreises
-  vergessen und erst wieder wiederhergestellt, nachdem sie erneut über Home Assistant geschrieben wurde – so entsteht
-  keine Kombination, die niemand eingestellt hat.
-* **Keine Schreibschleifen.** Jeder Schlüssel wird pro erkanntem Reset einmal wiederhergestellt, mit Rücklesen.
-  Betriebsarten kommen zuletzt; eine Betriebsart wird nicht wiederhergestellt, wenn ein anderer Wert ihres Kreises
-  nicht wiederhergestellt werden konnte.
+  Abgesehen von der einmaligen Übernahme unten werden von anderen geschriebene Werte nicht gemerkt: Werte eines anderen Modbus-Clients sind nicht Sache dieser
+  Integration, und was eine andere Integration über den nativen Port 8889 schreibt, sind Parameter der Regelung, keine
+  über die SHI gesetzten Werte – ein Reset setzt sie nicht zurück.
+* **Einmalige Übernahme der aktuellen Werte.** Wird die Option eingeschaltet (in den Optionen oder bei der ersten
+  Einrichtung mit eingeschalteter Option), dient der erste vollständige Lesezyklus als Momentaufnahme und wird gemerkt,
+  als hätte die Integration ihn geschrieben: jede Betriebsart, Stufe und jeder Offset der Liste, die nicht 0 lesen,
+  (nie `0x7FFF`), und ein Sollwert nur, wenn die Betriebsart seines Kreises `Sollwert` liest. Die übernommenen
+  Schlüssel stehen im Log. Das passiert einmal; ein Neustart oder Neuladen bei weiter eingeschalteter Option übernimmt
+  nichts erneut. Übernommene Werte kann auch ein anderer Client gesetzt haben; sie werden wie deine eigenen
+  wiederhergestellt. Wer einen Wert gesetzt hat, lässt sich über Modbus nicht lesen, der Filter auf die Betriebsart
+  macht also nur wahrscheinlich, dass ein Sollwert gewollt war: Ein übernommener Sollwert kann auch ein Startwert oder
+  ein Parameter der Regelung sein. Hat sich dieser Parameter bei einem Reset geändert, wird der übernommene Wert über
+  die Änderung hinweg zurückgeschrieben, und ab dann gehört er der SHI.
+* **Nur nach einem Ausfall.** Die Regelung setzt die SHI-Werte aus genau zwei Gründen zurück: bei einem Neustart, der
+  die Verbindung trennt, und nach 10 Minuten ganz ohne Modbus-Zugriff
+  ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein Reset kommt deshalb nur in Frage
+  nach
+  * fehlgeschlagenen Abfragen,
+  * einer neu aufgebauten Verbindung (ein Neustart, der kürzer ist als das Abfrageintervall, kann die Verbindung
+    trennen, ohne dass eine Abfrage fehlschlägt; die Integration zählt die Wiederverbindungen ihrer Modbus-Verbindung,
+    ohne zusätzliche Anfragen). Das beruht auf einer **noch nicht gemessenen Annahme**: Die SHI hält die
+    TCP-Verbindung zwischen den Abfragen offen, eine Wiederverbindung heißt also, dass die Regelung sie getrennt hat.
+    Gibt es bei 3 der letzten 5 Abfragen eine Wiederverbindung, gilt die Annahme für diese Anlage nicht: Es wird
+    einmal gewarnt, und Wiederverbindungen zählen in dieser Sitzung nicht mehr,
+  * mehr als 10 Minuten seit der vorigen erfolgreichen Abfrage, während Home Assistant läuft, gemessen mit einer
+    monotonen Uhr, damit ein Verstellen der Systemuhr nicht zählt (ein angehaltener Host, etwa eine pausierte virtuelle
+    Maschine, wird so nicht erkannt: Dann wird eben nichts wiederhergestellt, was auf der sicheren Seite liegt), oder
+  * einer Lücke von mehr als 11 Minuten seit der letzten erfolgreichen Abfrage, etwa einem langen Stillstand von Home
+    Assistant (10 Minuten Watchdog plus 1 Minute, weil die Zeit der letzten Abfrage höchstens einmal pro Minute
+    gespeichert wird).
+
+  **Jede Änderung, die bei durchgehender Abfrage auftaucht, stammt von jemand anderem**: Sie wird vergessen
+  (Log-Level info) und nie wiederhergestellt.
+* **Alles oder nichts.** Bei einem Rücksetzen stellt die Regelung alle über die SHI gesetzten Werte auf einmal zurück:
+  Betriebsarten und Stufen auf 0, Sollwerte auf ihren gespeicherten oder festen Standardwert (nie 0). Nach einem
+  Ausfall, sobald jedes gemerkte Register gelesen wurde (ein bis zwei Abfragen, keine zusätzlichen Lesezugriffe), ist
+  es nur dann ein Reset, wenn **jeder** gemerkte Wert seinen Reset-Wert liest: 0 bei Betriebsarten, Stufen und
+  Offsets (bei Offsets ist das eine Annahme: fällt ein Offset ungleich 0 nicht auf 0 zurück, wird der Reset nicht
+  erkannt und nichts überschrieben), ein beliebiger Wert ungleich 0 bei Sollwerten (oder genau der gelernte Wert, siehe unten). Dann werden alle
+  abweichenden Werte wiederhergestellt, erst die Werte, die Betriebsarten zuletzt. Ist nur ein Teil zurückgesetzt,
+  waren die geänderten Werte fremde Änderungen: Sie werden vergessen, und nichts wird wiederhergestellt. Eine einzige
+  gemerkte Betriebsart, die nach einem Ausfall 0 liest, genügt. Beispiel: Warmwasser-Betriebsart `Sollwert` mit 54 °C
+  und Heizungs-Betriebsart `Offset` mit Offset 0 – nach einem Neustart kommen beide Betriebsarten und die 54 °C zurück;
+  eine Betriebsart, die `aus` war, bleibt `aus`.
+* **Gelernte Reset-Werte der Sollwerte.** Nach einem bestätigten Reset speichert die Integration, auf welchen Wert
+  jeder Sollwert zurückgefallen ist. Danach gilt ein Sollwert nur noch als zurückgesetzt, wenn er genau diesen Wert
+  liest; ein anderer Wert heißt, dass ihn jemand geändert hat. Diese Werte sind an deiner Anlage gelernt, nicht aus
+  einer Firmware-Tabelle übernommen. Verhindert ein Sollwert einen Reset nur, weil er vom gelernten Wert abweicht,
+  nennt ihn eine Warnung. Nach einem Neustart mit fehlgeschlagenen Abfragen, bei dem jede gemerkte Betriebsart und
+  Stufe 0 liest, wird der Reset trotzdem angenommen und der gelernte Wert ersetzt; eine Benachrichtigung (kein Reparaturhinweis) nennt dann die geänderten Grundwerte und die wiederhergestellten Werte, zu tun ist nichts. `0x7FFF`
+  („nicht verfügbar“) ist nie ein Reset-Wert und wird nie gelernt. Ein gemerktes Register, das nicht mehr verfügbar
+  ist, wird vergessen.
+* **Gruppen.** Betriebsart, Sollwert, Offset und Stufe eines Kreises bilden eine Gruppe: Sobald einer davon fremd
+  geändert wurde, wird auch die Betriebsart dieses Kreises vergessen und erst wieder wiederhergestellt, nachdem sie
+  erneut über Home Assistant geschrieben wurde – so entsteht keine Kombination, die niemand eingestellt hat.
+* **Keine Schreibschleifen.** Jeder Schlüssel wird pro erkanntem Reset einmal wiederhergestellt, mit Rücklesen. Eine
+  Betriebsart wird nicht wiederhergestellt, wenn ein anderer Wert ihres Kreises nicht wiederhergestellt werden konnte.
   Schlägt das Schreiben fehl oder liest es einen anderen Wert zurück, wird der Schlüssel vergessen und nicht erneut
   versucht. Ein Reset, der innerhalb von 15 Minuten nach einer Wiederherstellung erneut erkannt wird, wird nicht
-  wiederhergestellt. Wiederhergestellte Schlüssel stehen mit Log-Level warning im Log.
+  wiederhergestellt. Gemerkte Werte, die älter als 24 Stunden sind (seit der letzten erfolgreichen Abfrage), werden
+  beim Start der Integration verworfen. Wiederhergestellte Schlüssel stehen mit Log-Level warning im Log.
 
 Der [Hinweis nach einem Ausfall](#reparaturhinweise) funktioniert wie bisher; mit eingeschalteter Option verschwindet er
-meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunterladen* listet die gemerkten Werte.
+meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunterladen* listet die gemerkten und
+gelernten Werte, die Zahl der Wiederverbindungen und die Zeit der letzten sowie, ob Wiederverbindungen noch als
+Ausfall zählen.
 
 **Grenzen:**
 
-* **Eine fremde Änderung auf 0 kann überschrieben werden.** Der Reset-Wert der Regelung ist 0. Setzt ein anderer
-  Modbus-Client einen Wert während oder kurz nach einem Verbindungsausfall auf 0, oder
-  zwei gemerkte Werte gleichzeitig, sieht das genau wie ein Reset aus und wird über diese Änderung hinweg
-  wiederhergestellt. **Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt.**
+* Ein falscher oder veralteter gelernter Wert (etwa gelernt, während ein anderer Client den Sollwert während eines
+  Resets geändert hat) kann Wiederherstellungen blockieren, bis zu einem Neustart mit fehlgeschlagenen Abfragen, bei
+  dem jede gemerkte Betriebsart und Stufe 0 liest. Option aus- und wieder einschalten löscht alle gelernten Werte.
 
-* Ist nur **ein** Wert gemerkt und liest er 0, lässt sich ein Reset nicht davon unterscheiden, dass jemand ihn auf
-  seinen Reset-Wert gesetzt hat. Er wird nicht wiederhergestellt (und vergessen).
-* Ohne vorherigen Verbindungsausfall gilt ein **einzelner** Wert, der 0 liest, als fremde Änderung – auch wenn die
-  Regelung ihn zurückgesetzt hat.
-* Beleg für einen Reset ist immer eine Betriebsart, Stufe oder ein Offset, die 0 lesen, nie ein Sollwert. Fällt bei einem Reset keine gemerkte
-  Betriebsart oder Stufe auf 0 (etwa weil nur Sollwerte gemerkt sind), wird er nicht erkannt; die zurückgesetzten
-  Sollwerte gelten dann als fremde Änderung und werden vergessen. Ändert jemand anderes einen Sollwert im selben
-  Lesezyklus wie ein echter Reset, wird er über diese Änderung hinweg wiederhergestellt.
-* Die Erkennung folgt dem normalen Abfrageintervall; die Wiederherstellung kommt also ein bis zwei Abfragen nach der
-  Rückkehr der Regelung.
+* Ändert ein anderer Modbus-Client rund um einen Ausfall Werte so, **dass zufällig jeder gemerkte Wert seinen
+  Reset-Wert liest** (etwa indem er die einzige gemerkte Betriebsart ausschaltet), sieht das genau wie ein Reset aus und
+  wird über diese Änderung hinweg wiederhergestellt. **Lass die Option aus, wenn ein anderes System diese Register
+  ebenfalls schreibt.**
+* Solange der Reset-Wert eines Sollwerts noch nicht gelernt ist, gilt jeder Wert ungleich 0 als zurückgesetzt. Ein
+  Sollwert, den jemand anderes während eines Ausfalls ändert, kann dann über diese Änderung hinweg wiederhergestellt
+  werden, wenn alles andere ebenfalls zurückgesetzt ist.
 * Eine Wiederherstellung schreibt ohne Zutun auf die Wärmepumpe. Schreibzugriffe aus Home Assistant und eine
   Wiederherstellung laufen nie gleichzeitig; ein Schreibzugriff während einer Wiederherstellung wartet und wird danach
   ausgeführt.

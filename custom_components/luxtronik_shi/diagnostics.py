@@ -94,6 +94,14 @@ async def async_get_config_entry_diagnostics(
         "restore_after_reset": {
             "enabled": coordinator.restore_enabled,
             "remembered": coordinator.remembered,
+            "learned": coordinator.learned,
+        },
+        "connection": {
+            "reconnects": coordinator.client.reconnects,
+            "last_reconnect": (
+                coordinator.client.last_reconnect.isoformat() if coordinator.client.last_reconnect else None
+            ),
+            "reconnect_is_outage_signal": coordinator.reconnect_signal_active,
         },
         "blocks": blocks,
     }

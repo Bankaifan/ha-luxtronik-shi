@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from datetime import UTC, datetime
 
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ModbusException
@@ -30,17 +31,39 @@ class LuxtronikModbusClient:
         self.host = host
         self.port = port
         self.slave = slave
-        self._client = AsyncModbusTcpClient(host, port=port, timeout=timeout, retries=2)
+        # Re-established connections after the first one. pymodbus reconnects in the background after a lost
+        # connection, so a short controller reboot between two polls would otherwise go unseen.
+        # ASSUMPTION (not measured yet): the SHI keeps the connection open between polls; see
+        # RECONNECT_GUARD_* in const.py.
+        self.reconnects = 0
+        self.last_reconnect: datetime | None = None
+        self._connected_once = False
+        kwargs = {}
+        self._traced = "trace_connect" in inspect.signature(AsyncModbusTcpClient.__init__).parameters
+        if self._traced:
+            kwargs["trace_connect"] = self._on_connect
+        self._client = AsyncModbusTcpClient(host, port=port, timeout=timeout, retries=2, **kwargs)
         self._lock = asyncio.Lock()
         # pymodbus >= 3.10 calls the unit parameter ``device_id``, older ones ``slave``.
         params = inspect.signature(self._client.read_holding_registers).parameters
         self._unit_kw = "device_id" if "device_id" in params else "slave"
+
+    def _on_connect(self, connected: bool) -> None:
+        """pymodbus connect/disconnect trace: count every connection after the first."""
+        if not connected:
+            return
+        if self._connected_once:
+            self.reconnects += 1
+            self.last_reconnect = datetime.now(UTC)
+        self._connected_once = True
 
     async def _call(self, method: str, *args: int, **kwargs: int):
         async with self._lock:
             try:
                 if not self._client.connected:
                     await self._client.connect()
+                    if not self._traced and self._client.connected:
+                        self._on_connect(True)  # pymodbus without connect trace: count our own reconnects
                 if not self._client.connected:
                     raise ModbusCommError(f"Verbindung zu {self.host}:{self.port} fehlgeschlagen")
                 response = await getattr(self._client, method)(*args, **kwargs, **{self._unit_kw: self.slave})

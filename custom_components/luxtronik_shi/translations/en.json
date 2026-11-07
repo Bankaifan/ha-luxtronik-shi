@@ -65,8 +65,8 @@
           "room_unit": "Room unit (room temperature)"
         },
         "data_description": {
-          "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically.",
-          "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts. When on, the integration writes the values it last set itself back, but only when at least two of them fall back to 0 at once, or one after a connection outage. Only modes, levels, offsets and setpoints are restored, never blocks. A value someone else sets to 0 around a connection outage can be overwritten, so leave this off if another system also writes these registers. Off by default."
+          "scan_interval": "Base interval, at most 300 seconds (5 minutes): the heat pump drops values set over the Smart Home Interface after 10 minutes without access. Slowly changing values (counters, settings, firmware) are read less often automatically.",
+          "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts or nothing has accessed it for 10 minutes. When on, the integration writes the values it last set itself back, but only after a connection outage and only if every one of them reads its reset value; any change seen while polling continuously is treated as someone else's. Only modes, levels, offsets and setpoints are restored, never blocks. Leave this off if another system also writes these registers. Off by default."
         },
         "description": "Parts of the installation that are switched off are not polled and get no entities. Their entity IDs stay reserved and come back when the part is switched on again."
       }
@@ -585,6 +585,14 @@
     "values_changed_after_outage": {
       "title": "{name}: Values changed after connection outage",
       "description": "The Smart Home Interface was unreachable. Since it answers again, these values differ from those before the outage (old -> new):\n\n{changes}\n\nThe integration does not write anything back. Check the values and set them again yourself if needed. This issue disappears when the values match those from before the outage again, or when you dismiss it."
+    }
+  },
+  "exceptions": {
+    "base_values_changed_title": {
+      "message": "{name}: base values of setpoints changed"
+    },
+    "base_values_changed": {
+      "message": "After a restart of the heat pump, the base values these setpoints fall back to have changed (learned before -> now):\n\n{changes}\n\nThe values set in Home Assistant remain valid and were restored:\n\n{restored}\n\nNo action is needed. This is information only."
     }
   },
   "device": {

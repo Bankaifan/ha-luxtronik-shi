@@ -64,8 +64,8 @@ STATIC = {
                         "restore_after_reset": "Restore values after a device reset",
                     },
                     "data_description": {
-                        "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically.",
-                        "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts. When on, the integration writes the values it last set itself back, but only when at least two of them fall back to 0 at once, or one after a connection outage. Only modes, levels, offsets and setpoints are restored, never blocks. A value someone else sets to 0 around a connection outage can be overwritten, so leave this off if another system also writes these registers. Off by default.",
+                        "scan_interval": "Base interval, at most 300 seconds (5 minutes): the heat pump drops values set over the Smart Home Interface after 10 minutes without access. Slowly changing values (counters, settings, firmware) are read less often automatically.",
+                        "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts or nothing has accessed it for 10 minutes. When on, the integration writes the values it last set itself back, but only after a connection outage and only if every one of them reads its reset value; any change seen while polling continuously is treated as someone else's. Only modes, levels, offsets and setpoints are restored, never blocks. Leave this off if another system also writes these registers. Off by default.",
                     },
                 }
             }
@@ -109,8 +109,8 @@ STATIC = {
                         "restore_after_reset": "Werte nach einem Geräte-Reset wiederherstellen",
                     },
                     "data_description": {
-                        "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
-                        "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur, wenn mindestens zwei davon gleichzeitig auf 0 fallen oder einer nach einem Verbindungsausfall. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Setzt jemand anderes rund um einen Verbindungsausfall einen Wert auf 0, kann er überschrieben werden – lass die Option deshalb aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus.",
+                        "scan_interval": "Basisintervall, höchstens 300 Sekunden (5 Minuten): Die Wärmepumpe verwirft über die Smart-Home-Schnittstelle gesetzte Werte nach 10 Minuten ohne Zugriff. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
+                        "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet oder 10 Minuten lang niemand zugreift. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur nach einem Verbindungsausfall und nur, wenn jeder davon seinen Reset-Wert liest; jede Änderung bei durchgehender Abfrage gilt als fremd. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus.",
                     },
                 }
             }
@@ -209,6 +209,28 @@ STATES = {
     },
 }
 
+# Information notices (persistent notifications, not repair issues). Stored under "exceptions", the translation
+# category Home Assistant provides for backend-generated messages.
+NOTICES = {
+    "en": {
+        "base_values_changed_title": {"message": "{name}: base values of setpoints changed"},
+        "base_values_changed": {
+            "message": "After a restart of the heat pump, the base values these setpoints fall back to have changed "
+            "(learned before -> now):\n\n{changes}\n\nThe values set in Home Assistant remain valid and were "
+            "restored:\n\n{restored}\n\nNo action is needed. This is information only."
+        },
+    },
+    "de": {
+        "base_values_changed_title": {"message": "{name}: Grundwerte von Sollwerten geändert"},
+        "base_values_changed": {
+            "message": "Nach einem Neustart der Wärmepumpe haben sich die Grundwerte geändert, auf die diese "
+            "Sollwerte zurückfallen (bisher gelernt -> jetzt):\n\n{changes}\n\nDie in Home Assistant gesetzten "
+            "Werte gelten weiter und wurden wiederhergestellt:\n\n{restored}\n\nEs ist nichts zu tun. Das ist "
+            "nur ein Hinweis."
+        },
+    },
+}
+
 ISSUES = {
     "en": {
         "firmware_old": {
@@ -266,6 +288,7 @@ for lang in ("en", "de"):
     data["options"]["step"]["init"]["description"] = EQUIPMENT_TEXT[lang]["options"]
     data["entity"] = entity
     data["issues"] = ISSUES[lang]
+    data["exceptions"] = NOTICES[lang]
     data["device"] = {area: {"name": name} for area, name in DEVICE_NAMES[lang].items()}
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

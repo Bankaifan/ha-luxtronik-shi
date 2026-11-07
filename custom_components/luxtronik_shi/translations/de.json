@@ -65,8 +65,8 @@
           "room_unit": "Raumeinheit (Raumtemperatur)"
         },
         "data_description": {
-          "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
-          "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur, wenn mindestens zwei davon gleichzeitig auf 0 fallen oder einer nach einem Verbindungsausfall. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Setzt jemand anderes rund um einen Verbindungsausfall einen Wert auf 0, kann er überschrieben werden – lass die Option deshalb aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus."
+          "scan_interval": "Basisintervall, höchstens 300 Sekunden (5 Minuten): Die Wärmepumpe verwirft über die Smart-Home-Schnittstelle gesetzte Werte nach 10 Minuten ohne Zugriff. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
+          "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet oder 10 Minuten lang niemand zugreift. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur nach einem Verbindungsausfall und nur, wenn jeder davon seinen Reset-Wert liest; jede Änderung bei durchgehender Abfrage gilt als fremd. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus."
         },
         "description": "Abgewählte Teile der Anlage werden nicht abgefragt und bekommen keine Entitäten. Ihre Entity-IDs bleiben reserviert und kommen beim Wiedereinschalten zurück."
       }
@@ -585,6 +585,14 @@
     "values_changed_after_outage": {
       "title": "{name}: Werte nach Verbindungsausfall geändert",
       "description": "Die Smart-Home-Schnittstelle war nicht erreichbar. Seit sie wieder antwortet, unterscheiden sich diese Werte von denen vor dem Ausfall (alt -> neu):\n\n{changes}\n\nDie Integration schreibt nichts zurück. Prüfe die Werte und stelle sie bei Bedarf selbst wieder ein. Dieser Hinweis verschwindet, sobald die Werte wieder denen vor dem Ausfall entsprechen, oder wenn du ihn schließt."
+    }
+  },
+  "exceptions": {
+    "base_values_changed_title": {
+      "message": "{name}: Grundwerte von Sollwerten geändert"
+    },
+    "base_values_changed": {
+      "message": "Nach einem Neustart der Wärmepumpe haben sich die Grundwerte geändert, auf die diese Sollwerte zurückfallen (bisher gelernt -> jetzt):\n\n{changes}\n\nDie in Home Assistant gesetzten Werte gelten weiter und wurden wiederhergestellt:\n\n{restored}\n\nEs ist nichts zu tun. Das ist nur ein Hinweis."
     }
   },
   "device": {

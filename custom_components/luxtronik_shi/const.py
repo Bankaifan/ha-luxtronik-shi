@@ -13,7 +13,9 @@ DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
 DEFAULT_SCAN_INTERVAL = 30  # seconds, base cycle
 MIN_SCAN_INTERVAL = 10
-MAX_SCAN_INTERVAL = 600
+# At most 5 minutes: the SHI watchdog drops every value set over the SHI after 600 s without Modbus access
+# (docs/firmware-3.92.3-shi-analysis.md, "SHI watchdog"), so a longer interval could lose them between polls.
+MAX_SCAN_INTERVAL = 300
 
 # Repair issues (issue #24)
 # First firmware with the circulation pump and extra hot water registers (README note on the features).
@@ -45,7 +47,9 @@ LAST_POLL_SAVE_INTERVAL = 60  # seconds
 # room setpoint. Blocks (heating_block, dhw_block, cooling_block, pool_block), circulation, extra_dhw (effect
 # open, may be one-shot) and the power limit are deliberately left out: an optimizer such as the Heat Pump
 # Optimizer owns them live, and re-applying a block after a long downtime would invert the fail-safe of the
-# SHI watchdog (all values released). Edit this set to change what is restored.
+# SHI watchdog (all values released). The overall group (cfg_overall_*, 10065-10067) is left out too: its
+# semantics are unproven (on the reference installation 10065 fell back to `off` about 2 s after a write, and
+# python-luxtronik gives the overall mode no setpoint). Edit this set to change what is restored.
 RESTORE_KEYS: frozenset[str] = frozenset(
     {
         "cfg_heating_mode",
@@ -77,18 +81,23 @@ RESTORE_KEYS: frozenset[str] = frozenset(
         "cfg_mk3_cool_mode",
         "cfg_mk3_cool_setpoint",
         "cfg_mk3_cool_offset",
-        "cfg_overall_mode",
-        "cfg_overall_offset",
-        "cfg_overall_level",
         "cfg_room_setpoint",
     }
 )
+# The SHI answers 0x7FFF for a register that is not available (docs/firmware-3.92.3-shi-analysis.md,
+# dispatcher 0x000d9298). Never a reset value and never learned.
+SHI_NOT_AVAILABLE = 0x7FFF
+# A re-established Modbus connection counts as an outage signal. ASSUMPTION, not measured on the reference
+# installation yet: the SHI keeps the TCP connection open between polls, so a reconnect means the controller
+# dropped it. If reconnects happen on at least RECONNECT_GUARD_COUNT of the last RECONNECT_GUARD_POLLS polls,
+# the assumption does not hold for this setup and the signal is switched off for the session.
+RECONNECT_GUARD_POLLS = 5
+RECONNECT_GUARD_COUNT = 3
 # Keys whose reset value is not 0: on watchdog expiry and at boot the controller reverts setpoints to their
-# persisted parameter or fixed default, while modes, levels and blocks read 0
-# (docs/firmware-3.92.3-shi-analysis.md, "SHI watchdog"). A different non-zero value of these keys in a window
-# with reset evidence is part of the reset and is restored with it. A setpoint reading 0 is never a reset
-# (0 is outside every setpoint range), so it is an external change and does not count as evidence. Offsets
-# are not listed: their reset value is not proven.
+# persisted parameter or fixed default, while modes and levels read 0 (docs/firmware-3.92.3-shi-analysis.md,
+# "SHI watchdog"). After an outage such a key counts as reverted if it reads any non-zero value, or exactly
+# its learned value once one was observed in a confirmed reset. Offsets are *assumed* to revert to 0 (not
+# proven): if not, a reset with a non-zero offset remembered is not recognised and nothing is overwritten.
 RESET_TO_DEFAULT_SUFFIXES = ("_setpoint",)
 # Remembered values older than this (time since the last successful poll) are dropped at setup: an optimizer
 # such as the Heat Pump Optimizer rewrites modes and setpoints live, so a day-old value is no longer meant.

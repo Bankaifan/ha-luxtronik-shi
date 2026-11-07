@@ -249,7 +249,8 @@ class LuxtronikOptionsFlow(OptionsFlowWithReload):
             )
         options = self.config_entry.options
         restore = options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET)
-        current = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        # Older entries may hold up to 600 s; the form shows at most the current maximum.
+        current = min(options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL), MAX_SCAN_INTERVAL)
         # Entries created before 0.3.0 have no equipment option and still show everything.
         selected = options.get(CONF_FEATURES, list(FEATURES))
         return self.async_show_form(
