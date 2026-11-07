@@ -165,12 +165,13 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
 
     assert hass.states.get(_entity_id(hass, entry, "sensor", "dhw")).state == "48.2"
     assert hass.states.get(_entity_id(hass, entry, "sensor", "return")).state == "28.5"
-    # the missing raw values are just unknown, the block was read register by register
+    # the missing values are just unknown, the block was read register by register; the disabled raw value is
+    # not polled at all
     data = entry.runtime_data.data
-    assert data["raw_10113"] is None
+    assert "raw_10113" not in data
     assert data["dhw_limit"] is None
     assert data["heating_limit"] is None
-    assert data["max_flow_temp"] == 0.7
+    assert "max_flow_temp" not in data  # disabled by default, not polled
     assert any(block.split for block in entry.runtime_data._blocks)
 
 
@@ -584,10 +585,18 @@ async def test_named_raw_values_decode(hass: HomeAssistant, shi: FakeSHI) -> Non
     """Raw 10113 is the calculated heating flow target in 0.1 degC; outputs and inputs are plain 0/1 values."""
     shi.input[10113] = 253
     shi.input[10354] = 1
+    registry = er.async_get(hass)
     entry = await _setup(hass, shi)
+    data = entry.runtime_data.data
+    assert "raw_10113" not in data  # disabled by default: not polled
+    reg = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10354"))
+    assert reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    # Enabling an entity reads its register at once (the entry is reloaded by Home Assistant a bit later).
+    for address in (10113, 10354):
+        registry.async_update_entity(
+            _entity_id(hass, entry, "sensor", f"raw_{address}"), disabled_by=None
+        )
+    await hass.async_block_till_done()
     data = entry.runtime_data.data
     assert data["raw_10113"] == 25.3
     assert data["raw_10354"] == 1
-    registry = er.async_get(hass)
-    reg = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10354"))
-    assert reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION

@@ -164,10 +164,21 @@ async def test_added_raw_registers_are_read_and_disabled(hass: HomeAssistant, sh
     entry = _entry(hass, shi)
     await _setup(hass, entry)
 
+    registry = er.async_get(hass)
+    assert "raw_10352" not in entry.runtime_data.data  # disabled by default: not polled
+    for address in (10352, 10502):
+        registry.async_update_entity(
+            registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"), disabled_by=None
+        )
+    await hass.async_block_till_done()
     data = entry.runtime_data.data
     assert data["raw_10352"] == 52
     assert data["raw_10502"] == 2
-    registry = er.async_get(hass)
+    for address in (10352, 10502):
+        registry.async_update_entity(
+            registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"),
+            disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+        )
     for address in (*RAW_INPUT_ADDRESSES_ADDED, *RAW_HOLDING_ADDRESSES_ADDED):
         entity = registry.async_get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"))
         assert entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION

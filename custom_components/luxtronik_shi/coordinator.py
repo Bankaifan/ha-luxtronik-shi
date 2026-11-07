@@ -13,7 +13,7 @@ from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -58,6 +58,7 @@ from .const import (
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
+from .poll_plan import select_polled
 from .registers import (
     ALL_REGISTERS,
     AREAS,
@@ -155,7 +156,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._values: dict[str, Any] = {}
         self._tick = 0
         self.registers = registers
-        self._blocks = plan_blocks(registers)
+        # Registers with an enabled entity, plus everything the integration reads itself (poll_plan.py). The
+        # others are read once their entity gets enabled (async_track_entity_enablement).
+        self._polled = select_polled(hass, entry.entry_id, registers)
+        self._blocks = plan_blocks(self._polled)
         self._missing: set[str] = set()
         # Entities only link to devices by identifier; the devices themselves are created in
         # async_setup_devices() through the device registry.
@@ -256,6 +260,55 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 **link,
             )
         self._update_firmware()
+
+    # ------------------------------------------------------------------ polled registers
+    @property
+    def polled_registers(self) -> tuple[Register, ...]:
+        """Registers read by the regular poll (enabled entities and internal keys)."""
+        return self._polled
+
+    @callback
+    def async_track_entity_enablement(self) -> CALLBACK_TYPE:
+        """Follow entities that are enabled or disabled while the entry is loaded.
+
+        A newly enabled entity is read once at once, so it does not wait for its first poll slot (rarely read
+        registers can be 30 cycles apart); the plan for the following polls includes it. A disabled one leaves
+        the plan. Home Assistant reloads the entry soon after such a change anyway; this closes the gap.
+        """
+
+        @callback
+        def _changed(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
+            if event.data["action"] != "update" or "disabled_by" not in event.data["changes"]:
+                return
+            self._replan()
+
+        return self.hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _changed)
+
+    @callback
+    def _replan(self) -> None:
+        polled = select_polled(self.hass, self.config_entry.entry_id, self.registers)
+        old = {reg.key for reg in self._polled}
+        new = {reg.key for reg in polled}
+        if old == new:
+            return
+        added = tuple(reg for reg in polled if reg.key not in old)
+        for key in old - new:
+            self._values.pop(key, None)
+        self._polled = polled
+        self._blocks = plan_blocks(polled)
+        if added:
+            self.config_entry.async_create_task(self.hass, self._read_added(added))
+
+    async def _read_added(self, added: tuple[Register, ...]) -> None:
+        """Read registers that joined the plan once, and hand the values to the entities."""
+        try:
+            for block in plan_blocks(added):
+                await self._read_block(block)
+        except ModbusCommError as err:
+            _LOGGER.debug("%s: newly enabled registers not read: %s", self.config_entry.title, err)
+            return  # the next regular poll reads them
+        self.data = dict(self._values)
+        self.async_update_listeners()
 
     # ------------------------------------------------------------------ reading
     async def _async_update_data(self) -> dict[str, Any]:

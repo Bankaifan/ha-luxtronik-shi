@@ -108,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
 
     entry.runtime_data = coordinator
     coordinator.async_setup_devices()
+    entry.async_on_unload(coordinator.async_track_entity_enablement())
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
