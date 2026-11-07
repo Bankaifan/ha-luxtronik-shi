@@ -196,7 +196,9 @@ async def test_unused_sub_devices_can_be_removed(hass: HomeAssistant, shi: FakeS
 
     def device(area: str | None):
         suffix = f"_{area}" if area else ""
-        return devices.async_get_device(identifiers={(DOMAIN, f"{entry.entry_id}{suffix}")})
+        wanted = (DOMAIN, f"{entry.entry_id}{suffix}")
+        found = [d for d in dr.async_entries_for_config_entry(devices, entry.entry_id) if wanted in d.identifiers]
+        return found[0] if found else None
 
     assert device("pool") and device("cooling")
     hass.config_entries.async_update_entry(entry, options={"scan_interval": 30, "features": ["mk1"]})

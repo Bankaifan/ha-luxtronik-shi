@@ -34,7 +34,7 @@ STATIC = {
                     "description": "Connect to the Smart Home Interface of your alpha innotec / Luxtronik heat pump. Modbus/TCP must be enabled in the controller.",
                     "data": {"name": "Name", "host": "Host", "port": "Port", "slave": "Unit ID (slave)"},
                     "data_description": {
-                        "name": "Shown in Home Assistant and part of the entity IDs, for example `sensor.<name>_flow`.",
+                        "name": "Shown in Home Assistant and part of the entity IDs.",
                         "host": "IP address or host name of the heat pump.",
                         "port": "Modbus/TCP port of the Smart Home Interface. The default is 502.",
                         "slave": "Modbus unit ID of the Smart Home Interface. The default is 1.",
@@ -90,7 +90,7 @@ STATIC = {
                     "description": "Verbindung zur Smart-Home-Schnittstelle deiner alpha innotec / Luxtronik Wärmepumpe. Modbus/TCP muss in der Regelung aktiviert sein.",
                     "data": {"name": "Name", "host": "Host", "port": "Port", "slave": "Geräte-ID (Slave)"},
                     "data_description": {
-                        "name": "Wird in Home Assistant angezeigt und steckt in den Entitäts-IDs, zum Beispiel `sensor.<name>_flow`.",
+                        "name": "Wird in Home Assistant angezeigt und steckt in den Entitäts-IDs.",
                         "host": "IP-Adresse oder Hostname der Wärmepumpe.",
                         "port": "Modbus/TCP-Port der Smart-Home-Schnittstelle. Standard ist 502.",
                         "slave": "Modbus-Geräte-ID der Smart-Home-Schnittstelle. Standard ist 1.",
