@@ -177,8 +177,13 @@ Heizungs-Stufe auf Rohwert 0 statt 2.
 Unter *Optionen* sorgt **Werte nach einem Geräte-Reset wiederherstellen** (standardmäßig aus) dafür, dass die
 Integration solche Werte zurückschreibt:
 
-* **Nur eigene Werte.** Gemerkt wird ein Wert erst, wenn er über eine Entität dieser Integration (Number, Select,
-  Switch, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Ein fehlgeschlagenes Schreiben oder
+* **Nur eigene Werte, und nur Einstellungen.** Gemerkt wird ein Wert erst, wenn er über eine Entität dieser
+  Integration (Number, Select, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Gemerkt werden
+  nur **Betriebsart, Stufe, Offset und Sollwert** jedes Kreises (Heizung, Warmwasser, Mischkreise 1–3 Heizen und
+  Kühlen, gesamt) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Sperren (Heizung, Warmwasser, Kühlung, Pool),
+  Zirkulation, Warmwasser-Extra und die Leistungsbegrenzung werden **nie** wiederhergestellt: Die gehören live einem
+  Optimierer wie dem Heat Pump Optimizer, und eine Sperre nach langem Stillstand wieder zu setzen, würde die
+  Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Ein fehlgeschlagenes Schreiben oder
   ein abweichender Rücklesewert löscht den Schlüssel. Die Werte liegen je Eintrag im Speicher von Home Assistant
   (`.storage/luxtronik_shi.restore.<entry_id>`), die Wiederherstellung klappt also auch nach einem Neustart von Home
   Assistant. Wer einen Wert auf seinen neutralen Wert zurücksetzt (z. B. Betriebsart `aus`, Offset 0), dem wird das
@@ -190,10 +195,13 @@ Integration solche Werte zurückschreibt:
     liest, wobei mindestens zwei Werte gemerkt sind. Eine Lücke von mehr als 10 Minuten seit der letzten
     erfolgreichen Abfrage, etwa ein langer Stillstand von Home Assistant, zählt als solcher Ausfall, weil der Watchdog
     dann abgelaufen ist. Die Zeit der letzten erfolgreichen Abfrage wird mit den Werten gespeichert, höchstens einmal
-    pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein.
-* **Nie über fremde Änderungen hinweg.** Liest ein gemerkter Wert einen *anderen Wert ungleich 0*, hat ihn ein anderer
-  Modbus-Client oder ein Mensch geändert: Er wird vergessen (Log-Level info) und nie wiederhergestellt. Nullen ohne
-  die Belege oben werden genauso behandelt.
+    pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein. Eine Lücke von mehr als
+    7 Tagen wird ignoriert.
+* **Fremde Änderungen werden respektiert, soweit sie erkennbar sind.** Liest ein gemerkter Wert einen *anderen Wert
+  ungleich 0*, hat ihn ein anderer Modbus-Client oder ein Mensch geändert: Er wird vergessen (Log-Level info) und nicht
+  wiederhergestellt. Nullen ohne die Belege oben werden genauso behandelt. Betriebsart, Sollwert, Offset und Stufe
+  eines Kreises bilden eine Gruppe: Wurde einer davon fremd geändert, wird auch die Betriebsart dieses Kreises nicht
+  wiederhergestellt – so entsteht keine Kombination, die niemand eingestellt hat.
 * **Keine Schreibschleifen.** Jeder Schlüssel wird pro erkanntem Reset einmal wiederhergestellt, mit Rücklesen.
   Schlägt das Schreiben fehl oder liest es einen anderen Wert zurück, wird der Schlüssel vergessen und nicht erneut
   versucht. Ein Reset, der innerhalb von 15 Minuten nach einer Wiederherstellung erneut erkannt wird, wird nicht
@@ -204,6 +212,11 @@ meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunt
 
 **Grenzen:**
 
+* **Eine fremde Änderung auf 0 kann überschrieben werden.** Der Reset-Wert der Regelung ist 0. Setzt ein anderer
+  Modbus-Client (oder jemand an der Regelung) einen Wert während oder kurz nach einem Verbindungsausfall auf 0, oder
+  zwei gemerkte Werte gleichzeitig, sieht das genau wie ein Reset aus und wird über diese Änderung hinweg
+  wiederhergestellt. **Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt.**
+
 * Ist nur **ein** Wert gemerkt und liest er 0, lässt sich ein Reset nicht davon unterscheiden, dass jemand ihn auf
   seinen Reset-Wert gesetzt hat. Er wird nicht wiederhergestellt (und vergessen).
 * Ohne vorherigen Verbindungsausfall gilt ein **einzelner** Wert, der 0 liest, als fremde Änderung – auch wenn die
@@ -213,8 +226,9 @@ meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunt
   ist nur für Heizungs-Betriebsart und Heizungs-Stufe gemessen.
 * Die Erkennung folgt dem normalen Abfrageintervall; die Wiederherstellung kommt also ein bis zwei Abfragen nach der
   Rückkehr der Regelung.
-* Eine Wiederherstellung schreibt ohne Zutun auf die Wärmepumpe. Schalte die Option nicht ein, wenn ein anderes System
-  (etwa ein Planer mit eigener Modbus-Verbindung) für diese Register zuständig sein soll.
+* Eine Wiederherstellung schreibt ohne Zutun auf die Wärmepumpe. Schreibzugriffe aus Home Assistant und eine
+  Wiederherstellung laufen nie gleichzeitig; ein Schreibzugriff während einer Wiederherstellung wartet und wird danach
+  ausgeführt.
 
 ## Diagnose
 

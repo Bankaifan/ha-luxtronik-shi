@@ -168,8 +168,12 @@ instead of 2.
 
 Under *Options*, **Restore values after a device reset** (off by default) makes the integration write such values back:
 
-* **Only its own values.** It remembers a value only after it was written through one of its own entities (number,
-  select, switch, climate, water heater) and read back unchanged. A failed write or a different read-back forgets the
+* **Only its own values, and only settings.** It remembers a value only after it was written through one of its own
+  entities (number, select, climate, water heater) and read back unchanged. Only the **mode, level, offset and setpoint**
+  of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint are
+  remembered (`RESTORE_KEYS` in `const.py`). Blocks (heating, hot water, cooling, pool), circulation, extra hot water
+  and the power limit are **never** restored: an optimizer such as the Heat Pump Optimizer owns them live, and
+  re-applying a block after a long downtime would undo the watchdog's fail-safe (everything released). A failed write or a different read-back forgets the
   key. The values are stored per entry in Home Assistant's storage (`.storage/luxtronik_shi.restore.<entry_id>`), so a
   restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `off`,
   offset 0) is remembered like any other write, so there is nothing left to restore for it.
@@ -180,10 +184,12 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
     two values are remembered. A gap of more than 10 minutes since the last successful poll, for example a long Home
     Assistant downtime, counts as such an outage, because the watchdog has then expired. The time of the last
     successful poll is stored with the values, at most once a minute and on unload; to make up for that, the gap must
-    exceed 11 minutes.
-* **Never over someone else's change.** A remembered value that reads a *different non-zero* value was changed by
-  another Modbus client or a person: it is forgotten (logged at info level) and never restored. Zeros without the
-  evidence above are treated the same way.
+    exceed 11 minutes. A gap of more than 7 days is ignored.
+* **Changes by others are respected where they can be recognised.** A remembered value that reads a *different
+  non-zero* value was changed by another Modbus client or a person: it is forgotten (logged at info level) and not
+  restored. Zeros without the evidence above are treated the same way. Mode, setpoint, offset and level of one circuit
+  form a group: if any of them was changed by someone else, that circuit's mode is not restored either, so no
+  combination is created that nobody set.
 * **No write loops.** Each key is restored once per detected reset, with read-back. A restore whose write fails or reads
   back a different value forgets that key and is not retried. A reset detected again within 15 minutes of a restore is
   not restored. Restored keys are logged at warning level.
@@ -193,6 +199,11 @@ poll, because the values match again. *Download diagnostics* lists the remembere
 
 **Limits:**
 
+* **A change to 0 by someone else can be overwritten.** The controller's reset value is 0, so a value another Modbus
+  client (or a person on the controller) sets to 0 during or right after a connection outage, or two remembered values
+  set to 0 at the same time, look exactly like a reset and are restored over that change. **Leave the option off if
+  another system also writes these registers.**
+
 * If only **one** value is remembered and it reads 0, a reset cannot be told apart from someone setting it to its reset
   value. It is not restored (and forgotten).
 * Without a connection outage before it, a **single** value reading 0 counts as an external change, even if the
@@ -201,8 +212,8 @@ poll, because the values match again. *Download diagnostics* lists the remembere
   external change and the value is forgotten, not restored. Which registers reset to 0 is measured only for heating
   mode and heating level.
 * The detection uses the normal poll interval, so the restore comes one or two polls after the controller is back.
-* A restore writes to the heat pump without a user action. Do not turn the option on if another system (for example a
-  planner on its own Modbus connection) is meant to own these registers.
+* A restore writes to the heat pump without a user action. Writes through Home Assistant and a restore never run at
+  the same time; a write that arrives during a restore waits for it and then applies.
 
 ## Diagnostics
 

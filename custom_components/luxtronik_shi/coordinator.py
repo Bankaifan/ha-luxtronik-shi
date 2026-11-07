@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from dataclasses import dataclass, field
@@ -31,6 +32,8 @@ from .const import (
     MODEL,
     OUTAGE_WATCH_KEYS,
     RESTORE_COOLDOWN,
+    RESTORE_KEYS,
+    RESTORE_MAX_GAP,
     SHI_WATCHDOG_TIMEOUT,
     STORE_VERSION,
     UNREACHABLE_AFTER,
@@ -85,6 +88,14 @@ def plan_blocks(registers: tuple[Register, ...] | list[Register]) -> list[Block]
 def restore_store_key(entry_id: str) -> str:
     """Storage key of the values remembered for a restore after a device reset."""
     return f"{DOMAIN}.restore.{entry_id}"
+
+
+def restore_group(key: str) -> str:
+    """Circuit a restorable key belongs to: ``cfg_mk1_cool_mode`` -> ``cfg_mk1_cool``."""
+    for suffix in ("_mode", "_setpoint", "_offset", "_level"):
+        if key.endswith(suffix):
+            return key.removesuffix(suffix)
+    return key
 
 
 class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -147,6 +158,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_poll: datetime | None = None
         self._last_poll_saved: datetime | None = None
         self._gap_checked = False
+        self._window_groups_forgotten: set[str] = set()  # circuits with an external change in the window
+        self._write_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:
@@ -395,22 +408,32 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_write(self, reg: Register, raw: int) -> None:
         """Write a holding register and read the value back.
 
-        With the restore option on, the value is remembered once the read-back matches what was written
-        (also a neutral value such as mode ``off``, which then leaves nothing to restore). A failed write or a
-        different read-back forgets the key: the intended value is unknown, so it is never restored.
+        With the restore option on, a key of RESTORE_KEYS is remembered once the read-back matches what was
+        written (also a neutral value such as mode ``off``, which then leaves nothing to restore). A failed
+        write or a different read-back forgets the key: the intended value is unknown, so it is not restored.
+        Writes and restores are serialised by one lock, so a restore never interleaves with a user write.
         """
         if reg.kind != "holding":
             raise HomeAssistantError(f"Register {reg.key} ist nicht beschreibbar")
-        try:
-            await self.client.write_register(reg.address, raw)
-            await self._read_single(reg)
-        except (ModbusCommError, ModbusIllegalAddress) as err:
-            await self._remember(reg.key, None)
-            raise HomeAssistantError(f"Schreiben von {reg.key} fehlgeschlagen: {err}") from err
-        await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
+        async with self._write_lock:
+            try:
+                await self.client.write_register(reg.address, raw)
+                await self._read_single(reg)
+            except (ModbusCommError, ModbusIllegalAddress) as err:
+                await self._remember(reg.key, None)
+                raise HomeAssistantError(f"Schreiben von {reg.key} fehlgeschlagen: {err}") from err
+            await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
         self.async_set_updated_data(dict(self._values))
 
     # ------------------------------------------------------------------ restore after a device reset
+    def _restorable(self) -> set[str]:
+        """RESTORE_KEYS that exist for the configured equipment."""
+        return {
+            r.key
+            for r in self.registers
+            if r.kind == "holding" and r.platform in WRITABLE_PLATFORMS and r.key in RESTORE_KEYS
+        }
+
     async def async_load_remembered(self) -> None:
         """Load the remembered values (option on) or delete them (option off), before the first poll."""
         if not self.restore_enabled:
@@ -422,14 +445,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (KeyError, TypeError, ValueError):
             self._last_poll_saved = None
         values = data.get("values") or {}
-        writable = {
-            r.key for r in self.registers if r.kind == "holding" and r.platform in WRITABLE_PLATFORMS
-        }
+        restorable = self._restorable()
         # Keys of equipment that was switched off are dropped: their values may be stale when it comes back.
         self._remembered = {
             k: v
             for k, v in values.items()
-            if k in writable and isinstance(v, int) and not isinstance(v, bool)
+            if k in restorable and isinstance(v, int) and not isinstance(v, bool)
         }
         if self._remembered != values:
             await self._save(self._last_poll_saved)
@@ -458,6 +479,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         gap = (dt_util.utcnow() - self._last_poll_saved).total_seconds()
         if gap <= SHI_WATCHDOG_TIMEOUT + LAST_POLL_SAVE_INTERVAL:
             return False
+        if gap > RESTORE_MAX_GAP:
+            _LOGGER.info(
+                "%s: last successful poll %d s ago, more than %d days; not treated as evidence of a reset",
+                self.config_entry.title, gap, RESTORE_MAX_GAP // 86400,
+            )
+            return False
         _LOGGER.info(
             "%s: no successful poll for %d s (SHI watchdog %d s); treated like a communication outage",
             self.config_entry.title, gap, SHI_WATCHDOG_TIMEOUT,
@@ -465,21 +492,24 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return True
 
     async def _save_last_poll(self) -> None:
-        """Remember the time of this successful poll, written at most every LAST_POLL_SAVE_INTERVAL."""
+        """Remember the time of this successful poll; written at most every LAST_POLL_SAVE_INTERVAL, and only
+        while something is remembered (otherwise the gap does not matter)."""
         if not self.restore_enabled:
             return
         self._last_poll = dt_util.utcnow()
+        if not self._remembered:
+            return
         saved = self._last_poll_saved
         if saved is None or (self._last_poll - saved).total_seconds() >= LAST_POLL_SAVE_INTERVAL:
             await self._save()
 
     async def async_save_last_poll(self) -> None:
         """Write the exact time of the last successful poll (on unload, so a restart measures the gap)."""
-        if self.restore_enabled and self._last_poll is not None:
+        if self.restore_enabled and self._remembered and self._last_poll is not None:
             await self._save()
 
     async def _remember(self, key: str, raw: int | None) -> None:
-        if not self.restore_enabled or self._remembered.get(key) == raw:
+        if not self.restore_enabled or key not in RESTORE_KEYS or self._remembered.get(key) == raw:
             return
         if raw is None:
             self._remembered.pop(key)
@@ -490,33 +520,40 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _reg(self, key: str) -> Register:
         return next(r for r in self.registers if r.key == key)
 
+    def _forget_external(self, key: str, remembered: int, current: int) -> None:
+        del self._remembered[key]
+        self._window_groups_forgotten.add(restore_group(key))
+        _LOGGER.info(
+            "%s: %s was changed outside this integration (%s -> %s) and will not be restored",
+            self.config_entry.title, key, remembered, current,
+        )
+
     async def _check_device_reset(self, *, recovered: bool) -> None:
         """Re-apply remembered values when the evidence shows that the device reset them (option on).
 
         * A remembered register that reads a different non-zero value was changed by someone else: forgotten.
         * Registers whose non-zero remembered value reads 0 are collected until every remembered register was
           read once (settings are only read every few polls). A reset is assumed when at least two of them
-          read 0, or when a communication outage came first and at least two keys are remembered. Otherwise
-          the zeros count as external changes and are forgotten.
+          read 0, or when a communication outage (or a gap beyond the SHI watchdog) came first and at least
+          two keys are remembered. Otherwise the zeros count as external changes and are forgotten.
         No extra Modbus reads: the values come from the normal poll.
         """
         if not self.restore_enabled or not self._remembered:
             self._window_left = 0
             return
         changed = False
+        opening = self._window_left == 0
+        if opening:
+            self._window_groups_forgotten = set()
         for key, remembered in list(self._remembered.items()):
             current = self._raw.get(key)
             if key in self._fresh and current not in (None, 0, remembered):
-                del self._remembered[key]
+                self._forget_external(key, remembered, current)
                 changed = True
-                _LOGGER.info(
-                    "%s: %s was changed outside this integration (%s -> %s) and will not be restored",
-                    self.config_entry.title, key, remembered, current,
-                )
         zeros = any(
             self._raw.get(k) == 0 and v != 0 for k, v in self._remembered.items() if k in self._fresh
         )
-        if self._window_left == 0 and (recovered or zeros):
+        if opening and (recovered or zeros) and self._remembered:
             self._window_left = max((self._reg(k).every for k in self._remembered), default=1)
             self._window_seen = set()
             self._window_outage = recovered
@@ -560,39 +597,54 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 title, ", ".join(sorted(pending)),
             )
             return True
+        # Group rule: a mode is not restored when another member of its circuit (setpoint, offset, level)
+        # was changed by someone else in this window; the result would be a combination nobody wrote.
+        held = sorted(
+            k for k in pending if k.endswith("_mode") and restore_group(k) in self._window_groups_forgotten
+        )
+        if held:
+            for key in held:
+                del pending[key]
+                del self._remembered[key]
+            _LOGGER.info(
+                "%s: %s not restored, another value of the same circuit was changed outside this "
+                "integration",
+                title, ", ".join(held),
+            )
         self._last_restore = now
         restored: list[str] = []
         failed: list[str] = []
         lost = False  # connection lost: the remaining keys are not tried either
-        for key, raw in pending.items():
-            if lost:
-                failed.append(key)
-                continue
-            reg = self._reg(key)
-            try:
-                await self.client.write_register(reg.address, raw)
-                await self._read_single(reg)
-            except ModbusCommError:
-                lost = True
-                failed.append(key)
-                continue
-            except ModbusIllegalAddress:
-                failed.append(key)
-                continue
-            (restored if self._raw.get(key) == raw else failed).append(key)
+        async with self._write_lock:
+            for key, raw in pending.items():
+                if self._remembered.get(key) != raw:
+                    continue  # written (or forgotten) through Home Assistant since the snapshot
+                if lost:
+                    failed.append(key)
+                    continue
+                reg = self._reg(key)
+                try:
+                    await self.client.write_register(reg.address, raw)
+                    await self._read_single(reg)
+                except ModbusCommError:
+                    lost = True
+                    failed.append(key)
+                    continue
+                except ModbusIllegalAddress:
+                    failed.append(key)
+                    continue
+                (restored if self._raw.get(key) == raw else failed).append(key)
+            for key in failed:
+                self._remembered.pop(key, None)
         if restored:
             _LOGGER.warning(
                 "%s: device reset detected, restored %s", title,
                 ", ".join(f"{k}={pending[k]}" for k in sorted(restored)),
             )
-        if not failed:
-            return False
-        for key in failed:
-            del self._remembered[key]
-        _LOGGER.warning(
-            "%s: device reset detected, could not restore %s (write failed or read back a different value); "
-            "they are forgotten and not retried",
-            title, ", ".join(sorted(failed)),
-        )
-        return True
-
+        if failed:
+            _LOGGER.warning(
+                "%s: device reset detected, could not restore %s (write failed or read back a different "
+                "value); they are forgotten and not retried",
+                title, ", ".join(sorted(failed)),
+            )
+        return bool(failed or held)

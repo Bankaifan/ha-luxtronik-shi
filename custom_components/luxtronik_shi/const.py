@@ -41,6 +41,50 @@ SHI_WATCHDOG_TIMEOUT = 600  # seconds
 # The time of the last successful poll is persisted at most this often (no disk write on every poll). The gap
 # is compared against SHI_WATCHDOG_TIMEOUT plus this interval, so the throttling never fakes an outage.
 LAST_POLL_SAVE_INTERVAL = 60  # seconds
+# Only these keys are remembered and restored: the mode, level, offset and setpoint of each circuit, and the
+# room setpoint. Blocks (heating_block, dhw_block, cooling_block, pool_block), circulation, extra_dhw (effect
+# open, may be one-shot) and the power limit are deliberately left out: an optimizer such as the Heat Pump
+# Optimizer owns them live, and re-applying a block after a long downtime would invert the fail-safe of the
+# SHI watchdog (all values released). Edit this set to change what is restored.
+RESTORE_KEYS: frozenset[str] = frozenset(
+    {
+        "cfg_heating_mode",
+        "cfg_heating_setpoint",
+        "cfg_heating_offset",
+        "cfg_heating_level",
+        "cfg_dhw_mode",
+        "cfg_dhw_setpoint",
+        "cfg_dhw_offset",
+        "cfg_dhw_level",
+        "cfg_mk1_mode",
+        "cfg_mk1_setpoint",
+        "cfg_mk1_offset",
+        "cfg_mk1_level",
+        "cfg_mk1_cool_mode",
+        "cfg_mk1_cool_setpoint",
+        "cfg_mk1_cool_offset",
+        "cfg_mk2_mode",
+        "cfg_mk2_setpoint",
+        "cfg_mk2_offset",
+        "cfg_mk2_level",
+        "cfg_mk2_cool_mode",
+        "cfg_mk2_cool_setpoint",
+        "cfg_mk2_cool_offset",
+        "cfg_mk3_mode",
+        "cfg_mk3_setpoint",
+        "cfg_mk3_offset",
+        "cfg_mk3_level",
+        "cfg_mk3_cool_mode",
+        "cfg_mk3_cool_setpoint",
+        "cfg_mk3_cool_offset",
+        "cfg_overall_mode",
+        "cfg_overall_offset",
+        "cfg_overall_level",
+        "cfg_room_setpoint",
+    }
+)
+# A gap since the last successful poll longer than this is no evidence (stale store, restored backup).
+RESTORE_MAX_GAP = 7 * 86400  # seconds
 # A device reset detected again within this time after a restore is not restored again (no write loops).
 RESTORE_COOLDOWN = 900  # seconds
 

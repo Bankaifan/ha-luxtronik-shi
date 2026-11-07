@@ -66,7 +66,7 @@
         },
         "data_description": {
           "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
-          "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur, wenn mindestens zwei davon gleichzeitig auf 0 fallen oder einer nach einem Verbindungsausfall. Von anderen geänderte Werte werden nie überschrieben. Standardmäßig aus."
+          "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur, wenn mindestens zwei davon gleichzeitig auf 0 fallen oder einer nach einem Verbindungsausfall. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Setzt jemand anderes rund um einen Verbindungsausfall einen Wert auf 0, kann er überschrieben werden – lass die Option deshalb aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus."
         },
         "description": "Abgewählte Teile der Anlage werden nicht abgefragt und bekommen keine Entitäten. Ihre Entity-IDs bleiben reserviert und kommen beim Wiedereinschalten zurück."
       }

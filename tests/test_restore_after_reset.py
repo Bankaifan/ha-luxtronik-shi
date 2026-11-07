@@ -22,7 +22,7 @@ from .fake_shi import FakeSHI
 from .test_integration import _entity_id
 from .test_repairs import Clock, Outage
 
-MODE, OFFSET, LEVEL, BLOCK = 10000, 10002, 10003, 10050
+MODE, SETPOINT, OFFSET, LEVEL, DHW_MODE, BLOCK, EXTRA_DHW = 10000, 10001, 10002, 10003, 10005, 10050, 10071
 
 
 @pytest.fixture
@@ -78,20 +78,20 @@ async def test_reboot_restores_with_read_back(
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_level", 2)
-    await _write(entry, "heating_block", 1)
-    assert entry.runtime_data.remembered == {"cfg_heating_mode": 1, "cfg_heating_level": 2, "heating_block": 1}
+    await _write(entry, "cfg_dhw_mode", 1)
+    assert entry.runtime_data.remembered == {"cfg_heating_mode": 1, "cfg_heating_level": 2, "cfg_dhw_mode": 1}
     before = len(_writes(shi))
 
     with caplog.at_level(logging.WARNING):
-        await _reboot(entry, shi, {MODE: 0, LEVEL: 0, BLOCK: 0})
+        await _reboot(entry, shi, {MODE: 0, LEVEL: 0, DHW_MODE: 0})
 
-    assert (shi.holding[MODE], shi.holding[LEVEL], shi.holding[BLOCK]) == (1, 2, 1)
+    assert (shi.holding[MODE], shi.holding[LEVEL], shi.holding[DHW_MODE]) == (1, 2, 1)
     assert len(_writes(shi)) == before + 3  # one restore write per key
     reads = [r for r in shi.requests if r[0] == 3 and r[1] == MODE and r[2] == 1]
     assert reads, "restore must read the value back"
     data = entry.runtime_data.data
     assert data["cfg_heating_mode"] == 1 and data["cfg_heating_level"] == 2
-    assert "restored cfg_heating_level=2, cfg_heating_mode=1, heating_block=1" in caplog.text
+    assert "restored cfg_dhw_mode=1, cfg_heating_level=2, cfg_heating_mode=1" in caplog.text
     await _polls(entry, 4)
     assert len(_writes(shi)) == before + 3  # once per reset
 
@@ -130,13 +130,15 @@ async def test_single_external_change_is_adopted_and_forgotten(
 
 
 async def test_external_non_zero_change_during_reset_is_not_overwritten(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Level of the heating circuit changed by someone else: kept, and (group rule) its mode is not restored."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_level", 2)
-    await _write(entry, "heating_block", 1)
-    await _reboot(entry, shi, {MODE: 0, LEVEL: 3, BLOCK: 0})
-    assert (shi.holding[MODE], shi.holding[LEVEL], shi.holding[BLOCK]) == (1, 3, 1)
-    assert "cfg_heating_level" not in entry.runtime_data.remembered
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 450)
+    await _reboot(entry, shi, {MODE: 0, LEVEL: 3, DHW_MODE: 0})
+    assert (shi.holding[MODE], shi.holding[LEVEL], shi.holding[DHW_MODE]) == (0, 3, 1)
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 450}
 
 
 async def test_single_remembered_register_is_ambiguous(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -188,7 +190,9 @@ async def test_failed_restore_write_is_not_retried(hass: HomeAssistant, shi: Fak
     assert entry.runtime_data.remembered == {}
 
 
-async def test_wrong_read_back_is_not_retried(hass: HomeAssistant, shi: FakeSHI, monkeypatch) -> None:
+async def test_wrong_read_back_is_not_retried(
+    hass: HomeAssistant, shi: FakeSHI, monkeypatch, caplog: pytest.LogCaptureFixture
+) -> None:
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_level", 2)
@@ -198,10 +202,13 @@ async def test_wrong_read_back_is_not_retried(hass: HomeAssistant, shi: FakeSHI,
         attempts.append(address)
 
     monkeypatch.setattr(entry.runtime_data.client, "write_register", ignored)
-    await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
-    await _polls(entry, 4)
+    with caplog.at_level(logging.WARNING):
+        await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
+        await _polls(entry, 4)
     assert sorted(attempts) == [MODE, LEVEL]
     assert entry.runtime_data.remembered == {}
+    assert "could not restore cfg_heating_level, cfg_heating_mode" in caplog.text
+    assert "restored" not in caplog.text
 
 
 async def test_reset_again_within_cooldown_is_not_restored(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -334,3 +341,118 @@ async def test_last_poll_time_is_written_at_most_once_a_minute(
     clock.tick(timedelta(seconds=31))
     await _polls(entry, 1)
     assert hass_storage[key]["data"]["last_poll"] != first
+
+
+async def test_group_rule_mode_not_restored_over_foreign_setpoint(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Review probe p3: the setpoint comes back at a non-zero default the integration never wrote. Restoring
+    only the mode would run mode `setpoint` at 20.0 °C, a combination nobody chose."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_setpoint", 350)
+    await _write(entry, "cfg_dhw_mode", 1)
+    before = len(_writes(shi, MODE))
+    await _reboot(entry, shi, {MODE: 0, SETPOINT: 200, DHW_MODE: 0})
+    assert (shi.holding[MODE], shi.holding[SETPOINT], shi.holding[DHW_MODE]) == (0, 200, 1)
+    assert len(_writes(shi, MODE)) == before
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1}
+
+
+@pytest.mark.parametrize(("key", "address"), [("heating_block", BLOCK), ("extra_dhw", EXTRA_DHW)])
+async def test_blocks_and_extra_dhw_are_never_remembered_or_restored(
+    hass: HomeAssistant, shi: FakeSHI, key: str, address: int
+) -> None:
+    entry = await _setup(hass, shi)
+    await _write(entry, key, 1)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_level", 2)
+    assert key not in entry.runtime_data.remembered
+    before = len(_writes(shi, address))
+    await _reboot(entry, shi, {MODE: 0, LEVEL: 0, address: 0})
+    assert shi.holding[address] == 0  # the watchdog fail-safe (released) stays
+    assert len(_writes(shi, address)) == before
+    assert (shi.holding[MODE], shi.holding[LEVEL]) == (1, 2)
+
+
+async def test_allow_list_only_names_existing_writable_keys() -> None:
+    from custom_components.luxtronik_shi.const import RESTORE_KEYS
+
+    assert RESTORE_KEYS <= {k for k, r in BY_KEY.items() if r.kind == "holding" and r.platform != "sensor"}
+    assert not RESTORE_KEYS & {"heating_block", "dhw_block", "cooling_block", "pool_block", "circulation", "extra_dhw"}
+
+
+async def test_user_write_during_restore_waits_and_wins(hass: HomeAssistant, shi: FakeSHI, monkeypatch) -> None:
+    """Review probe p5: a user write that arrives while a restore runs is serialised after it."""
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_level", 2)
+    original = coordinator.client.write_register
+    tasks = []
+
+    async def wrapped(address, value):
+        await original(address, value)
+        if address == MODE and not tasks:  # the user sets the level while the restore is running
+            tasks.append(hass.async_create_task(coordinator.async_write(BY_KEY["cfg_heating_level"], 3)))
+
+    monkeypatch.setattr(coordinator.client, "write_register", wrapped)
+    await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
+    await tasks[0]
+    assert shi.holding[LEVEL] == 3
+    assert coordinator.remembered["cfg_heating_level"] == 3  # store and device agree
+
+
+async def test_restore_skips_key_written_since_snapshot(hass: HomeAssistant, shi: FakeSHI, monkeypatch) -> None:
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_level", 2)
+    original = coordinator.client.write_register
+    written: list[int] = []
+
+    async def wrapped(address, value):
+        written.append(address)
+        if address == MODE:  # meanwhile Home Assistant set the level to 3 (store updated, device not yet)
+            coordinator._remembered["cfg_heating_level"] = 3
+        await original(address, value)
+
+    monkeypatch.setattr(coordinator.client, "write_register", wrapped)
+    await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
+    assert MODE in written and LEVEL not in written
+
+
+async def test_user_write_with_different_read_back_is_not_remembered(
+    hass: HomeAssistant, shi: FakeSHI, monkeypatch
+) -> None:
+    """The controller clamps or ignores the value: what it holds was not written by us, so it is not remembered."""
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    original = coordinator.client.write_register
+
+    async def clamping(address, value):
+        await original(address, min(value, 1))
+
+    monkeypatch.setattr(coordinator.client, "write_register", clamping)
+    await _write(entry, "cfg_heating_level", 2)
+    assert shi.holding[LEVEL] == 1
+    assert "cfg_heating_level" not in coordinator.remembered
+
+
+@pytest.mark.parametrize(("downtime", "restored"), [(660, False), (661, True), (7 * 86400 + 1, False)])
+async def test_watchdog_gap_boundary(
+    hass: HomeAssistant, shi: FakeSHI, clock: Clock, downtime: int, restored: bool
+) -> None:
+    """The gap must exceed 600 s plus the 60 s save interval, and is ignored beyond 7 days."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 2)
+    await _write(entry, "cfg_heating_offset", 0)
+    await _restart(hass, entry, shi, clock, downtime)
+    assert (shi.holding[MODE] == 2) is restored
+
+
+async def test_last_poll_not_saved_while_nothing_is_remembered(
+    hass: HomeAssistant, shi: FakeSHI, clock: Clock, hass_storage
+) -> None:
+    entry = await _setup(hass, shi)
+    clock.tick(timedelta(seconds=120))
+    await _polls(entry, 2)
+    assert restore_store_key(entry.entry_id) not in hass_storage
