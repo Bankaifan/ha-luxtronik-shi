@@ -187,7 +187,12 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). So a reset is only considered after
   * failed polls,
   * a re-established connection (a reboot shorter than the poll interval can drop the connection without a failed
-    poll; the integration counts reconnects of its Modbus connection, no extra requests), or
+    poll; the integration counts reconnects of its Modbus connection, no extra requests). This rests on an
+    **assumption that is not measured yet**: the SHI keeps the TCP connection open between polls, so a reconnect
+    means the controller dropped it. If reconnects happen on 3 of the last 5 polls, the assumption does not hold for
+    the setup: a warning is logged once and reconnects no longer count in that session,
+  * more than 10 minutes since the previous successful poll while Home Assistant runs (possible with a long scan
+    interval: the watchdog can expire between two polls), or
   * a gap of more than 11 minutes since the last successful poll, for example a long Home Assistant downtime (10
     minutes watchdog plus 1 minute, because the time of the last poll is stored at most once a minute).
 
@@ -204,7 +209,11 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   modes and the 54 °C come back; a mode that was `off` stays `off`.
 * **Learned setpoint reset values.** After a confirmed reset the integration stores the value each setpoint reverted
   to. From then on a setpoint only counts as reverted if it reads exactly that value; another value means someone
-  changed it. These values are learned on your device, not taken from a firmware table.
+  changed it. These values are learned on your device, not taken from a firmware table. If a setpoint blocks a reset
+  only because it differs from its learned value, a warning names it. After a reboot with failed polls in which every
+  remembered mode and level reads 0, the reset is accepted anyway and the learned value is replaced (logged). `0x7FFF`
+  ("not available") is never a reset value and never learned. A remembered register that becomes unavailable is
+  forgotten.
 * **Groups.** Mode, setpoint, offset and level of one circuit form a group: once any of them was changed by someone
   else, that circuit's mode is forgotten as well and is only restored again after it was written through Home
   Assistant again, so no combination is created that nobody set.
@@ -215,9 +224,14 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   logged at warning level.
 
 The [outage notice](#repair-issues) keeps working as before; with the option on it usually disappears with the next
-poll, because the values match again. *Download diagnostics* lists the remembered values.
+poll, because the values match again. *Download diagnostics* lists the remembered and learned values, the number of
+reconnects and the time of the last one, and whether reconnects still count as an outage signal.
 
 **Limits:**
+
+* A wrong or stale learned value (for example learned while another client changed the setpoint during a reset) can
+  block restores until a reboot with failed polls in which every remembered mode and level reads 0. Turning the option
+  off and on again clears all learned values.
 
 * If another Modbus client changes values around an outage **so that every remembered value happens to read its reset
   value** (for example it switches off the only remembered mode), that looks exactly like a reset and is restored over

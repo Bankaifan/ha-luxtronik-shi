@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from datetime import UTC, datetime
 
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ModbusException
@@ -32,7 +33,10 @@ class LuxtronikModbusClient:
         self.slave = slave
         # Re-established connections after the first one. pymodbus reconnects in the background after a lost
         # connection, so a short controller reboot between two polls would otherwise go unseen.
+        # ASSUMPTION (not measured yet): the SHI keeps the connection open between polls; see
+        # RECONNECT_GUARD_* in const.py.
         self.reconnects = 0
+        self.last_reconnect: datetime | None = None
         self._connected_once = False
         kwargs = {}
         self._traced = "trace_connect" in inspect.signature(AsyncModbusTcpClient.__init__).parameters
@@ -50,6 +54,7 @@ class LuxtronikModbusClient:
             return
         if self._connected_once:
             self.reconnects += 1
+            self.last_reconnect = datetime.now(UTC)
         self._connected_once = True
 
     async def _call(self, method: str, *args: int, **kwargs: int):

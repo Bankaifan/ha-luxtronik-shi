@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -31,10 +32,13 @@ from .const import (
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
+    RECONNECT_GUARD_COUNT,
+    RECONNECT_GUARD_POLLS,
     RESET_TO_DEFAULT_SUFFIXES,
     RESTORE_COOLDOWN,
     RESTORE_KEYS,
     RESTORE_MAX_GAP,
+    SHI_NOT_AVAILABLE,
     SHI_WATCHDOG_TIMEOUT,
     STORE_VERSION,
     UNREACHABLE_AFTER,
@@ -155,6 +159,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._window_seen: set[str] = set()
         self._learned: dict[str, int] = {}  # setpoint key -> raw value it reverted to in a confirmed reset
         self._reconnects_seen = 0
+        self._reconnect_history: deque[bool] = deque(maxlen=RECONNECT_GUARD_POLLS)
+        self.reconnect_signal_active = True  # False once reconnects happen on most polls (see const.py)
+        self._remembered_dirty = False
+        self._window_failed = False  # the current window followed failed polls (not only a reconnect or gap)
         self._last_restore: datetime | None = None
         # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
         self._last_poll: datetime | None = None
@@ -215,13 +223,14 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._tick += 1
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
-        reconnected = self.client.reconnects != self._reconnects_seen
-        self._reconnects_seen = self.client.reconnects
-        if reconnected and not recovered:
-            _LOGGER.info(
-                "%s: connection to the SHI was re-established; treated as an outage", self.config_entry.title
-            )
-        await self._check_device_reset(outage=recovered or reconnected or self._watchdog_gap())
+        reconnected = self._reconnect_signal()
+        await self._check_device_reset(
+            outage=recovered or reconnected or self._watchdog_gap() or self._session_gap(),
+            failed=recovered,
+        )
+        if self._remembered_dirty:
+            self._remembered_dirty = False
+            await self._save()
         await self._save_last_poll()
         self._check_outage_changes(recovered=recovered)
         self._update_firmware()
@@ -271,6 +280,13 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._missing.add(reg.key)
         self._values[reg.key] = None
         self._raw.pop(reg.key, None)
+        if self._remembered.pop(reg.key, None) is not None:
+            # A remembered register that is not available can never be compared: it would block every restore.
+            _LOGGER.info(
+                "%s: %s is not available on the SHI; it is forgotten and will not be restored",
+                self.config_entry.title, reg.key,
+            )
+            self._remembered_dirty = True
 
     def _update_firmware(self) -> None:
         platform, major, minor = (self._values.get(k) for k in ("fw_platform", "fw_major", "fw_minor"))
@@ -479,6 +495,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._save(self._last_poll_saved)
 
     @property
+    def learned(self) -> dict[str, int]:
+        """Raw values setpoints reverted to in confirmed resets, learned on this device (read only)."""
+        return dict(self._learned)
+
+    @property
     def remembered(self) -> dict[str, int]:
         """Raw values that would be restored after a device reset (read only)."""
         return dict(self._remembered)
@@ -568,14 +589,51 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         default value, never 0: before one was observed any non-zero value counts, afterwards only the
         learned one (learned on this device).
         """
-        if current is None:
-            return False
+        if current is None or current == SHI_NOT_AVAILABLE:
+            return False  # 0x7FFF means "not available", never a reset value
         if key.endswith(RESET_TO_DEFAULT_SUFFIXES):
             learned = self._learned.get(key)
             return current != 0 if learned is None else current == learned
         return current == 0
 
-    async def _check_device_reset(self, *, outage: bool) -> None:
+    def _reconnect_signal(self) -> bool:
+        """Whether the Modbus connection was re-established since the last poll, as an outage signal.
+
+        Assumption (not measured yet): the SHI keeps the TCP connection open between polls, so a reconnect
+        means the controller dropped it. If reconnects happen on most polls, that does not hold for this
+        setup: the signal is switched off for the session and only failed polls and gaps count.
+        """
+        reconnected = self.client.reconnects != self._reconnects_seen
+        self._reconnects_seen = self.client.reconnects
+        self._reconnect_history.append(reconnected)
+        if self.reconnect_signal_active and sum(self._reconnect_history) >= RECONNECT_GUARD_COUNT:
+            self.reconnect_signal_active = False
+            _LOGGER.warning(
+                "%s: the Modbus connection was re-established on %d of the last %d polls; reconnects are no "
+                "longer treated as a device reset signal in this session (only failed polls and gaps)",
+                self.config_entry.title, sum(self._reconnect_history), len(self._reconnect_history),
+            )
+        if not reconnected or not self.reconnect_signal_active:
+            return False
+        _LOGGER.info(
+            "%s: connection to the SHI was re-established; treated as an outage", self.config_entry.title
+        )
+        return True
+
+    def _session_gap(self) -> bool:
+        """Within a session: more than the watchdog time since the previous successful poll."""
+        if not self.restore_enabled or self._last_poll is None:
+            return False
+        gap = (dt_util.utcnow() - self._last_poll).total_seconds()
+        if gap <= SHI_WATCHDOG_TIMEOUT:
+            return False
+        _LOGGER.info(
+            "%s: %d s since the previous successful poll (SHI watchdog %d s); treated like an outage",
+            self.config_entry.title, gap, SHI_WATCHDOG_TIMEOUT,
+        )
+        return True
+
+    async def _check_device_reset(self, *, outage: bool, failed: bool = False) -> None:
         """Re-apply remembered values when the evidence shows that the device reverted them (option on).
 
         * Without an observed outage (failed polls, a reconnect, or a gap beyond the SHI watchdog) the values
@@ -593,6 +651,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if outage:
             if self._window_left == 0:
                 self._window_seen = set()
+                self._window_failed = False
+            self._window_failed |= failed
             self._window_left = max((self._reg(k).every for k in self._remembered), default=1)
         if self._window_left == 0:
             for key, remembered in list(self._remembered.items()):
@@ -619,7 +679,28 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         unseen = self._remembered.keys() - seen.keys()
         # All or nothing: the controller reverts every SHI value at once, so each remembered register must
         # read its reset value (a remembered mode `off` or offset 0 trivially does).
-        reset = not unseen and all(self._reads_reset_value(k, self._raw.get(k)) for k in seen)
+        blockers = [k for k in seen if not self._reads_reset_value(k, self._raw.get(k))]
+        reset = not unseen and not blockers
+        relearn = False
+        # Setpoints that only differ from their learned value (a wrong or stale learned value, or another
+        # value after a firmware change). Relearned only under stricter evidence: failed polls and every
+        # remembered mode and level at 0.
+        stale = [
+            k for k in blockers
+            if k.endswith(RESET_TO_DEFAULT_SUFFIXES) and k in self._learned
+            and self._raw.get(k) not in (None, 0, SHI_NOT_AVAILABLE)
+        ]
+        if not unseen and blockers and stale == blockers:
+            modes = [k for k in seen if k.endswith(("_mode", "_level")) and self._remembered[k] != 0]
+            if self._window_failed and modes and all(self._raw.get(k) == 0 for k in modes):
+                reset = relearn = True
+            else:
+                _LOGGER.warning(
+                    "%s: after the outage %s read a value other than the learned reset value; not treated "
+                    "as a device reset",
+                    title,
+                    ", ".join(f"{k}={self._raw.get(k)} (learned {self._learned[k]})" for k in sorted(stale)),
+                )
         now = dt_util.utcnow()
         if reset and self._last_restore is not None:
             if (now - self._last_restore).total_seconds() < RESTORE_COOLDOWN:
@@ -645,9 +726,16 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         learned_changed = False
         for key in differ:
             if key.endswith(RESET_TO_DEFAULT_SUFFIXES) and self._learned.get(key) != self._raw[key]:
+                old = self._learned.get(key)
                 self._learned[key] = self._raw[key]
                 learned_changed = True
-                _LOGGER.info("%s: learned reset value of %s: %s", title, key, self._raw[key])
+                if relearn and old is not None:
+                    _LOGGER.info(
+                        "%s: relearned reset value of %s: %s (was %s; failed polls, all modes at 0)",
+                        title, key, self._raw[key], old,
+                    )
+                else:
+                    _LOGGER.info("%s: learned reset value of %s: %s", title, key, self._raw[key])
         restored: list[str] = []
         failed: list[str] = []
         lost = False  # connection lost: the remaining keys are not tried either

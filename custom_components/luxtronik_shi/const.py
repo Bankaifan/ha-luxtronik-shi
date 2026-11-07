@@ -83,6 +83,15 @@ RESTORE_KEYS: frozenset[str] = frozenset(
         "cfg_room_setpoint",
     }
 )
+# The SHI answers 0x7FFF for a register that is not available (docs/firmware-3.92.3-shi-analysis.md,
+# dispatcher 0x000d9298). Never a reset value and never learned.
+SHI_NOT_AVAILABLE = 0x7FFF
+# A re-established Modbus connection counts as an outage signal. ASSUMPTION, not measured on the reference
+# installation yet: the SHI keeps the TCP connection open between polls, so a reconnect means the controller
+# dropped it. If reconnects happen on at least RECONNECT_GUARD_COUNT of the last RECONNECT_GUARD_POLLS polls,
+# the assumption does not hold for this setup and the signal is switched off for the session.
+RECONNECT_GUARD_POLLS = 5
+RECONNECT_GUARD_COUNT = 3
 # Keys whose reset value is not 0: on watchdog expiry and at boot the controller reverts setpoints to their
 # persisted parameter or fixed default, while modes and levels read 0 (docs/firmware-3.92.3-shi-analysis.md,
 # "SHI watchdog"). After an outage such a key counts as reverted if it reads any non-zero value, or exactly

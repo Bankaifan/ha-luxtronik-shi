@@ -67,6 +67,16 @@ versioning follows [Semantic Versioning](https://semver.org/):
     restored. A single remembered mode reading 0 after an outage is enough.
   - **Learned setpoint reset values**: after a confirmed reset the value each setpoint reverted to is stored; later a
     setpoint only counts as reverted if it reads exactly that value. Learned on the device, not a firmware table.
+  - The reconnect signal rests on an **assumption not yet measured** on the reference installation: the SHI keeps the
+    TCP connection open between polls. If reconnects happen on 3 of the last 5 polls, reconnects stop counting as an
+    outage for the session (warning once). More than 600 s since the previous successful poll (long scan interval)
+    also counts as an outage.
+  - A setpoint that blocks a reset only because it differs from its learned value is named in a warning; after a
+    reboot with failed polls and every remembered mode and level at 0 the reset is accepted and the learned value
+    replaced. `0x7FFF` is never a reset value or learned. A remembered register that becomes unavailable is
+    forgotten. Learned values are kept regardless of age; turning the option off and on clears them.
+  - Diagnostics list the learned values, the reconnect count, the time of the last reconnect and whether reconnects
+    still count as an outage.
   - Group rule: once a member of a circuit changed externally, the circuit's mode is forgotten until it is written
     through Home Assistant again. A mode is not restored if another value of its circuit failed to restore.
   - Restores run with read-back, once per reset; failures are not retried; no second restore within 15 minutes;
@@ -99,7 +109,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   registers still open). The README cites it.
 
 ### Tests
-- `tests/test_restore_after_reset.py` (reset detection v2): zeros without an outage are external, a partial revert restores nothing, a single remembered mode is restored after an outage, a network blip with unchanged values does nothing, a blip with one external change is forgotten, a reconnect without a failed poll counts as an outage, setpoint reset values are learned, required and persisted; setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
+- `tests/test_restore_after_reset.py` (reset detection v2, review): relearning after a real reboot and not when a mode did not revert, the reconnect guard, an unavailable remembered key is dropped, an unseen key blocks the restore, 0x7FFF is never a reset value, a zero setpoint after an outage, the watchdog between two polls of a long interval, learned values exempt from the age limit, a deterministic lock test; zeros without an outage are external, a partial revert restores nothing, a single remembered mode is restored after an outage, a network blip with unchanged values does nothing, a blip with one external change is forgotten, a reconnect without a failed poll counts as an outage, setpoint reset values are learned, required and persisted; setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
   external changes; blocks and extra hot water are never remembered or restored, the allow-list only
   names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
   skipped, a write whose read-back differs is not remembered, the group rule across windows, modes restored last and skipped after a failed value of their circuit, a lone zero forgets its circuit's mode, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no

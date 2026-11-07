@@ -200,7 +200,12 @@ Integration solche Werte zurückschreibt:
   * fehlgeschlagenen Abfragen,
   * einer neu aufgebauten Verbindung (ein Neustart, der kürzer ist als das Abfrageintervall, kann die Verbindung
     trennen, ohne dass eine Abfrage fehlschlägt; die Integration zählt die Wiederverbindungen ihrer Modbus-Verbindung,
-    ohne zusätzliche Anfragen), oder
+    ohne zusätzliche Anfragen). Das beruht auf einer **noch nicht gemessenen Annahme**: Die SHI hält die
+    TCP-Verbindung zwischen den Abfragen offen, eine Wiederverbindung heißt also, dass die Regelung sie getrennt hat.
+    Gibt es bei 3 der letzten 5 Abfragen eine Wiederverbindung, gilt die Annahme für diese Anlage nicht: Es wird
+    einmal gewarnt, und Wiederverbindungen zählen in dieser Sitzung nicht mehr,
+  * mehr als 10 Minuten seit der vorigen erfolgreichen Abfrage, während Home Assistant läuft (möglich bei einem langen
+    Abfrageintervall: Der Watchdog kann zwischen zwei Abfragen ablaufen), oder
   * einer Lücke von mehr als 11 Minuten seit der letzten erfolgreichen Abfrage, etwa einem langen Stillstand von Home
     Assistant (10 Minuten Watchdog plus 1 Minute, weil die Zeit der letzten Abfrage höchstens einmal pro Minute
     gespeichert wird).
@@ -221,7 +226,11 @@ Integration solche Werte zurückschreibt:
 * **Gelernte Reset-Werte der Sollwerte.** Nach einem bestätigten Reset speichert die Integration, auf welchen Wert
   jeder Sollwert zurückgefallen ist. Danach gilt ein Sollwert nur noch als zurückgesetzt, wenn er genau diesen Wert
   liest; ein anderer Wert heißt, dass ihn jemand geändert hat. Diese Werte sind an deiner Anlage gelernt, nicht aus
-  einer Firmware-Tabelle übernommen.
+  einer Firmware-Tabelle übernommen. Verhindert ein Sollwert einen Reset nur, weil er vom gelernten Wert abweicht,
+  nennt ihn eine Warnung. Nach einem Neustart mit fehlgeschlagenen Abfragen, bei dem jede gemerkte Betriebsart und
+  Stufe 0 liest, wird der Reset trotzdem angenommen und der gelernte Wert ersetzt (mit Log-Eintrag). `0x7FFF`
+  („nicht verfügbar“) ist nie ein Reset-Wert und wird nie gelernt. Ein gemerktes Register, das nicht mehr verfügbar
+  ist, wird vergessen.
 * **Gruppen.** Betriebsart, Sollwert, Offset und Stufe eines Kreises bilden eine Gruppe: Sobald einer davon fremd
   geändert wurde, wird auch die Betriebsart dieses Kreises vergessen und erst wieder wiederhergestellt, nachdem sie
   erneut über Home Assistant geschrieben wurde – so entsteht keine Kombination, die niemand eingestellt hat.
@@ -233,9 +242,15 @@ Integration solche Werte zurückschreibt:
   beim Start der Integration verworfen. Wiederhergestellte Schlüssel stehen mit Log-Level warning im Log.
 
 Der [Hinweis nach einem Ausfall](#reparaturhinweise) funktioniert wie bisher; mit eingeschalteter Option verschwindet er
-meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunterladen* listet die gemerkten Werte.
+meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunterladen* listet die gemerkten und
+gelernten Werte, die Zahl der Wiederverbindungen und die Zeit der letzten sowie, ob Wiederverbindungen noch als
+Ausfall zählen.
 
 **Grenzen:**
+
+* Ein falscher oder veralteter gelernter Wert (etwa gelernt, während ein anderer Client den Sollwert während eines
+  Resets geändert hat) kann Wiederherstellungen blockieren, bis zu einem Neustart mit fehlgeschlagenen Abfragen, bei
+  dem jede gemerkte Betriebsart und Stufe 0 liest. Option aus- und wieder einschalten löscht alle gelernten Werte.
 
 * Ändert ein anderer Modbus-Client rund um einen Ausfall Werte so, **dass zufällig jeder gemerkte Wert seinen
   Reset-Wert liest** (etwa indem er die einzige gemerkte Betriebsart ausschaltet), sieht das genau wie ein Reset aus und
