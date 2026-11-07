@@ -8,9 +8,9 @@ that needs the HACS card [apexcharts-card](https://github.com/RomRider/apexchart
 
 | View | For | Content |
 |---|---|---|
-| Overview | Everyone who leaves control to a planner such as the Heat Pump Optimizer | Connection, operating mode, status, temperatures, power, COP, alerts for utility lockout and blocks. Read-only: tapping a lock does not switch it. |
+| Overview | Everyone who leaves control to a planner such as the Heat Pump Optimizer | Connection, operating mode, status, pumps (HUP, BUP, ZIP), temperatures, power, COP, alerts for utility lockout and blocks. Read-only: tapping a lock does not switch it. |
 | Energy | Energy management (HEMS) users | Electric and thermal energy today, this week and this month (long-term statistics, no helpers needed), energy per day per area, COP |
-| Locks and grid | HEMS users | Heating, hot water, cooling and pool blocks, power limit, circulation, extra hot water, utility lockout, notes on PV surplus |
+| Locks and grid | HEMS users | Heating, hot water, cooling and pool blocks, power limit, circulation, extra hot water, utility lockout, EVU input level (only if enabled; the level is shown, not "locked", its polarity is inferred), notes on PV surplus |
 | Control | People who control the heat pump themselves | Thermostat, water heater, mode, setpoint (with the controller's effective target), offset and level per circuit |
 | Diagnostics | Support and troubleshooting | Firmware, buffer type, error number, generator bits, equipment flags, status history, troubleshooting steps |
 | Automation | People who write automations | Table of every entity (key and entity ID), blueprint import links, example automations |

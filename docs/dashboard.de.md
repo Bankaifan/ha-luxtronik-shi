@@ -8,9 +8,9 @@ Ansicht, die die HACS-Karte [apexcharts-card](https://github.com/RomRider/apexch
 
 | Ansicht | Für | Inhalt |
 |---|---|---|
-| Übersicht | Alle, die die Steuerung einem Planer wie dem Heat Pump Optimizer überlassen | Verbindung, Betriebsart, Status, Temperaturen, Leistung, COP, Hinweise bei EVU-Sperre und Sperren. Nur Anzeige: Ein Tipp auf eine Sperre schaltet nichts. |
+| Übersicht | Alle, die die Steuerung einem Planer wie dem Heat Pump Optimizer überlassen | Verbindung, Betriebsart, Status, Pumpen (HUP, BUP, ZIP), Temperaturen, Leistung, COP, Hinweise bei EVU-Sperre und Sperren. Nur Anzeige: Ein Tipp auf eine Sperre schaltet nichts. |
 | Energie | Nutzer von Energiemanagement (HEMS) | Strom- und Wärmeenergie heute, diese Woche, diesen Monat (Langzeitstatistik, keine Hilfsentitäten nötig), Energie pro Tag je Bereich, COP |
-| Sperren und Netz | HEMS-Nutzer | Sperren für Heizen, Warmwasser, Kühlen und Pool, Leistungsbegrenzung, Zirkulation, Extra-Warmwasser, EVU-Sperre, Hinweise zum PV-Überschuss |
+| Sperren und Netz | HEMS-Nutzer | Sperren für Heizen, Warmwasser, Kühlen und Pool, Leistungsbegrenzung, Zirkulation, Extra-Warmwasser, EVU-Sperre, EVU-Eingangspegel (nur wenn aktiviert; der Pegel wird angezeigt, nicht „gesperrt“, die Polarität ist abgeleitet), Hinweise zum PV-Überschuss |
 | Steuerung | Wer die Wärmepumpe selbst steuert | Thermostat, Warmwasser, Betriebsart, Sollwert (mit wirksamem Sollwert der Regelung), Anhebung und Stufe je Kreis |
 | Diagnose | Support und Fehlersuche | Firmware, Puffertyp, Fehlernummer, Erzeuger-Bits, Ausstattung, Statusverlauf, Fehlersuche |
 | Automation | Wer Automationen schreibt | Tabelle aller Entitäten (Schlüssel und Entity-ID), Blueprint-Import, Beispiel-Automationen |

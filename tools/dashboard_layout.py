@@ -33,7 +33,7 @@ TXT: dict[str, dict[str, str]] = {
         "h_status": "Status", "h_temps": "Temperatures", "h_power": "Power and COP", "h_quick": "Quick view",
         "h_energy_now": "Energy consumed", "h_energy_hist": "Energy per day", "h_cop": "COP",
         "h_locks": "Locks", "h_limit": "Power limit", "h_dhw_extra": "Hot water", "h_grid": "Grid operator and PV",
-        "h_modes": "Modes", "h_fw": "Controller", "h_bits": "Generators", "h_caps": "Equipment reported by the controller",
+        "h_modes": "Modes", "h_pumps": "Pumps", "h_io": "Outputs and inputs", "h_fw": "Controller", "h_bits": "Generators", "h_caps": "Equipment reported by the controller",
         "h_trouble": "Troubleshooting", "h_ids": "Entities", "h_examples": "Examples", "h_bp": "Blueprints",
         "p_day": "Today", "p_week": "This week", "p_month": "This month",
         "n_el": "Electric", "n_th": "Thermal",
@@ -59,6 +59,11 @@ TXT: dict[str, dict[str, str]] = {
             "\"Utility lockout\". How exactly the controller reacts to each power limit mode is not verified by this "
             "project, see the entity reference in `docs/`. Letting the heat pump run into surplus PV power is done "
             "with an automation, see the *Automation* view and the blueprint \"Trigger with hysteresis\"."
+        ),
+        "t_evu": (
+            "**EVU input:** the sensors show the *level* of the input (on = level 1), not \"locked\". Which level "
+            "means a lock is not proven; that level 1 means released is inferred from one measured state. The "
+            "operating mode \"Utility lockout\" reports the lock itself."
         ),
         "t_planner": (
             "**Planners:** if a planner such as the Heat Pump Optimizer writes blocks, modes or setpoints of a circuit, "
@@ -112,7 +117,7 @@ TXT: dict[str, dict[str, str]] = {
         "h_status": "Status", "h_temps": "Temperaturen", "h_power": "Leistung und COP", "h_quick": "Kurzüberblick",
         "h_energy_now": "Verbrauchte Energie", "h_energy_hist": "Energie pro Tag", "h_cop": "COP",
         "h_locks": "Sperren", "h_limit": "Leistungsbegrenzung", "h_dhw_extra": "Warmwasser", "h_grid": "Netzbetreiber und PV",
-        "h_modes": "Betriebsarten", "h_fw": "Regler", "h_bits": "Erzeuger", "h_caps": "Ausstattung laut Regler",
+        "h_modes": "Betriebsarten", "h_pumps": "Pumpen", "h_io": "Ausgänge und Eingänge", "h_fw": "Regler", "h_bits": "Erzeuger", "h_caps": "Ausstattung laut Regler",
         "h_trouble": "Fehlersuche", "h_ids": "Entitäten", "h_examples": "Beispiele", "h_bp": "Blueprints",
         "p_day": "Heute", "p_week": "Diese Woche", "p_month": "Dieser Monat",
         "n_el": "Strom", "n_th": "Wärme",
@@ -138,6 +143,11 @@ TXT: dict[str, dict[str, str]] = {
             "als Betriebsart \"EVU-Sperre\". Wie genau der Regler auf die einzelnen Betriebsarten der Leistungsbegrenzung "
             "reagiert, ist in diesem Projekt nicht geprüft, siehe die Entitätenreferenz in `docs/`. PV-Überschuss nutzt "
             "man mit einer Automation, siehe Ansicht *Automation* und den Blueprint \"Auslöser mit Hysterese\"."
+        ),
+        "t_evu": (
+            "**EVU-Eingang:** Die Sensoren zeigen den *Pegel* des Eingangs (an = Pegel 1), nicht \"gesperrt\". Welcher "
+            "Pegel eine Sperre bedeutet, ist nicht belegt; dass Pegel 1 freigegeben heißt, ist aus einem gemessenen "
+            "Zustand abgeleitet. Die Betriebsart \"EVU-Sperre\" meldet die Sperre selbst."
         ),
         "t_planner": (
             "**Planer:** Schreibt ein Planer wie der Heat Pump Optimizer Sperren, Betriebsarten oder Sollwerte eines "
@@ -276,6 +286,9 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
             alert("heating_block", "on", t["alert_heating"]),
             alert("dhw_block", "on", t["alert_dhw"]),
         ]),
+        section("h_pumps", "mdi:pump", [
+            tile("pump_heating"), tile("pump_hot_water"), tile("pump_circulation"),
+        ]),
         section("h_temps", "mdi:thermometer", [
             tile("outside"), tile("flow"), tile("return"), tile("dhw"),
             history(["flow", "return", "outside", "dhw"]),
@@ -327,6 +340,8 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
         section("h_grid", "mdi:transmission-tower", [
             tile("operating_mode"), alert("operating_mode", "evu_lock", t["alert_evu"]),
             tile("electric_power"), tile("compressor_thermal_power"), tile("cop"),
+            tile("input_evu"), tile("input_evu2"),
+            markdown(t["t_evu"]) if res.has("input_evu") or res.has("input_evu2") else None,
             markdown(t["t_hems"]), markdown(t["t_planner"]),
         ]),
     ]
@@ -367,6 +382,10 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
         section("h_fw", "mdi:chip", [
             *[tile(k) for k in firmware], tile("buffer_type"), tile("error_number"),
             tile("switching_lock_minutes"), tile("min_runtime_minutes"), tile("heat_generator_state"),
+        ]),
+        section("h_io", "mdi:electric-switch", [
+            tile("pump_heating"), tile("pump_hot_water"), tile("pump_circulation"), tile("output_vbo"),
+            tile("output_fp1"), tile("output_fp2"), tile("output_fp3"),
         ]),
         section("h_bits", "mdi:engine", [
             tile("compressor_1"), tile("compressor_2"), tile("aux_heater_1"), tile("aux_heater_2"),

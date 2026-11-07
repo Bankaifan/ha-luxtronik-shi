@@ -58,6 +58,17 @@ views:
   - type: grid
     cards:
     - type: heading
+      heading: Pumps
+      icon: mdi:pump
+    - type: tile
+      entity: binary_sensor.warmepumpe_heating_pump_heating_hup
+    - type: tile
+      entity: binary_sensor.warmepumpe_hot_water_pump_hot_water_bup
+    - type: tile
+      entity: binary_sensor.warmepumpe_hot_water_pump_circulation_zip
+  - type: grid
+    cards:
+    - type: heading
       heading: Temperatures
       icon: mdi:thermometer
     - type: tile
@@ -456,11 +467,22 @@ views:
     - type: tile
       entity: sensor.warmepumpe_status_error_number
     - type: tile
-      entity: sensor.warmepumpe_system_switching_lock_time
-    - type: tile
-      entity: sensor.warmepumpe_system_minimum_runtime
-    - type: tile
       entity: sensor.warmepumpe_status_heat_generator_bit_mask
+  - type: grid
+    cards:
+    - type: heading
+      heading: Outputs and inputs
+      icon: mdi:electric-switch
+    - type: tile
+      entity: binary_sensor.warmepumpe_heating_pump_heating_hup
+    - type: tile
+      entity: binary_sensor.warmepumpe_hot_water_pump_hot_water_bup
+    - type: tile
+      entity: binary_sensor.warmepumpe_hot_water_pump_circulation_zip
+    - type: tile
+      entity: binary_sensor.warmepumpe_output_vbo
+    - type: tile
+      entity: binary_sensor.warmepumpe_output_fp1
   - type: grid
     cards:
     - type: heading
@@ -547,7 +569,6 @@ views:
         | Wärmepumpe Temperature: outside | `outside` | `sensor.warmepumpe_temperature_outside` |
         | Wärmepumpe Hot water Temperature | `dhw` | `sensor.warmepumpe_hot_water_temperature` |
         | Wärmepumpe Hot water Target | `dhw_target` | `sensor.warmepumpe_hot_water_target` |
-        | Wärmepumpe Hot water Minimum | `dhw_min` | `sensor.warmepumpe_hot_water_minimum` |
         | Wärmepumpe Hot water Maximum | `dhw_max` | `sensor.warmepumpe_hot_water_maximum` |
         | Wärmepumpe Hot water Limit temperature | `dhw_limit` | `sensor.warmepumpe_hot_water_limit_temperature` |
         | Wärmepumpe Heating Mixing circuit 1: flow | `mk1_flow` | `sensor.warmepumpe_heating_mixing_circuit_1_flow` |
@@ -556,8 +577,6 @@ views:
         | Wärmepumpe Heating Mixing circuit 1: flow maximum | `mk1_flow_max` | `sensor.warmepumpe_heating_mixing_circuit_1_flow_maximum` |
         | Wärmepumpe Status: error number | `error_number` | `sensor.warmepumpe_status_error_number` |
         | Wärmepumpe System: buffer tank type | `buffer_type` | `sensor.warmepumpe_system_buffer_tank_type` |
-        | Wärmepumpe System: switching lock time | `switching_lock_minutes` | `sensor.warmepumpe_system_switching_lock_time` |
-        | Wärmepumpe System: minimum runtime | `min_runtime_minutes` | `sensor.warmepumpe_system_minimum_runtime` |
         | Wärmepumpe Cooling: configured | `cooling_configured` | `binary_sensor.warmepumpe_cooling_configured` |
         | Wärmepumpe Pool: configured | `pool_configured` | `binary_sensor.warmepumpe_pool_configured` |
         | Wärmepumpe Cooling: released | `cooling_release` | `binary_sensor.warmepumpe_cooling_released` |
@@ -621,6 +640,11 @@ views:
         | Wärmepumpe Pool Energy: electric | `energy_el_pool` | `sensor.warmepumpe_pool_energy_electric` |
         | Wärmepumpe Cooling Energy: thermal | `energy_th_cooling` | `sensor.warmepumpe_cooling_energy_thermal` |
         | Wärmepumpe Pool Energy: thermal | `energy_th_pool` | `sensor.warmepumpe_pool_energy_thermal` |
+        | Wärmepumpe Heating Pump: heating (HUP) | `pump_heating` | `binary_sensor.warmepumpe_heating_pump_heating_hup` |
+        | Wärmepumpe Hot water Pump: hot water (BUP) | `pump_hot_water` | `binary_sensor.warmepumpe_hot_water_pump_hot_water_bup` |
+        | Wärmepumpe Hot water Pump: circulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_hot_water_pump_circulation_zip` |
+        | Wärmepumpe Output: VBO | `output_vbo` | `binary_sensor.warmepumpe_output_vbo` |
+        | Wärmepumpe Output: FP1 | `output_fp1` | `binary_sensor.warmepumpe_output_fp1` |
         | Wärmepumpe Equipment: heating | `cap_heating` | `binary_sensor.warmepumpe_equipment_heating` |
         | Wärmepumpe Equipment: hot water | `cap_hot_water` | `binary_sensor.warmepumpe_equipment_hot_water` |
         | Wärmepumpe Equipment: cooling | `cap_cooling` | `binary_sensor.warmepumpe_equipment_cooling` |

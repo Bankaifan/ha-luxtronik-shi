@@ -59,6 +59,17 @@ views:
   - type: grid
     cards:
     - type: heading
+      heading: Pumpen
+      icon: mdi:pump
+    - type: tile
+      entity: binary_sensor.warmepumpe_heizung_pumpe_heizung_hup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip
+  - type: grid
+    cards:
+    - type: heading
       heading: Temperaturen
       icon: mdi:thermometer
     - type: tile
@@ -457,11 +468,22 @@ views:
     - type: tile
       entity: sensor.warmepumpe_status_fehlernummer
     - type: tile
-      entity: sensor.warmepumpe_anlage_schaltspielsperre
-    - type: tile
-      entity: sensor.warmepumpe_anlage_mindestlaufzeit
-    - type: tile
       entity: sensor.warmepumpe_status_warmeerzeuger_bitmaske
+  - type: grid
+    cards:
+    - type: heading
+      heading: Ausgänge und Eingänge
+      icon: mdi:electric-switch
+    - type: tile
+      entity: binary_sensor.warmepumpe_heizung_pumpe_heizung_hup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip
+    - type: tile
+      entity: binary_sensor.warmepumpe_ausgang_vbo
+    - type: tile
+      entity: binary_sensor.warmepumpe_ausgang_fp1
   - type: grid
     cards:
     - type: heading
@@ -548,7 +570,6 @@ views:
         | Wärmepumpe Temperatur: Außen | `outside` | `sensor.warmepumpe_temperatur_aussen` |
         | Wärmepumpe Warmwasser Temperatur | `dhw` | `sensor.warmepumpe_warmwasser_temperatur` |
         | Wärmepumpe Warmwasser Soll | `dhw_target` | `sensor.warmepumpe_warmwasser_soll` |
-        | Wärmepumpe Warmwasser Minimum | `dhw_min` | `sensor.warmepumpe_warmwasser_minimum` |
         | Wärmepumpe Warmwasser Maximum | `dhw_max` | `sensor.warmepumpe_warmwasser_maximum` |
         | Wärmepumpe Warmwasser Grenztemperatur | `dhw_limit` | `sensor.warmepumpe_warmwasser_grenztemperatur` |
         | Wärmepumpe Heizung Mischkreis 1: Vorlauf | `mk1_flow` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf` |
@@ -557,8 +578,6 @@ views:
         | Wärmepumpe Heizung Mischkreis 1: Vorlauf Maximum | `mk1_flow_max` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf_maximum` |
         | Wärmepumpe Status: Fehlernummer | `error_number` | `sensor.warmepumpe_status_fehlernummer` |
         | Wärmepumpe Anlage: Puffertyp | `buffer_type` | `sensor.warmepumpe_anlage_puffertyp` |
-        | Wärmepumpe Anlage: Schaltspielsperre | `switching_lock_minutes` | `sensor.warmepumpe_anlage_schaltspielsperre` |
-        | Wärmepumpe Anlage: Mindestlaufzeit | `min_runtime_minutes` | `sensor.warmepumpe_anlage_mindestlaufzeit` |
         | Wärmepumpe Kühlen: konfiguriert | `cooling_configured` | `binary_sensor.warmepumpe_kuhlen_konfiguriert` |
         | Wärmepumpe Pool: konfiguriert | `pool_configured` | `binary_sensor.warmepumpe_pool_konfiguriert` |
         | Wärmepumpe Kühlen: freigegeben | `cooling_release` | `binary_sensor.warmepumpe_kuhlen_freigegeben` |
@@ -622,6 +641,11 @@ views:
         | Wärmepumpe Pool Energie: Strom | `energy_el_pool` | `sensor.warmepumpe_pool_energie_strom` |
         | Wärmepumpe Kühlung Energie: Wärme | `energy_th_cooling` | `sensor.warmepumpe_kuhlung_energie_warme` |
         | Wärmepumpe Pool Energie: Wärme | `energy_th_pool` | `sensor.warmepumpe_pool_energie_warme` |
+        | Wärmepumpe Heizung Pumpe: Heizung (HUP) | `pump_heating` | `binary_sensor.warmepumpe_heizung_pumpe_heizung_hup` |
+        | Wärmepumpe Warmwasser Pumpe: Warmwasser (BUP) | `pump_hot_water` | `binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup` |
+        | Wärmepumpe Warmwasser Pumpe: Zirkulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip` |
+        | Wärmepumpe Ausgang: VBO | `output_vbo` | `binary_sensor.warmepumpe_ausgang_vbo` |
+        | Wärmepumpe Ausgang: FP1 | `output_fp1` | `binary_sensor.warmepumpe_ausgang_fp1` |
         | Wärmepumpe Ausstattung: Heizen | `cap_heating` | `binary_sensor.warmepumpe_ausstattung_heizen` |
         | Wärmepumpe Ausstattung: Warmwasser | `cap_hot_water` | `binary_sensor.warmepumpe_ausstattung_warmwasser` |
         | Wärmepumpe Ausstattung: Kühlen | `cap_cooling` | `binary_sensor.warmepumpe_ausstattung_kuhlen` |
