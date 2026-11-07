@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.9.0] – 2026-11-07
+
 ### Action required
 - **Update intervals longer than 5 minutes are reduced to 5 minutes (300 s).** The SHI drops every value set over it
   after 10 minutes without Modbus access, even with the restore option off, so the options now allow 10–300 s. An
@@ -356,7 +358,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.7.0...v0.8.0
