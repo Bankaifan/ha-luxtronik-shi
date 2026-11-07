@@ -1,0 +1,93 @@
+blueprint:
+  name: "Luxtronik SHI: notify about problems / bei Problemen benachrichtigen"
+  description: >-
+    EN: Runs your notification action when the heat pump is not reachable for some minutes, when the error number
+    changes to another value, or when the utility lockout (EVU) lasts longer than a set time. Writes nothing to
+    the heat pump. The variables "title" and "message" are available in the action.
+    DE: Führt deine Benachrichtigung aus, wenn die Wärmepumpe einige Minuten nicht erreichbar ist, wenn sich die
+    Fehlernummer ändert oder wenn die EVU-Sperre länger als eine Zeit dauert. Schreibt nichts in die Wärmepumpe.
+    In der Aktion stehen die Variablen "title" und "message" zur Verfügung.
+  domain: automation
+  source_url: https://github.com/Bankaifan/ha-luxtronik-shi/blob/main/blueprints/automation/luxtronik_shi/notify_problems.yaml
+  input:
+    online:
+      name: Connection sensor / Verbindungs-Sensor
+      description: "EN: The binary sensor \"connection\" of the integration. DE: Der Binärsensor \"Verbindung\" der Integration."
+      selector:
+        entity:
+          filter:
+            - integration: luxtronik_shi
+              domain: binary_sensor
+    error_number:
+      name: Error number sensor / Fehlernummer-Sensor
+      selector:
+        entity:
+          filter:
+            - integration: luxtronik_shi
+              domain: sensor
+    operating_mode:
+      name: Operating mode sensor / Betriebsart-Sensor
+      selector:
+        entity:
+          filter:
+            - integration: luxtronik_shi
+              domain: sensor
+    offline_minutes:
+      name: Minutes offline / Minuten offline
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 240
+          unit_of_measurement: min
+          mode: box
+    lockout_minutes:
+      name: Minutes of utility lockout / Minuten EVU-Sperre
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+    notify:
+      name: Notification action / Benachrichtigung
+      default: []
+      selector:
+        action: {}
+
+mode: queued
+max: 5
+
+triggers:
+  - trigger: state
+    entity_id: !input online
+    to: "off"
+    for:
+      minutes: !input offline_minutes
+    id: offline
+  - trigger: state
+    entity_id: !input error_number
+    id: error
+  - trigger: state
+    entity_id: !input operating_mode
+    to: evu_lock
+    for:
+      minutes: !input lockout_minutes
+    id: lockout
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'error' or (trigger.to_state.state not in ['unknown', 'unavailable']
+         and trigger.from_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.state != trigger.from_state.state) }}
+
+actions:
+  - variables:
+      title: "Heat pump / Wärmepumpe"
+      message: >-
+        {% if trigger.id == 'offline' %}Heat pump not reachable / Wärmepumpe nicht erreichbar
+        {% elif trigger.id == 'error' %}Error number {{ trigger.from_state.state }} -> {{ trigger.to_state.state }} / Fehlernummer {{ trigger.from_state.state }} -> {{ trigger.to_state.state }}
+        {% else %}Utility lockout (EVU) is active / EVU-Sperre ist aktiv{% endif %}
+  - sequence: !input notify

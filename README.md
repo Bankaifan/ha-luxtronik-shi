@@ -324,6 +324,8 @@ reconnects and the time of the last one, and whether reconnects still count as a
 
 ## Diagnostics
 
+See also [Dashboards and blueprints](docs/dashboard.md): ready-made dashboards (overview, energy, locks and grid, control, diagnostics), blueprints and a generator for your own entity IDs.
+
 Under *Settings → Devices & services → Luxtronik SHI*, the ⋮ menu of the entry offers **Download diagnostics**. It
 creates a file with the integration and Home Assistant
 version, the selected equipment and equipment flags, the firmware and the last polled register values (raw and
