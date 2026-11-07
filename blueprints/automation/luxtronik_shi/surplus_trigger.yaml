@@ -1,0 +1,103 @@
+blueprint:
+  name: "Luxtronik SHI: trigger with hysteresis / Auslöser mit Hysterese"
+  description: >-
+    EN: Runs your actions when a power or price value stays above an upper threshold for some minutes ("start"), and
+    other actions when it stays below a lower threshold for some minutes ("end"). Typical use: PV surplus, a
+    dynamic price, the grid feed-in power. The blueprint writes nothing itself; you choose the actions (for example
+    raise the hot water setpoint, see the Automation view of the dashboard). The "end" actions also run when Home
+    Assistant starts while the value is below the lower threshold, so a temporary change is not left in place.
+    DE: Führt deine Aktionen aus, wenn ein Leistungs- oder Preiswert einige Minuten über der oberen Schwelle bleibt
+    ("Start"), und andere Aktionen, wenn er einige Minuten unter der unteren Schwelle bleibt ("Ende"). Typisch:
+    PV-Überschuss, dynamischer Preis, Einspeiseleistung. Das Blueprint schreibt selbst nichts; die Aktionen wählst du
+    (z. B. Warmwasser-Sollwert anheben, siehe Ansicht Automation im Dashboard). Die "Ende"-Aktionen laufen auch beim
+    Start von Home Assistant, wenn der Wert unter der unteren Schwelle liegt, damit eine vorübergehende Änderung nicht stehen bleibt.
+  domain: automation
+  source_url: https://github.com/Bankaifan/ha-luxtronik-shi/blob/main/blueprints/automation/luxtronik_shi/surplus_trigger.yaml
+  input:
+    value:
+      name: Value / Wert
+      description: "EN: Numeric sensor, for example PV surplus in W. DE: Zahlen-Sensor, z. B. PV-Überschuss in W."
+      selector:
+        entity:
+          domain: [sensor, input_number, number]
+    upper:
+      name: Upper threshold / Obere Schwelle
+      default: 1500
+      selector:
+        number:
+          min: -100000
+          max: 100000
+          step: any
+          mode: box
+    lower:
+      name: Lower threshold / Untere Schwelle
+      default: 300
+      selector:
+        number:
+          min: -100000
+          max: 100000
+          step: any
+          mode: box
+    minutes:
+      name: Minutes the value must hold / Minuten, die der Wert halten muss
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 120
+          unit_of_measurement: min
+          mode: box
+    start_actions:
+      name: Start actions / Start-Aktionen
+      default: []
+      selector:
+        action: {}
+    end_actions:
+      name: End actions / Ende-Aktionen
+      default: []
+      selector:
+        action: {}
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  upper: !input upper
+  lower: !input lower
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input value
+    above: !input upper
+    for:
+      minutes: !input minutes
+    id: start
+  - trigger: numeric_state
+    entity_id: !input value
+    below: !input lower
+    for:
+      minutes: !input minutes
+    id: end
+  - trigger: homeassistant
+    event: start
+    id: boot
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: ["start"]
+        sequence: !input start_actions
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: ["end"]
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: ["boot"]
+                  - condition: numeric_state
+                    entity_id: !input value
+                    below: !input lower
+        sequence: !input end_actions
