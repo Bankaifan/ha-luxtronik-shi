@@ -286,6 +286,14 @@ reconnects and the time of the last one, and whether reconnects still count as a
 
 **Limits:**
 
+* **Hot water settings are taken with a delay.** The controller commits writes to the hot water mode, setpoint,
+  offset and level about 10 s later (firmware analysis; measured for the mode), and writing the current value cancels
+  such a pending write. The integration therefore checks a differing read-back once more after 15 s instead of
+  treating it as a failure, and writes nothing to that register meanwhile. The entity shows the new value from the
+  next poll on. A restore of these values waits while the hot water block is on (owner measurement: the hot water
+  mode can only be set while the block is not active; the reason is unknown) and is retried on later polls, at most 5
+  times within 10 minutes, before it is given up with a warning. A write through Home Assistant cancels it.
+
 * A wrong or stale learned value (for example learned while another client changed the setpoint during a reset) can
   block restores until a reboot with failed polls in which every remembered mode and level reads 0. Turning the option
   off and on again clears all learned values.

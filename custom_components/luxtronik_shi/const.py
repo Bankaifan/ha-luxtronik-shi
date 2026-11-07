@@ -114,6 +114,20 @@ RESET_TO_DEFAULT_SUFFIXES = ("_setpoint",)
 RESTORE_MAX_GAP = 24 * 3600  # seconds
 # A device reset detected again within this time after a restore is not restored again (no write loops).
 RESTORE_COOLDOWN = 900  # seconds
+# Deferred writes of the hot water group (docs/firmware-3.92.3-shi-analysis.md, "Deferred writes of the hot
+# water group"): SHI writes to 10005-10008 go into a pending map and are committed after about 10 s; writing
+# the value currently stored cancels a pending write. A read-back that differs is checked again after
+# DEFERRED_RECHECK s (one extra read of that register), and nothing is written to the register meanwhile.
+DEFERRED_KEYS: frozenset[str] = frozenset(
+    {"cfg_dhw_mode", "cfg_dhw_setpoint", "cfg_dhw_offset", "cfg_dhw_level"}
+)
+DEFERRED_RECHECK = 15  # seconds
+# Hot water group writes wait while the hot water block reads on (owner measurement on the reference
+# installation: the hot water mode can only be set while the block is not active; mechanism unknown).
+DHW_BLOCK_KEY = "dhw_block"
+# A restore value that did not read back is retried on later polls (once per poll) instead of being forgotten.
+RESTORE_RETRY_DEADLINE = 600  # seconds
+RESTORE_RETRY_ATTEMPTS = 5
 
 MANUFACTURER = "alpha innotec / Luxtronik"
 MODEL = "Smart Home Interface (Modbus/TCP)"
