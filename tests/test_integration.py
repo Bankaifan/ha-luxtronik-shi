@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.luxtronik_shi.const import CONF_SLAVE, DOMAIN
+from custom_components.luxtronik_shi.registers import FEATURES, active_registers
 
 from .fake_shi import FakeSHI, free_port
 
@@ -165,12 +166,13 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
 
     assert hass.states.get(_entity_id(hass, entry, "sensor", "dhw")).state == "48.2"
     assert hass.states.get(_entity_id(hass, entry, "sensor", "return")).state == "28.5"
-    # the missing raw values are just unknown, the block was read register by register
+    # the missing values are just unknown, the block was read register by register; the disabled raw value is
+    # not polled at all
     data = entry.runtime_data.data
-    assert data["raw_10113"] is None
+    assert "raw_10113" not in data
     assert data["dhw_limit"] is None
     assert data["heating_limit"] is None
-    assert data["max_flow_temp"] == 0.7
+    assert "max_flow_temp" not in data  # disabled by default, not polled
     assert any(block.split for block in entry.runtime_data._blocks)
 
 
@@ -308,7 +310,7 @@ async def test_equipment_off_and_on_keeps_entity_ids(hass: HomeAssistant, shi: F
     entry = await _setup(hass, shi)
     pool_block = _entity_id(hass, entry, "switch", "pool_block")
     mk1_setpoint = _entity_id(hass, entry, "number", "cfg_mk1_setpoint")
-    reads_before = len(entry.runtime_data.registers)
+    reads_before = len(active_registers(set(FEATURES)))  # everything the equipment can have
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
@@ -343,11 +345,12 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
-    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, RENAMED_KEYS
+    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, OUTPUT_FLAGS, RENAMED_KEYS
 
-    # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2).
+    # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2,
+    # output and input flags of 0.13.0).
     # Renamed keys stay in the contract but have no entity of their own any more (see tests/test_migration.py).
-    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED)}
+    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED, *OUTPUT_FLAGS)}
     assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added) - len(RENAMED_KEYS)
     assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
 
@@ -584,10 +587,33 @@ async def test_named_raw_values_decode(hass: HomeAssistant, shi: FakeSHI) -> Non
     """Raw 10113 is the calculated heating flow target in 0.1 degC; outputs and inputs are plain 0/1 values."""
     shi.input[10113] = 253
     shi.input[10354] = 1
+    registry = er.async_get(hass)
     entry = await _setup(hass, shi)
+    data = entry.runtime_data.data
+    assert "raw_10113" not in data  # disabled by default: not polled
+    reg = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10354"))
+    assert reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    # Enabling an entity reads its register at once (the entry is reloaded by Home Assistant a bit later).
+    for address in (10113, 10354):
+        registry.async_update_entity(
+            _entity_id(hass, entry, "sensor", f"raw_{address}"), disabled_by=None
+        )
+    await hass.async_block_till_done()
     data = entry.runtime_data.data
     assert data["raw_10113"] == 25.3
     assert data["raw_10354"] == 1
-    registry = er.async_get(hass)
-    reg = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10354"))
-    assert reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_default_name_follows_the_language(hass: HomeAssistant, shi: FakeSHI) -> None:
+    from custom_components.luxtronik_shi.config_flow import default_name
+
+    assert default_name("de") == "Wärmepumpe"
+    assert default_name("de-AT") == "Wärmepumpe"
+    assert default_name("en") == "Heat pump"
+    assert default_name("fr") == "Heat pump"
+    for language, expected in (("en", "Heat pump"), ("de", "Wärmepumpe")):
+        hass.config.language = language
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        name = next(key for key in result["data_schema"].schema if key == "name")
+        assert name.default() == expected
+        hass.config_entries.flow.async_abort(result["flow_id"])

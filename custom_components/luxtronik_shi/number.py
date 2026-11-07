@@ -14,6 +14,9 @@ from .entity import LuxtronikEntity
 from .registers import SETPOINT_GROUPS, Register, encode_int16
 from .setpoint import setpoint_attributes
 
+# One write at a time per platform; the Modbus client serialises access to the SHI anyway.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

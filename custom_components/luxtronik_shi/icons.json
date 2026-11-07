@@ -1,0 +1,111 @@
+{
+  "entity": {
+    "sensor": {
+      "operating_mode": {
+        "default": "mdi:heat-pump",
+        "state": {
+          "heating": "mdi:radiator",
+          "hot_water": "mdi:water-boiler",
+          "pool": "mdi:pool",
+          "evu_lock": "mdi:transmission-tower-off",
+          "defrost": "mdi:snowflake-melt",
+          "off": "mdi:power-off",
+          "external_source": "mdi:source-branch",
+          "cooling": "mdi:snowflake"
+        }
+      },
+      "error_number": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "firmware_version": {
+        "default": "mdi:chip"
+      },
+      "heating_status": {
+        "default": "mdi:information-outline",
+        "state": {
+          "disabled": "mdi:cancel",
+          "no_request": "mdi:sleep",
+          "requested": "mdi:timer-sand",
+          "running": "mdi:play-circle-outline"
+        }
+      },
+      "hot_water_status": {
+        "default": "mdi:information-outline",
+        "state": {
+          "disabled": "mdi:cancel",
+          "no_request": "mdi:sleep",
+          "requested": "mdi:timer-sand",
+          "running": "mdi:play-circle-outline"
+        }
+      },
+      "cooling_status": {
+        "default": "mdi:information-outline",
+        "state": {
+          "disabled": "mdi:cancel",
+          "no_request": "mdi:sleep",
+          "requested": "mdi:timer-sand",
+          "running": "mdi:play-circle-outline"
+        }
+      },
+      "pool_status": {
+        "default": "mdi:information-outline",
+        "state": {
+          "disabled": "mdi:cancel",
+          "no_request": "mdi:sleep",
+          "requested": "mdi:timer-sand",
+          "running": "mdi:play-circle-outline"
+        }
+      },
+      "cop": {
+        "default": "mdi:gauge"
+      },
+      "cop_heating": {
+        "default": "mdi:gauge"
+      },
+      "cop_dhw": {
+        "default": "mdi:gauge"
+      }
+    },
+    "binary_sensor": {
+      "pump_heating": {
+        "default": "mdi:pump-off",
+        "state": {
+          "on": "mdi:pump",
+          "off": "mdi:pump-off"
+        }
+      },
+      "pump_hot_water": {
+        "default": "mdi:pump-off",
+        "state": {
+          "on": "mdi:pump",
+          "off": "mdi:pump-off"
+        }
+      },
+      "pump_circulation": {
+        "default": "mdi:pump-off",
+        "state": {
+          "on": "mdi:pump",
+          "off": "mdi:pump-off"
+        }
+      },
+      "output_vbo": {
+        "default": "mdi:electric-switch"
+      },
+      "output_fp1": {
+        "default": "mdi:electric-switch"
+      },
+      "output_fp2": {
+        "default": "mdi:electric-switch"
+      },
+      "output_fp3": {
+        "default": "mdi:electric-switch"
+      },
+      "input_evu": {
+        "default": "mdi:transmission-tower"
+      },
+      "input_evu2": {
+        "default": "mdi:transmission-tower"
+      }
+    }
+  }
+}

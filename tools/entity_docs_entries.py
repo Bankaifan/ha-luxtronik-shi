@@ -90,9 +90,11 @@ _add("dhw_target", "dhw_temps",
      "Warmwasser-Sollwerts. Die Zahl Sollwert ändert sie nur in der Betriebsart `setpoint`.", "PL")
 _add("dhw_min", "dhw_temps",
      "Minimum adjustable hot water temperature. On the reference firmware the register returns a constant, "
-     "30.0 °C, which is also the lower limit of the setpoint number.",
+     "30.0 °C (a fixed firmware constant, not a measurement), which is also the lower limit of the setpoint number. "
+     "Disabled by default for new installations.",
      "Niedrigste einstellbare Warmwassertemperatur. In der Referenz-Firmware liefert das Register eine Konstante, "
-     "30,0 °C; das ist auch die Untergrenze der Zahl Sollwert.", "PL, FW")
+     "30,0 °C (eine feste Firmware-Konstante, kein Messwert); das ist auch die Untergrenze der Zahl Sollwert. Für "
+     "neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _add("dhw_max", "dhw_temps",
      "Maximum adjustable hot water temperature, as reported by the controller.",
      "Höchste einstellbare Warmwassertemperatur laut Regelung.", "PL")
@@ -421,12 +423,16 @@ _add("buffer_type", "system",
      "Reihenpuffer angezeigt.", "PL, M")
 _add("switching_lock_minutes", "system",
      "Minimum off time before the heat pump may start again (*Schaltspielsperre*), in minutes. The reference "
-     "firmware returns the constant 20.",
+     "firmware returns the constant 20 (a fixed value, not a measurement). Disabled by default for new "
+     "installations.",
      "Mindest-Ausschaltzeit, bevor die Wärmepumpe wieder starten darf (*Schaltspielsperre*), in Minuten. Die "
-     "Referenz-Firmware liefert die Konstante 20.", "PL, FW")
+     "Referenz-Firmware liefert die Konstante 20 (ein fester Wert, kein Messwert). Für neue Installationen "
+     "standardmäßig deaktiviert.", "PL, FW")
 _add("min_runtime_minutes", "system",
-     "Minimum runtime of the heat pump, in minutes. The reference firmware returns the constant 20.",
-     "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20.", "PL, FW")
+     "Minimum runtime of the heat pump, in minutes. The reference firmware returns the constant 20 (a fixed value, "
+     "not a measurement). Disabled by default for new installations.",
+     "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20 (ein fester Wert, "
+     "kein Messwert). Für neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _caps = {
     "cap_heating": ("heating", "Heizen"),
     "cap_hot_water": ("hot water", "Warmwasser"),
@@ -575,6 +581,57 @@ _add("raw_10361", "raw",
      "Digitaler Eingang EVU 2, 0 oder 1; Firmware-Variable `EVU2in` (Item `t0/0x2b`), der Name ist belegt. "
      "Gemessen: konstant 0 an der Referenzanlage (das native `evu2` ist aus), über den anderen Zustand ist also "
      "nichts bekannt. Standardmäßig deaktiviert.", "FW, M")
+
+# ------------------------------------------------------------------ outputs and inputs (binary sensors on proven raw values)
+# Same registers as the raw sensors above (read once, not twice); the raw sensors keep their keys.
+_FLAG_EN = (" Same register as the `{raw}` sensor (disabled by default), read once. Proven by the firmware "
+            "(`{var}`, item `{item}`). {meas}")
+_FLAG_DE = (" Dasselbe Register wie der Sensor `{raw}` (standardmäßig deaktiviert), nur einmal gelesen. Von der "
+            "Firmware belegt (`{var}`, Item `{item}`). {meas}")
+for _key, _raw, _var, _item, _en, _de, _meas_en, _meas_de in (
+    ("pump_heating", "raw_10354", "HUPout", "t0/0x20", "Heating circulation pump (HUP) runs.",
+     "Heizungsumwälzpumpe (HUP) läuft.", "Measured.", "Gemessen."),
+    ("pump_hot_water", "raw_10355", "BUPout", "t0/0x44", "Hot water pump (BUP) runs.",
+     "Brauchwasserpumpe (BUP) läuft.", "Measured.", "Gemessen."),
+    ("pump_circulation", "raw_10356", "ZIPout", "t0/0x48", "Circulation pump (ZIP) runs.",
+     "Zirkulationspumpe (ZIP) läuft.", "Measured: pulses of 2 minutes.", "Gemessen: Pulse von 2 Minuten."),
+    ("output_vbo", "raw_10350", "VBOout", "t0/0x45", "Digital output VBO is on. What it switches is not "
+     "documented (open).", "Digitaler Ausgang VBO ist an. Was er schaltet, ist nicht dokumentiert (ungeklärt).",
+     "Measured: coincides with the compressor runs.", "Gemessen: deckt sich mit den Verdichterläufen."),
+    ("output_fp1", "raw_10351", "FP1out", "t0/0x6d", "Digital output FP1 is on.",
+     "Digitaler Ausgang FP1 ist an.", "Measured: follows the heating circulation pump.",
+     "Gemessen: folgt der Heizungsumwälzpumpe."),
+    ("output_fp2", "raw_10352", "FP2out", "t0/0x4c", "Digital output FP2 is on. Disabled by default.",
+     "Digitaler Ausgang FP2 ist an. Standardmäßig deaktiviert.",
+     "Not measured (the reference installation has no second circuit).",
+     "Nicht gemessen (die Referenzanlage hat keinen zweiten Kreis)."),
+    ("output_fp3", "raw_10353", "FP3out", "t0/0x4d", "Digital output FP3 is on. Disabled by default.",
+     "Digitaler Ausgang FP3 ist an. Standardmäßig deaktiviert.",
+     "Not measured (the reference installation has no third circuit).",
+     "Nicht gemessen (die Referenzanlage hat keinen dritten Kreis)."),
+):
+    _add(_key, "status", _en + _FLAG_EN.format(raw=_raw, var=_var, item=_item, meas=_meas_en),
+         _de + _FLAG_DE.format(raw=_raw, var=_var, item=_item, meas=_meas_de), "FW, M")
+_add("input_evu", "status",
+     "Level of the digital input EVU (utility lock): on = level 1. **Which level means a lock is not proven.** "
+     "Measured: constant 1 while the native `evu_unlocked` of the Luxtronik integration is on, so 1 most likely "
+     "means released; that is inferred from one state only, a real lock has not been measured. Use the operating "
+     "mode *Utility lockout* for the lock itself. Same register as `raw_10360` (disabled by default), read once; "
+     "disabled by default.",
+     "Pegel des digitalen Eingangs EVU (EVU-Sperre): an = Pegel 1. **Welcher Pegel eine Sperre bedeutet, ist nicht "
+     "belegt.** Gemessen: konstant 1, solange das native `evu_unlocked` der Luxtronik-Integration an ist; 1 heißt "
+     "also wahrscheinlich freigegeben, aus diesem einen Zustand abgeleitet, eine echte Sperre wurde nicht "
+     "gemessen. Für die Sperre selbst die Betriebsart *EVU-Sperre* verwenden. Dasselbe Register wie `raw_10360` "
+     "(standardmäßig deaktiviert), nur einmal gelesen; standardmäßig deaktiviert.", "FW, M")
+_add("input_evu2", "status",
+     "Level of the digital input EVU 2: on = level 1. The name is proven by the firmware (`EVU2in`, item "
+     "`t0/0x2b`); the meaning of the levels is not. Measured: constant 0 on the reference installation (the native "
+     "`evu2` is off), so nothing is known about the other state. Same register as `raw_10361`, read once; disabled "
+     "by default.",
+     "Pegel des digitalen Eingangs EVU 2: an = Pegel 1. Der Name ist von der Firmware belegt (`EVU2in`, Item "
+     "`t0/0x2b`), die Bedeutung der Pegel nicht. Gemessen: konstant 0 an der Referenzanlage (das native `evu2` "
+     "ist aus), über den anderen Zustand ist also nichts bekannt. Dasselbe Register wie `raw_10361`, nur einmal "
+     "gelesen; standardmäßig deaktiviert.", "FW, M")
 
 _add("firmware_version", "system",
      "Firmware version of the controller as text, for example `3.92.3`, composed of the registers 10400, 10401 and "

@@ -9,6 +9,12 @@
           "host": "Host",
           "port": "Port",
           "slave": "Geräte-ID (Slave)"
+        },
+        "data_description": {
+          "name": "Wird in Home Assistant angezeigt und steckt in den Entitäts-IDs.",
+          "host": "IP-Adresse oder Hostname der Wärmepumpe.",
+          "port": "Modbus/TCP-Port der Smart-Home-Schnittstelle. Standard ist 502.",
+          "slave": "Modbus-Geräte-ID der Smart-Home-Schnittstelle. Standard ist 1."
         }
       },
       "reconfigure": {
@@ -17,6 +23,11 @@
           "host": "Host",
           "port": "Port",
           "slave": "Geräte-ID (Slave)"
+        },
+        "data_description": {
+          "host": "IP-Adresse oder Hostname der Wärmepumpe.",
+          "port": "Modbus/TCP-Port der Smart-Home-Schnittstelle. Standard ist 502.",
+          "slave": "Modbus-Geräte-ID der Smart-Home-Schnittstelle. Standard ist 1."
         }
       },
       "discovery_confirm": {
@@ -384,6 +395,33 @@
       },
       "cooling_release": {
         "name": "Kühlen: freigegeben"
+      },
+      "pump_heating": {
+        "name": "Pumpe: Heizung (HUP)"
+      },
+      "pump_hot_water": {
+        "name": "Pumpe: Warmwasser (BUP)"
+      },
+      "pump_circulation": {
+        "name": "Pumpe: Zirkulation (ZIP)"
+      },
+      "output_vbo": {
+        "name": "Ausgang: VBO"
+      },
+      "output_fp1": {
+        "name": "Ausgang: FP1"
+      },
+      "output_fp2": {
+        "name": "Ausgang: FP2"
+      },
+      "output_fp3": {
+        "name": "Ausgang: FP3"
+      },
+      "input_evu": {
+        "name": "Eingang: EVU (Pegel 1 = an)"
+      },
+      "input_evu2": {
+        "name": "Eingang: EVU 2 (Pegel 1 = an)"
       },
       "cap_heating": {
         "name": "Ausstattung: Heizen"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -32,6 +33,10 @@ def _raw(reg: Register, value: Any) -> int | bool | None:
     return raw % 0x10000
 
 
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
 def _scrub(value: Any, secrets: set[str]) -> Any:
     """Remove secret strings that might be embedded in free text (e.g. a title that contains the IP)."""
     if isinstance(value, str):
@@ -54,7 +59,7 @@ async def async_get_config_entry_diagnostics(
     integration = await async_get_integration(hass, entry.domain)
 
     blocks: dict[str, Any] = {}
-    for block in plan_blocks(coordinator.registers):
+    for block in plan_blocks(coordinator.polled_registers):
         name = f"{block.kind}_{block.start}_{block.count}"
         blocks[name] = {
             "kind": block.kind,
@@ -72,6 +77,8 @@ async def async_get_config_entry_diagnostics(
         }
 
     features = entry.options.get(CONF_FEATURES)
+    stats = coordinator.poll_stats
+    interval = coordinator.update_interval
     flags = {feature: data.get(cap) for feature, cap in FEATURE_CAPABILITY.items()}
     result = {
         "integration_version": str(integration.version),
@@ -102,6 +109,21 @@ async def async_get_config_entry_diagnostics(
                 coordinator.client.last_reconnect.isoformat() if coordinator.client.last_reconnect else None
             ),
             "reconnect_is_outage_signal": coordinator.reconnect_signal_active,
+        },
+        "polling": {
+            "interval_seconds": interval.total_seconds() if interval else None,
+            "polls": stats.polls,
+            "failed_polls": stats.failed,
+            "failed_in_a_row": coordinator.failed_in_a_row,
+            "last_poll_seconds": stats.last_duration,
+            "last_success": _iso(stats.last_success),
+            "last_failure": _iso(stats.last_failure),
+            "last_error": stats.last_error,
+            "registers_polled": len(coordinator.polled_registers),
+            # Registers of disabled entities are not read until their entity is enabled.
+            "registers_not_polled": sorted(
+                reg.key for reg in coordinator.registers if reg not in coordinator.polled_registers
+            ),
         },
         "blocks": blocks,
     }

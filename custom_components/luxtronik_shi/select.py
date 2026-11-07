@@ -11,6 +11,9 @@ from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
 from .registers import Register
 
+# One write at a time per platform; the Modbus client serialises access to the SHI anyway.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

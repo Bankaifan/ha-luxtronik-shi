@@ -20,6 +20,10 @@ MAX_SCAN_INTERVAL = 300
 # Repair issues (issue #24)
 # First firmware with the circulation pump and extra hot water registers (README note on the features).
 MIN_FIRMWARE = (3, 92)  # firmware 3.92.0
+# A poll that fails once is not shown as "unavailable" on every entity: the previous values stay for this many
+# failed polls in a row (a short glitch of the network or a busy controller). The failure still counts for the
+# unreachable issue and for the outage signal of the restore and the change notices.
+POLL_FAILURES_TOLERATED = 1
 UNREACHABLE_AFTER = 600  # seconds of consecutive failed polls before the "SHI unreachable" issue is raised
 ISSUE_FIRMWARE_OLD = "firmware_old"
 ISSUE_UNREACHABLE = "shi_unreachable"

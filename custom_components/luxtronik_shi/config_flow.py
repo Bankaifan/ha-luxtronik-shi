@@ -89,10 +89,15 @@ def _selected(user_input: dict[str, Any]) -> list[str]:
     return [feature for feature in FEATURES if user_input.get(feature)]
 
 
-def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
+def default_name(language: str) -> str:
+    """Suggested name of a new heat pump in the language of Home Assistant (it ends up in the entity IDs)."""
+    return "Wärmepumpe" if language.split("-")[0].lower() == "de" else "Heat pump"
+
+
+def _user_schema(defaults: dict[str, Any], language: str) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "Wärmepumpe")): str,
+            vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, default_name(language))): str,
             vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, vol.UNDEFINED)): str,
             vol.Required(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=65535)
@@ -136,7 +141,7 @@ class LuxtronikConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = error
         return self.async_show_form(
             step_id="user",
-            data_schema=_user_schema(user_input or {}),
+            data_schema=_user_schema(user_input or {}, self.hass.config.language),
             errors=errors,
         )
 
@@ -180,7 +185,9 @@ class LuxtronikConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_equipment()
         return self.async_show_form(
             step_id="discovery_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_NAME, default="Wärmepumpe"): str}),
+            data_schema=vol.Schema(
+                {vol.Required(CONF_NAME, default=default_name(self.hass.config.language)): str}
+            ),
             description_placeholders={"host": self._data[CONF_HOST]},
         )
 

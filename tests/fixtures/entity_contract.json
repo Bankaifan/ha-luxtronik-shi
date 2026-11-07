@@ -20,8 +20,17 @@
     "heatpump_vd2_status",
     "heatpump_zwe2_status",
     "heatpump_zwe3_status",
+    "input_evu",
+    "input_evu2",
     "online",
-    "pool_configured"
+    "output_fp1",
+    "output_fp2",
+    "output_fp3",
+    "output_vbo",
+    "pool_configured",
+    "pump_circulation",
+    "pump_heating",
+    "pump_hot_water"
   ],
   "climate": [
     "climate_heating"

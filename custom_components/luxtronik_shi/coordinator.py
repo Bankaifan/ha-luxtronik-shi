@@ -9,11 +9,12 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from time import monotonic as _monotonic
+from time import perf_counter
 from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -43,6 +44,7 @@ from .const import (
     MODEL,
     OUTAGE_WATCH_KEYS,
     OWN_WRITE_WINDOW,
+    POLL_FAILURES_TOLERATED,
     RECONNECT_GUARD_COUNT,
     RECONNECT_GUARD_POLLS,
     RESET_TO_DEFAULT_SUFFIXES,
@@ -57,6 +59,7 @@ from .const import (
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
+from .poll_plan import select_polled
 from .registers import (
     ALL_REGISTERS,
     AREAS,
@@ -80,6 +83,18 @@ WRITABLE_PLATFORMS = ("number", "select", "switch")
 EVENT_LOGBOOK_ENTRY = "logbook_entry"
 # Translation key (category "exceptions") of the logbook text of a change outside Home Assistant.
 LOGBOOK_EXTERNAL_CHANGE = "external_change_logbook"
+
+
+@dataclass
+class PollStats:
+    """Counters of the regular polls for the diagnostics download (kept in memory, no Modbus access)."""
+
+    polls: int = 0
+    failed: int = 0  # includes a failure whose previous values were kept (POLL_FAILURES_TOLERATED)
+    last_duration: float | None = None  # seconds of the latest poll, failed or not
+    last_success: datetime | None = None
+    last_failure: datetime | None = None
+    last_error: str | None = None
 
 
 @dataclass
@@ -154,7 +169,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._values: dict[str, Any] = {}
         self._tick = 0
         self.registers = registers
-        self._blocks = plan_blocks(registers)
+        # Registers with an enabled entity, plus everything the integration reads itself (poll_plan.py). The
+        # others are read once their entity gets enabled (async_track_entity_enablement).
+        self._polled = select_polled(hass, entry.entry_id, registers)
+        self._blocks = plan_blocks(self._polled)
         self._missing: set[str] = set()
         # Entities only link to devices by identifier; the devices themselves are created in
         # async_setup_devices() through the device registry.
@@ -162,6 +180,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._main_device_id: str | None = None
         self._sw_version: str | None = None
         self._first_failure: datetime | None = None  # start of the current run of failed polls
+        self.poll_stats = PollStats()
+        self._failed_polls = 0  # failed polls in a row; the first POLL_FAILURES_TOLERATED keep the old values
         # Outage notice: watched control values of the last successful poll. Deliberately in memory only, so
         # it is lost on a Home Assistant restart (a change during an outage over a restart is not noticed).
         self._snapshot: dict[str, Any] = {}
@@ -223,6 +243,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return self.device_info
         return DeviceInfo(identifiers={(DOMAIN, f"{self.config_entry.entry_id}_{area}")})
 
+    def active_areas(self) -> set[str | None]:
+        """Sub-devices that have at least one entity for the configured equipment (``None``: main device)."""
+        return {area_of(reg.key) for reg in self.registers}
+
     def async_setup_devices(self) -> None:
         """Create the main device and the sub-devices that have at least one entity.
 
@@ -239,7 +263,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._main_device_id = main.id
         via_kwarg = "via_device_id" in inspect.signature(registry.async_get_or_create).parameters
-        used = {area_of(reg.key) for reg in self.registers}
+        used = self.active_areas()
         for area in AREAS:
             if area not in used:
                 continue
@@ -255,8 +279,80 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         self._update_firmware()
 
+    @property
+    def failed_in_a_row(self) -> int:
+        """Failed polls since the last successful one."""
+        return self._failed_polls
+
+    # ------------------------------------------------------------------ polled registers
+    @property
+    def polled_registers(self) -> tuple[Register, ...]:
+        """Registers read by the regular poll (enabled entities and internal keys)."""
+        return self._polled
+
+    @callback
+    def async_track_entity_enablement(self) -> CALLBACK_TYPE:
+        """Follow entities that are enabled or disabled while the entry is loaded.
+
+        A newly enabled entity is read once at once, so it does not wait for its first poll slot (rarely read
+        registers can be 30 cycles apart); the plan for the following polls includes it. A disabled one leaves
+        the plan. Home Assistant reloads the entry soon after such a change anyway; this closes the gap.
+        """
+
+        @callback
+        def _changed(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
+            if event.data["action"] != "update" or "disabled_by" not in event.data["changes"]:
+                return
+            self._replan()
+
+        return self.hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _changed)
+
+    @callback
+    def _replan(self) -> None:
+        polled = select_polled(self.hass, self.config_entry.entry_id, self.registers)
+        old = {reg.key for reg in self._polled}
+        new = {reg.key for reg in polled}
+        if old == new:
+            return
+        added = tuple(reg for reg in polled if reg.key not in old)
+        for key in old - new:
+            self._values.pop(key, None)
+        self._polled = polled
+        rejected = [(b.kind, b.start, b.start + b.count) for b in self._blocks if b.split]
+        self._blocks = plan_blocks(polled)
+        for block in self._blocks:  # a range the SHI rejected as a block stays read register by register
+            block.split = any(
+                kind == block.kind and block.start < end and start < block.start + block.count
+                for kind, start, end in rejected
+            )
+        if added:
+            self.config_entry.async_create_task(self.hass, self._read_added(added))
+
+    async def _read_added(self, added: tuple[Register, ...]) -> None:
+        """Read registers that joined the plan once, and hand the values to the entities."""
+        try:
+            for block in plan_blocks(added):
+                await self._read_block(block)
+        except ModbusCommError as err:
+            _LOGGER.debug("%s: newly enabled registers not read: %s", self.config_entry.title, err)
+            return  # the next regular poll reads them
+        self.data = dict(self._values)
+        self.async_update_listeners()
+
     # ------------------------------------------------------------------ reading
+    def _record_poll(self, started: float, error: str | None = None) -> None:
+        stats = self.poll_stats
+        stats.polls += 1
+        stats.last_duration = round(perf_counter() - started, 3)
+        if error is None:
+            stats.last_success = dt_util.utcnow()
+            return
+        stats.failed += 1
+        stats.last_failure = dt_util.utcnow()
+        stats.last_error = error
+
     async def _async_update_data(self) -> dict[str, Any]:
+        started = perf_counter()
         self._fresh = set()
         self._poll_changes = []
         try:
@@ -264,13 +360,24 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if self._tick % block.every == 0:
                     await self._read_block(block)
         except ModbusCommError as err:
+            self._record_poll(started, str(err))
             self._update_unreachable_issue(failed=True)
+            self._failed_polls += 1
+            if self.data is not None and self._failed_polls <= POLL_FAILURES_TOLERATED:
+                # Keep the last values instead of making every entity unavailable for a whole interval. The
+                # run of failures is still recorded (_first_failure), so the next success counts as recovery.
+                _LOGGER.info(
+                    "%s: poll failed (%s); keeping the previous values for now", self.config_entry.title, err
+                )
+                return dict(self._values)
             raise UpdateFailed(
                 translation_domain=DOMAIN,
                 translation_key="poll_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
         self._tick += 1
+        self._failed_polls = 0
+        self._record_poll(started)
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
         reconnected = self._reconnect_signal()
@@ -307,16 +414,23 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     offset = reg.address - block.start
                     self._store(reg, words[offset : offset + reg.width], poll=True)
                 return
+        shared: dict[int, list[Register]] = {}  # entities that share a register (ALIAS_OF) are read once
         for reg in block.registers:
-            await self._read_single(reg, poll=True)
+            shared.setdefault(reg.address, []).append(reg)
+        for first, *twins in shared.values():
+            await self._read_single(first, poll=True, twins=twins)
 
-    async def _read_single(self, reg: Register, *, poll: bool = False) -> None:
+    async def _read_single(
+        self, reg: Register, *, poll: bool = False, twins: list[Register] | None = None
+    ) -> None:
         try:
             words = await self.client.read(reg.kind, reg.address, reg.width)
         except ModbusIllegalAddress:
-            self._mark_missing(reg)
+            for each in (reg, *(twins or ())):
+                self._mark_missing(each)
             return
-        self._store(reg, words, poll=poll)
+        for each in (reg, *(twins or ())):
+            self._store(each, words, poll=poll)
 
     def _store(self, reg: Register, words: list[Any], *, poll: bool = False) -> None:
         """Keep a value read from the heat pump. ``poll``: read by the regular poll, not as a write's read-

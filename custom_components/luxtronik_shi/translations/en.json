@@ -9,6 +9,12 @@
           "host": "Host",
           "port": "Port",
           "slave": "Unit ID (slave)"
+        },
+        "data_description": {
+          "name": "Shown in Home Assistant and part of the entity IDs.",
+          "host": "IP address or host name of the heat pump.",
+          "port": "Modbus/TCP port of the Smart Home Interface. The default is 502.",
+          "slave": "Modbus unit ID of the Smart Home Interface. The default is 1."
         }
       },
       "reconfigure": {
@@ -17,6 +23,11 @@
           "host": "Host",
           "port": "Port",
           "slave": "Unit ID (slave)"
+        },
+        "data_description": {
+          "host": "IP address or host name of the heat pump.",
+          "port": "Modbus/TCP port of the Smart Home Interface. The default is 502.",
+          "slave": "Modbus unit ID of the Smart Home Interface. The default is 1."
         }
       },
       "discovery_confirm": {
@@ -384,6 +395,33 @@
       },
       "cooling_release": {
         "name": "Cooling: released"
+      },
+      "pump_heating": {
+        "name": "Pump: heating (HUP)"
+      },
+      "pump_hot_water": {
+        "name": "Pump: hot water (BUP)"
+      },
+      "pump_circulation": {
+        "name": "Pump: circulation (ZIP)"
+      },
+      "output_vbo": {
+        "name": "Output: VBO"
+      },
+      "output_fp1": {
+        "name": "Output: FP1"
+      },
+      "output_fp2": {
+        "name": "Output: FP2"
+      },
+      "output_fp3": {
+        "name": "Output: FP3"
+      },
+      "input_evu": {
+        "name": "Input: EVU (level 1 = on)"
+      },
+      "input_evu2": {
+        "name": "Input: EVU 2 (level 1 = on)"
       },
       "cap_heating": {
         "name": "Equipment: heating"

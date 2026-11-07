@@ -195,7 +195,8 @@ REGISTERS: tuple[Register, ...] = (
     _s("outside", 10108, "Temperatur: Außen", "Temperature: outside", dtype="int16", scale=0.1, **_TEMP),
     _s("dhw", 10120, "Temperatur", "Temperature", dtype="int16", scale=0.1, **_TEMP),
     _s("dhw_target", 10121, "Soll", "Target", scale=0.1, every=2, **_TEMP),
-    _temp_in("dhw_min", 10122, "Minimum", "Minimum", every=10),
+    # Fixed firmware constant (300 = 30.0 degC, SHI analysis), not a measurement: disabled for new installations.
+    _temp_in("dhw_min", 10122, "Minimum", "Minimum", every=10, enabled_default=False),
     _temp_in("dhw_max", 10123, "Maximum", "Maximum", every=10),
     _temp_in("dhw_limit", 10124, "Grenztemperatur", "Limit temperature", every=10),
     # mixing circuits (flow actual / target / minimum / maximum)
@@ -275,6 +276,7 @@ REGISTERS: tuple[Register, ...] = (
         "System: switching lock time",
         unit="min",
         diagnostic=True,
+        enabled_default=False,  # fixed firmware constant (20), not a measurement
         every=30,
     ),
     _s(
@@ -284,6 +286,7 @@ REGISTERS: tuple[Register, ...] = (
         "System: minimum runtime",
         unit="min",
         diagnostic=True,
+        enabled_default=False,  # fixed firmware constant (20), not a measurement
         every=30,
     ),
     _s(
@@ -783,12 +786,56 @@ _SECONDARY_KEYS = frozenset(
 )
 REGISTERS = tuple(replace(reg, diagnostic=True) if reg.key in _SECONDARY_KEYS else reg for reg in REGISTERS)
 
-ALL_REGISTERS: tuple[Register, ...] = REGISTERS + RAW_REGISTERS + CAPABILITIES
+# Binary sensors for digital outputs and inputs of the controller whose meaning the firmware analysis proves
+# (``RAW_MEANINGS``). They read the same registers as the ``raw_<address>`` sensors, which stay unchanged (keys,
+# disabled by default); ``ALIAS_OF`` names the register each one shares, and a shared address is read once. They
+# poll like their raw twin. The level is shown as read (on = 1). For the EVU inputs only the name is proven;
+# that 1 means "released" is inferred from one measured state, so they stay disabled and say "level".
+ALIAS_OF: dict[str, str] = {}
+
+
+def _flag_of_raw(key: str, address: int, de: str, en: str, **kw) -> Register:
+    raw = next(r for r in RAW_REGISTERS if r.address == address)
+    ALIAS_OF[key] = raw.key
+    return Register(
+        key=key,
+        address=address,
+        kind="input",
+        name_de=de,
+        name_en=en,
+        platform="binary_sensor",
+        every=raw.every,
+        source=raw.source,
+        **kw,
+    )
+
+
+OUTPUT_FLAGS: tuple[Register, ...] = (
+    _flag_of_raw("pump_heating", 10354, "Pumpe: Heizung (HUP)", "Pump: heating (HUP)", device_class="running"),
+    _flag_of_raw("pump_hot_water", 10355, "Pumpe: Warmwasser (BUP)", "Pump: hot water (BUP)", device_class="running"),
+    _flag_of_raw(
+        "pump_circulation", 10356, "Pumpe: Zirkulation (ZIP)", "Pump: circulation (ZIP)", device_class="running"
+    ),
+    _flag_of_raw("output_vbo", 10350, "Ausgang: VBO", "Output: VBO", diagnostic=True),
+    _flag_of_raw("output_fp1", 10351, "Ausgang: FP1", "Output: FP1", diagnostic=True),
+    _flag_of_raw("output_fp2", 10352, "Ausgang: FP2", "Output: FP2", diagnostic=True, enabled_default=False),
+    _flag_of_raw("output_fp3", 10353, "Ausgang: FP3", "Output: FP3", diagnostic=True, enabled_default=False),
+    _flag_of_raw(
+        "input_evu", 10360, "Eingang: EVU (Pegel 1 = an)", "Input: EVU (level 1 = on)",
+        diagnostic=True, enabled_default=False,
+    ),
+    _flag_of_raw(
+        "input_evu2", 10361, "Eingang: EVU 2 (Pegel 1 = an)", "Input: EVU 2 (level 1 = on)",
+        diagnostic=True, enabled_default=False,
+    ),
+)
+
+ALL_REGISTERS: tuple[Register, ...] = REGISTERS + RAW_REGISTERS + OUTPUT_FLAGS + CAPABILITIES
 
 # Keys of undocumented raw values (shown with a generic "Raw value: <address>" name).
 # Raw values without a known meaning (they share the generic "Raw value: <address>" entity name).
 RAW_KEYS: frozenset[str] = frozenset(reg.key for reg in RAW_REGISTERS if reg.address not in RAW_MEANINGS)
-_LEGACY_EXCLUDED: frozenset[str] = frozenset(reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED))
+_LEGACY_EXCLUDED: frozenset[str] = frozenset(reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED, *OUTPUT_FLAGS))
 
 # -------------------------------------------------------------- installation equipment
 # Optional parts of an installation. Registers of a part that is switched off in the options are
@@ -992,7 +1039,17 @@ AREAS: tuple[str, ...] = ("heating", "hot_water", "cooling", "pool")
 _COOLING_KEYS = frozenset({"cooling_block", "cooling_status", "energy_el_cooling", "energy_th_cooling"})
 _POOL_KEYS = frozenset({"pool_block", "pool_status", "energy_el_pool", "energy_th_pool"})
 _HOT_WATER_KEYS = frozenset(
-    {"circulation", "extra_dhw", "hot_water_status", "energy_el_dhw", "energy_th_dhw", "hours_dhw", "cop_dhw"}
+    {
+        "circulation",
+        "extra_dhw",
+        "hot_water_status",
+        "energy_el_dhw",
+        "energy_th_dhw",
+        "hours_dhw",
+        "cop_dhw",
+        "pump_hot_water",
+        "pump_circulation",
+    }
 )
 _HEATING_KEYS = frozenset(
     {
@@ -1004,6 +1061,7 @@ _HEATING_KEYS = frozenset(
         "energy_th_heating",
         "hours_heating",
         "cop_heating",
+        "pump_heating",
     }
 )
 
