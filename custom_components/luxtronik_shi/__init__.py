@@ -6,9 +6,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 
-from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .coordinator import LuxtronikCoordinator
+from .const import CONF_FEATURES, CONF_SCAN_INTERVAL, CONF_SLAVE, DEFAULT_SCAN_INTERVAL, DOMAIN, STORE_VERSION
+from .coordinator import LuxtronikCoordinator, restore_store_key
 from .modbus_client import LuxtronikModbusClient
 from .registers import CLIMATE_KEYS, RENAMED_KEYS, WATER_HEATER_KEYS, active_registers
 
@@ -57,6 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
     # Entries created before 0.3.0 have no equipment option: keep every entity.
     registers = active_registers(entry.options.get(CONF_FEATURES))
     coordinator = LuxtronikCoordinator(hass, entry, client, scan_interval, registers)
+    await coordinator.async_load_remembered()
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception:
@@ -85,5 +87,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         entry.runtime_data.async_delete_issues()
+        await entry.runtime_data.async_save_last_poll()
         await entry.runtime_data.client.close()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -> None:
+    """Delete the values remembered for a restore after a device reset."""
+    await Store(hass, STORE_VERSION, restore_store_key(entry.entry_id)).async_remove()

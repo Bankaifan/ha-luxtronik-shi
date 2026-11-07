@@ -56,6 +56,7 @@
         "title": "Options",
         "data": {
           "scan_interval": "Update interval (seconds)",
+          "restore_after_reset": "Restore values after a device reset",
           "mk1": "Mixing circuit 1",
           "mk2": "Mixing circuit 2",
           "mk3": "Mixing circuit 3",
@@ -64,7 +65,8 @@
           "room_unit": "Room unit (room temperature)"
         },
         "data_description": {
-          "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically."
+          "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically.",
+          "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts. When on, the integration writes the values it last set itself back, but only when at least two of them fall back to 0 at once, or one after a connection outage. Only modes, levels, offsets and setpoints are restored, never blocks. A value someone else sets to 0 around a connection outage can be overwritten, so leave this off if another system also writes these registers. Off by default."
         },
         "description": "Parts of the installation that are switched off are not polled and get no entities. Their entity IDs stay reserved and come back when the part is switched on again."
       }

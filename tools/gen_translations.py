@@ -59,9 +59,13 @@ STATIC = {
             "step": {
                 "init": {
                     "title": "Options",
-                    "data": {"scan_interval": "Update interval (seconds)"},
+                    "data": {
+                        "scan_interval": "Update interval (seconds)",
+                        "restore_after_reset": "Restore values after a device reset",
+                    },
                     "data_description": {
-                        "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically."
+                        "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically.",
+                        "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts. When on, the integration writes the values it last set itself back, but only when at least two of them fall back to 0 at once, or one after a connection outage. Only modes, levels, offsets and setpoints are restored, never blocks. A value someone else sets to 0 around a connection outage can be overwritten, so leave this off if another system also writes these registers. Off by default.",
                     },
                 }
             }
@@ -100,9 +104,13 @@ STATIC = {
             "step": {
                 "init": {
                     "title": "Optionen",
-                    "data": {"scan_interval": "Aktualisierungsintervall (Sekunden)"},
+                    "data": {
+                        "scan_interval": "Aktualisierungsintervall (Sekunden)",
+                        "restore_after_reset": "Werte nach einem Geräte-Reset wiederherstellen",
+                    },
                     "data_description": {
-                        "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt."
+                        "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
+                        "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur, wenn mindestens zwei davon gleichzeitig auf 0 fallen oder einer nach einem Verbindungsausfall. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Setzt jemand anderes rund um einen Verbindungsausfall einen Wert auf 0, kann er überschrieben werden – lass die Option deshalb aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus.",
                     },
                 }
             }

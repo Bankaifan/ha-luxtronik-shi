@@ -152,16 +152,90 @@ The first two disappear by themselves when their condition ends.
 
 **Values changed after an outage:** if the controller was unreachable (e.g. restart or power cut, the SHI holding
 registers are volatile) and comes back with different values, a warning lists the old and new values. **This is a
-notice only: the integration never writes anything back.** The comparison uses the normal poll, no extra Modbus reads.
+notice only: the integration never writes anything back**, unless you turn on
+[restore after a device reset](#restore-after-a-device-reset-option). The comparison uses the normal poll, no extra Modbus reads.
 The issue disappears when the values match the pre-outage values again or when you dismiss it. The values from before
 the outage are kept in memory only, so an outage that spans a Home Assistant restart is not noticed.
+
+## Restore after a device reset (option)
+
+The SHI forgets every value set over Modbus when the controller restarts, and when its watchdog expires after 10
+minutes without any Modbus access (every read re-arms it, so this only happens while nothing polls; see
+[SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). The holding registers
+then read their reset value. Measured on the reference installation (LWDV 91-1/3, firmware 3.92.3): after two
+controller reboots the heating mode read `off` (raw 0) instead of `setpoint`, and once the heating level read raw 0
+instead of 2.
+
+Under *Options*, **Restore values after a device reset** (off by default) makes the integration write such values back:
+
+* **Only its own values, and only settings.** It remembers a value only after it was written through one of its own
+  entities (number, select, climate, water heater) and read back unchanged. Only the **mode, level, offset and setpoint**
+  of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint are
+  remembered (`RESTORE_KEYS` in `const.py`). Blocks (heating, hot water, cooling, pool), circulation, extra hot water
+  and the power limit are **never** restored: an optimizer such as the Heat Pump Optimizer owns them live, and
+  re-applying a block after a long downtime would undo the watchdog's fail-safe (everything released). The modes and
+  setpoints in the list (for example `cfg_heating_mode`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`) are restored
+  even if an optimizer writes them; its next write wins. A failed write or a different read-back forgets the
+  key. The values are stored per entry in Home Assistant's storage (`.storage/luxtronik_shi.restore.<entry_id>`), so a
+  restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `off`,
+  offset 0) is remembered like any other write, so there is nothing left to restore for it.
+* **Only on evidence of a reset.** The values come from the normal poll; there are no extra reads. A reset is
+  assumed when, within the first full read cycle after the trigger,
+  * at least **two** remembered values that are not 0 read 0, or
+  * the connection was lost before (failed polls) and at least one remembered non-zero value reads 0, while at least
+    two values are remembered. A gap of more than 10 minutes since the last successful poll, for example a long Home
+    Assistant downtime, counts as such an outage, because the watchdog has then expired. The time of the last
+    successful poll is stored with the values, at most once a minute and on unload; to make up for that, the gap must
+    exceed 11 minutes. Remembered values older than 24 hours (since the last successful poll) are dropped when the
+    integration starts, so nothing is restored from them.
+* **Setpoints come back with the reset.** A reset does not set setpoints to 0: the controller reverts
+  them to their persisted or default value, while modes, levels and blocks read 0
+  ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). So when the evidence above confirms a reset, a
+  remembered setpoint that reads a different non-zero value in the same read cycle is part of the reset and is
+  restored with its circuit: values first, the mode last. Example: hot water mode `setpoint` at 54 °C and
+  heating mode `offset` with offset 0 – after a reboot both modes and the 54 °C come back; a mode that was `off` stays
+  `off`.
+* **Changes by others are respected where they can be recognised.** Without reset evidence, a remembered value that
+  reads a *different non-zero* value was changed outside this integration, for example by another Modbus client: it
+  is forgotten (logged at info level) and not restored. A mode or level that reads a different non-zero value is
+  always treated this way, and so is an offset (its reset value is not proven). A setpoint that reads 0 is never a
+  reset (0 is outside every setpoint range), so it is an external change too. Zeros without the evidence above are
+  treated the same way. Mode, setpoint, offset and
+  level of one circuit form a group: once any of them was changed by someone else, that circuit's mode is forgotten as well and is only
+  restored again after it was written through Home Assistant again, so no combination is created that nobody set.
+* **No write loops.** Each key is restored once per detected reset, with read-back. Modes are written last; a mode
+  is not restored if another value of its circuit failed to restore. A restore whose write fails or reads
+  back a different value forgets that key and is not retried. A reset detected again within 15 minutes of a restore is
+  not restored. Restored keys are logged at warning level.
+
+The [outage notice](#repair-issues) keeps working as before; with the option on it usually disappears with the next
+poll, because the values match again. *Download diagnostics* lists the remembered values.
+
+**Limits:**
+
+* **A change to 0 by someone else can be overwritten.** The controller's reset value is 0, so a value another Modbus
+  client sets to 0 during or right after a connection outage, or two remembered values
+  set to 0 at the same time, look exactly like a reset and are restored over that change. **Leave the option off if
+  another system also writes these registers.**
+
+* If only **one** value is remembered and it reads 0, a reset cannot be told apart from someone setting it to its reset
+  value. It is not restored (and forgotten).
+* Without a connection outage before it, a **single** value reading 0 counts as an external change, even if the
+  controller reset it.
+* The evidence for a reset is always a mode, level or offset reading 0, never a setpoint. A reset in which no
+  remembered mode or level falls to 0 (for example only setpoints are remembered) is not recognised; the reverted setpoints then count as
+  external changes and are forgotten. If someone else changes a setpoint in the same read cycle as a real reset, it
+  is restored over that change.
+* The detection uses the normal poll interval, so the restore comes one or two polls after the controller is back.
+* A restore writes to the heat pump without a user action. Writes through Home Assistant and a restore never run at
+  the same time; a write that arrives during a restore waits for it and then applies.
 
 ## Diagnostics
 
 Under *Settings → Devices & services → Luxtronik SHI*, the ⋮ menu of the entry offers **Download diagnostics**. It
 creates a file with the integration and Home Assistant
 version, the selected equipment and equipment flags, the firmware and the last polled register values (raw and
-decoded). Host address, MAC address and the entry's unique ID and title are redacted. The file is built from the last
+decoded) and, with the [restore option](#restore-after-a-device-reset-option) on, the remembered values. Host address, MAC address and the entry's unique ID and title are redacted. The file is built from the last
 poll, without extra Modbus reads. Please attach it to bug reports.
 
 ## Beta versions
@@ -228,7 +302,8 @@ those who deliberately stay on YAML, no longer used in production and not tested
 
 * **Values can fall back after a controller restart.** The SHI holding registers are volatile. After a power cut or
   a controller restart, values written through this integration (for example the heating or hot water block) can
-  return to the controller default, e.g. `off`. The integration does **not** write them back. If Home Assistant was
+  return to the controller default, e.g. `off`. By default the integration does **not** write them back; see
+  [restore after a device reset](#restore-after-a-device-reset-option) for the option that does. If Home Assistant was
   running during the outage, a [repair issue](#repair-issues) shows what changed. Check the block and mode entities
   after a power outage, or have your automation or planner write them again.
 * **Return / return target:** the published register list names 10100 "return target" and 10101 "return actual".

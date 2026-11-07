@@ -49,6 +49,38 @@ versioning follows [Semantic Versioning](https://semver.org/):
   that set or read a level option.
 
 ### Added
+- **Restore after a device reset** (option, off by default, so existing installations behave as before). The SHI drops
+  every value set over Modbus when the controller reboots or its watchdog expires (see *SHI watchdog* in
+  `docs/firmware-3.92.3-shi-analysis.md`); measured on the reference installation (LWDV 91-1/3, FW 3.92.3), heating
+  mode (10000) read `off` instead of `setpoint` after two reboots and heating level (10003) raw 0 instead of 2.
+  - Only an allow-list is remembered and restored (`RESTORE_KEYS` in `const.py`): mode, level, offset and setpoint of
+    each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint. Blocks,
+    circulation, extra hot water and the power limit are never restored, because an optimizer owns them live and
+    re-applying a block would undo the watchdog's fail-safe.
+  - A value is remembered after a write through the integration's own entities whose read-back matches (persisted per
+    entry with Home Assistant's storage, so it survives a restart). Values set back to neutral (e.g. mode `off`) are
+    remembered as such and so not restored.
+  - Evidence of a reset, from the normal poll only: at least two remembered non-zero values reading 0, or a connection
+    outage followed by such a zero while at least two values are remembered. A gap of more than 660 s (600 s watchdog
+    plus the 60 s save interval) since the last successful poll, e.g. a long Home Assistant downtime, counts like an
+    outage. Remembered values older than 24 hours are dropped at setup. The last-poll time is stored at most once a minute, on unload, and only while
+    something is remembered.
+  - A reset reverts setpoints to their persisted or default value, not 0 (firmware analysis). When the evidence
+    confirms a reset, a remembered setpoint that reads a different non-zero value in the same read cycle is
+    part of the reset and is restored with its circuit (values first, mode last), e.g. hot water mode `setpoint` with
+    54 °C and heating mode `offset` both come back after a reboot. Only setpoints are treated this way (offsets have no
+    proven reset value), and a setpoint reading 0 is always an external change and never counts as reset evidence.
+  - Without that evidence, a different non-zero value, or a lone zero, is an external change and is forgotten. If any
+    member of a circuit (mode, setpoint, offset, level) changed externally, that circuit's mode is forgotten too and
+    only restorable again after the next write through Home Assistant. Modes and setpoints in the list are restored
+    even if an optimizer writes them; its next write wins.
+    **Limit:** a value another Modbus client sets to 0 during or right after an outage, or two values set to 0 at
+    once, cannot be told apart from a reset and is restored over that change. Leave the option off if another system
+    also writes these registers.
+  - Restores run with read-back, once per reset. Modes are written last, and a mode is not restored (and is
+    forgotten) if another value of its circuit failed to restore in the same run. A failed restore is not retried, and a reset seen again within
+    15 minutes is not restored. Writes from Home Assistant and restores are serialised by a lock.
+  - Diagnostics list the remembered values. No extra polling, no new entities.
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
@@ -66,7 +98,21 @@ versioning follows [Semantic Versioning](https://semver.org/):
   in the entity contract fixture; `RENAMED_KEYS` in `registers.py` tells the contract test that they were renamed on
   purpose.
 
+### Documentation
+- `docs/firmware-3.92.3-shi-analysis.md`: new section *SHI watchdog* (10-minute watchdog, re-armed by every Modbus
+  access, discards the SHI values on expiry; reboot evidence from the reference installation; reset values of other
+  registers still open). The README cites it.
+
 ### Tests
+- `tests/test_restore_after_reset.py`: setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
+  external changes; blocks and extra hot water are never remembered or restored, the allow-list only
+  names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
+  skipped, a write whose read-back differs is not remembered, the group rule across windows, modes restored last and skipped after a failed value of their circuit, a lone zero forgets its circuit's mode, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no
+  last-poll save while nothing is remembered; watchdog gap after a Home Assistant restart (over 600 s counts as an outage,
+  a short restart does not), the last-poll time is written at most once a minute; reboot simulation with restore and read-back, external changes adopted and
+  forgotten (also during a reset), the single-register ambiguity, option off writes nothing and stores nothing, no
+  retry after a failed write or a wrong read-back, cooldown, restore from the store after a Home Assistant restart,
+  values set back to neutral through the select entities, diagnostics.
 - `tests/test_migration.py`: the renamed entities keep their entity ID, state, unit and disabled flag after the
   migration (also for entries without equipment option and when the new unique ID already exists); the added raw
   values are read, disabled and not polled by entries without equipment option. The contract test accepts a missing

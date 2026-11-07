@@ -7,6 +7,7 @@ DOMAIN = "luxtronik_shi"
 CONF_SLAVE = "slave"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_FEATURES = "features"
+CONF_RESTORE_AFTER_RESET = "restore_after_reset"
 
 DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
@@ -28,6 +29,72 @@ OUTAGE_WATCH_KEYS = {
     "cfg_heating_mode": "heating mode",
     "cfg_dhw_mode": "hot water mode",
 }
+
+# Restore after a device reset (option, off by default). The SHI drops every value set over Modbus when the
+# controller reboots or its watchdog expires; the holding registers then read their reset value 0.
+DEFAULT_RESTORE_AFTER_RESET = False
+STORE_VERSION = 1
+# SHI watchdog: without any Modbus access for this long the SHI discards every value set over it
+# (docs/firmware-3.92.3-shi-analysis.md, section "SHI watchdog"). A longer gap since the last successful poll,
+# e.g. a Home Assistant downtime, counts like an observed communication outage for the reset detection.
+SHI_WATCHDOG_TIMEOUT = 600  # seconds
+# The time of the last successful poll is persisted at most this often (no disk write on every poll). The gap
+# is compared against SHI_WATCHDOG_TIMEOUT plus this interval, so the throttling never fakes an outage.
+LAST_POLL_SAVE_INTERVAL = 60  # seconds
+# Only these keys are remembered and restored: the mode, level, offset and setpoint of each circuit, and the
+# room setpoint. Blocks (heating_block, dhw_block, cooling_block, pool_block), circulation, extra_dhw (effect
+# open, may be one-shot) and the power limit are deliberately left out: an optimizer such as the Heat Pump
+# Optimizer owns them live, and re-applying a block after a long downtime would invert the fail-safe of the
+# SHI watchdog (all values released). Edit this set to change what is restored.
+RESTORE_KEYS: frozenset[str] = frozenset(
+    {
+        "cfg_heating_mode",
+        "cfg_heating_setpoint",
+        "cfg_heating_offset",
+        "cfg_heating_level",
+        "cfg_dhw_mode",
+        "cfg_dhw_setpoint",
+        "cfg_dhw_offset",
+        "cfg_dhw_level",
+        "cfg_mk1_mode",
+        "cfg_mk1_setpoint",
+        "cfg_mk1_offset",
+        "cfg_mk1_level",
+        "cfg_mk1_cool_mode",
+        "cfg_mk1_cool_setpoint",
+        "cfg_mk1_cool_offset",
+        "cfg_mk2_mode",
+        "cfg_mk2_setpoint",
+        "cfg_mk2_offset",
+        "cfg_mk2_level",
+        "cfg_mk2_cool_mode",
+        "cfg_mk2_cool_setpoint",
+        "cfg_mk2_cool_offset",
+        "cfg_mk3_mode",
+        "cfg_mk3_setpoint",
+        "cfg_mk3_offset",
+        "cfg_mk3_level",
+        "cfg_mk3_cool_mode",
+        "cfg_mk3_cool_setpoint",
+        "cfg_mk3_cool_offset",
+        "cfg_overall_mode",
+        "cfg_overall_offset",
+        "cfg_overall_level",
+        "cfg_room_setpoint",
+    }
+)
+# Keys whose reset value is not 0: on watchdog expiry and at boot the controller reverts setpoints to their
+# persisted parameter or fixed default, while modes, levels and blocks read 0
+# (docs/firmware-3.92.3-shi-analysis.md, "SHI watchdog"). A different non-zero value of these keys in a window
+# with reset evidence is part of the reset and is restored with it. A setpoint reading 0 is never a reset
+# (0 is outside every setpoint range), so it is an external change and does not count as evidence. Offsets
+# are not listed: their reset value is not proven.
+RESET_TO_DEFAULT_SUFFIXES = ("_setpoint",)
+# Remembered values older than this (time since the last successful poll) are dropped at setup: an optimizer
+# such as the Heat Pump Optimizer rewrites modes and setpoints live, so a day-old value is no longer meant.
+RESTORE_MAX_GAP = 24 * 3600  # seconds
+# A device reset detected again within this time after a restore is not restored again (no write loops).
+RESTORE_COOLDOWN = 900  # seconds
 
 MANUFACTURER = "alpha innotec / Luxtronik"
 MODEL = "Smart Home Interface (Modbus/TCP)"

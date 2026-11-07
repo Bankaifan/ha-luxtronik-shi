@@ -90,6 +90,11 @@ async def async_get_config_entry_diagnostics(
         },
         "firmware": {k: data.get(k) for k in ("fw_platform", "fw_major", "fw_minor")},
         "last_update_success": coordinator.last_update_success,
+        # Raw values this integration wrote and would re-apply after a device reset (option on).
+        "restore_after_reset": {
+            "enabled": coordinator.restore_enabled,
+            "remembered": coordinator.remembered,
+        },
         "blocks": blocks,
     }
     secrets = {str(v) for k, v in entry.data.items() if k in (CONF_HOST, CONF_MAC) and v}

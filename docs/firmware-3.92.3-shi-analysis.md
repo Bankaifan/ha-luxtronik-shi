@@ -60,6 +60,39 @@ Verified directly from the constructor arguments, no deviation from the current 
   `10122` = `300` (30.0 °C, DHW minimum; confirmed live: `30.0`), `10203`/`10204` = `20` (minutes),
   firmware version registers `10400`/`10401`/`10402` = `3`/`92`/`3` → **V3.92.3**.
 
+## SHI watchdog
+
+Recorded from the reverse engineering of 2026-11-07 (function addresses only, no code):
+
+- `SmartHomeInterface::Monitor` is a `Tick_t` task that runs **once per second**. Evidence: the hwclock counter
+  86400 in `FUN_0047e7d4`.
+- Its counter counts to **600**, i.e. **10 minutes** (tick at `0x000dff50`).
+- The re-arm at `0x000de744` is called at the start of the SHI dispatcher `FUN_000d9298`, so **every Modbus access
+  resets the counter, a pure read included**. While an integration polls, the watchdog does not expire.
+- On expiry, `0x00186120` calls `GDI::reloadIfSetBy` (`0x000882f0`) for the SHI source, which **discards every value
+  last set over the SHI**; the holding registers then read their reset value.
+- **Reboots have the same effect.** The Home Assistant history of the reference installation shows the reset on
+  2026-11-05 19:15 and 2026-11-06 13:16. At those times the separate port-8889 integration dropped as well, so these
+  were controller reboots, not watchdog expiries. Measured after them: heating mode (10000) read raw 0 instead of 1,
+  and on 2026-11-05 heating level (10003) read raw 0 instead of 2.
+- **What the revert restores** (`reloadIfSetBy` walks the items of t1 and t2 and calls the revert function
+  `0x000881e0` for each item last set by the SHI source): either the **persisted parameter value** (type 1,
+  `0x00244298`) or the **fixed default** (type 2, `FUN_00087e9c`), written back with source `0xFFFFFFFF`, so the web
+  UI shows "---" again. Result: **modes, levels and blocks read 0; setpoints read their persisted value or their
+  default, not 0.**
+- **Boot defaults.** At boot, `FUN_0009da20` sets every t2 item (0..0x28) to its default from `FUN_00087e9c` with
+  source 0. Setpoints have real defaults (examples seen: 350, 400, 300, 200); levels (ids 0x22–0x27), modes and blocks
+  default to 0.
+- **A holding that was never set reads its boot default, not `0x7FFF`.** The dispatcher `0x000d9298` returns
+  `0x7FFF` only when the register's availability check (`0x000dfc98` → `0x003d9e0c`) fails, which depends on the
+  configuration (for example absent equipment), not on who set the value. 10003 reads 0 when never set, matching the
+  device.
+- **Open:** the exact default of each individual setpoint register, and whether a given setpoint reverts to a
+  persisted parameter (type 1) or a fixed default (type 2).
+
+The integration uses these facts for the optional *restore after a device reset*: `SHI_WATCHDOG_TIMEOUT` in
+`const.py` is the 600 s above.
+
 ## Open questions / proposed follow-ups
 
 1. **Level option order (`_LEVELS`).** The firmware proves the level feature has one *increase* and one
