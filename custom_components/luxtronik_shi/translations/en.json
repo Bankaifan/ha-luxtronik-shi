@@ -196,16 +196,88 @@
         }
       },
       "heating_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Disabled",
+          "no_request": "No request",
+          "requested": "Requested",
+          "running": "Running",
+          "unknown_4": "Unknown (4)",
+          "unknown_5": "Unknown (5)",
+          "unknown_6": "Unknown (6)",
+          "unknown_7": "Unknown (7)",
+          "unknown_8": "Unknown (8)",
+          "unknown_9": "Unknown (9)",
+          "unknown_10": "Unknown (10)",
+          "unknown_11": "Unknown (11)",
+          "unknown_12": "Unknown (12)",
+          "unknown_13": "Unknown (13)",
+          "unknown_14": "Unknown (14)",
+          "unknown_15": "Unknown (15)"
+        }
       },
       "hot_water_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Disabled",
+          "no_request": "No request",
+          "requested": "Requested",
+          "running": "Running",
+          "unknown_4": "Unknown (4)",
+          "unknown_5": "Unknown (5)",
+          "unknown_6": "Unknown (6)",
+          "unknown_7": "Unknown (7)",
+          "unknown_8": "Unknown (8)",
+          "unknown_9": "Unknown (9)",
+          "unknown_10": "Unknown (10)",
+          "unknown_11": "Unknown (11)",
+          "unknown_12": "Unknown (12)",
+          "unknown_13": "Unknown (13)",
+          "unknown_14": "Unknown (14)",
+          "unknown_15": "Unknown (15)"
+        }
       },
       "cooling_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Disabled",
+          "no_request": "No request",
+          "requested": "Requested",
+          "running": "Running",
+          "unknown_4": "Unknown (4)",
+          "unknown_5": "Unknown (5)",
+          "unknown_6": "Unknown (6)",
+          "unknown_7": "Unknown (7)",
+          "unknown_8": "Unknown (8)",
+          "unknown_9": "Unknown (9)",
+          "unknown_10": "Unknown (10)",
+          "unknown_11": "Unknown (11)",
+          "unknown_12": "Unknown (12)",
+          "unknown_13": "Unknown (13)",
+          "unknown_14": "Unknown (14)",
+          "unknown_15": "Unknown (15)"
+        }
       },
       "pool_status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "disabled": "Disabled",
+          "no_request": "No request",
+          "requested": "Requested",
+          "running": "Running",
+          "unknown_4": "Unknown (4)",
+          "unknown_5": "Unknown (5)",
+          "unknown_6": "Unknown (6)",
+          "unknown_7": "Unknown (7)",
+          "unknown_8": "Unknown (8)",
+          "unknown_9": "Unknown (9)",
+          "unknown_10": "Unknown (10)",
+          "unknown_11": "Unknown (11)",
+          "unknown_12": "Unknown (12)",
+          "unknown_13": "Unknown (13)",
+          "unknown_14": "Unknown (14)",
+          "unknown_15": "Unknown (15)"
+        }
       },
       "energy_el_total": {
         "name": "Energy: electric total"
@@ -234,15 +306,6 @@
       "hours_dhw": {
         "name": "Operating hours"
       },
-      "fw_platform": {
-        "name": "Firmware: platform"
-      },
-      "fw_major": {
-        "name": "Firmware: major version"
-      },
-      "fw_minor": {
-        "name": "Firmware: minor version"
-      },
       "outside_temp_average": {
         "name": "Temperature: outside average"
       },
@@ -270,8 +333,11 @@
       "raw": {
         "name": "Raw value: {address}"
       },
+      "firmware_version": {
+        "name": "Firmware version"
+      },
       "cop": {
-        "name": "COP"
+        "name": "COP (10 min)"
       },
       "cop_heating": {
         "name": "COP overall"
@@ -620,17 +686,17 @@
       "water_heater_dhw": {
         "state": {
           "no_influence": "No influence",
-          "setpoint": "Setpoint (replaces the controller's target)",
-          "offset": "Offset (controller's target plus offset)",
-          "level": "Level (controller's target corrected by the level)"
+          "setpoint": "Setpoint",
+          "offset": "Offset",
+          "level": "Level"
         },
         "state_attributes": {
           "operation_mode": {
             "state": {
               "no_influence": "No influence",
-              "setpoint": "Setpoint (replaces the controller's target)",
-              "offset": "Offset (controller's target plus offset)",
-              "level": "Level (controller's target corrected by the level)"
+              "setpoint": "Setpoint",
+              "offset": "Offset",
+              "level": "Level"
             }
           },
           "setpoint_active": {

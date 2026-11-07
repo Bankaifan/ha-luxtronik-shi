@@ -18,6 +18,8 @@ from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
     CLIMATE_KEYS,
     DERIVED_SENSOR_KEYS,
+    FIRMWARE_SENSOR_KEY,
+    REMOVED_KEYS,
     RENAMED_KEYS,
     WATER_HEATER_KEYS,
 )
@@ -39,10 +41,12 @@ def _status_bits() -> list[str]:
 def _current() -> dict[str, set[str]]:
     current: dict[str, set[str]] = {}
     for reg in ALL_REGISTERS:
+        if reg.platform == "internal":
+            continue  # read only, no entity
         current.setdefault(reg.platform, set()).add(reg.key)
     current["climate"] = set(CLIMATE_KEYS)
     current["water_heater"] = set(WATER_HEATER_KEYS)
-    current["sensor"] |= set(DERIVED_SENSOR_KEYS)
+    current["sensor"] |= set(DERIVED_SENSOR_KEYS) | {FIRMWARE_SENSOR_KEY}
     current.setdefault("binary_sensor", set()).update([*_status_bits(), "online"])
     return current
 
@@ -77,3 +81,11 @@ def test_renamed_keys_are_consistent():
         assert new in current[platform], f"{old} -> {new}: new key missing on {platform}"
         assert old not in current[platform], f"{old} is still defined next to its replacement {new}"
         assert new not in RENAMED_KEYS, "chained renames are not supported"
+
+
+def test_removed_keys_are_gone_everywhere():
+    """A removal is a deliberate exception (CHANGELOG): the key is out of the contract and out of the map."""
+    current = _current()
+    for key in REMOVED_KEYS:
+        assert all(key not in keys for keys in CONTRACT.values()), f"{key} is still in the contract fixture"
+        assert all(key not in keys for keys in current.values()), f"{key} still defines an entity"

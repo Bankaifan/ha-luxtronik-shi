@@ -75,9 +75,9 @@ INPUT = {
     10327: 30,
     10328: 0,
     10329: 40,
-    10400: 3,
-    10401: 3,
-    10402: 92,
+    10400: 3,  # firmware 3.92.3 as on the reference installation (docs/firmware-3.92.3-shi-analysis.md)
+    10401: 92,
+    10402: 3,
     10404: 0,
     10405: 1234,
     10406: 0,
@@ -189,10 +189,11 @@ class FakeSHI:
             except TimeoutError:
                 pass
 
-    def set_firmware(self, major: int, minor: int) -> None:
-        """Set the firmware version the simulator reports (registers 10401/10402)."""
-        self.input[10401] = major
-        self.input[10402] = minor
+    def set_firmware(self, major: int, minor: int, patch: int = 0) -> None:
+        """Set the firmware version the simulator reports (registers 10400/10401/10402 = major.minor.patch)."""
+        self.input[10400] = major
+        self.input[10401] = minor
+        self.input[10402] = patch
 
     def advance(self, seconds: float) -> None:
         """Advance the simulator clock and commit the deferred writes that are due."""
