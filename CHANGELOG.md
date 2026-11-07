@@ -11,6 +11,18 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Changed
+- **One failed poll no longer makes every entity unavailable.** A poll that fails once (a network glitch, a busy
+  controller) keeps the previous values for that cycle; entities become unavailable only when the next poll fails
+  as well. Nothing else changes: the failed poll still starts the outage clock of the *Smart Home Interface not
+  reachable* issue (after 10 minutes), and the next successful poll counts as recovery for the restore and the
+  change notices exactly as before. A first poll that fails at setup is still retried by Home Assistant.
+  The tolerance is `POLL_FAILURES_TOLERATED` in `const.py` (1; 0 restores the old behaviour).
+
+### Tests
+- `tests/test_poll_tolerance.py`; the other outage tests run with the tolerance switched off (`tests/conftest.py`),
+  because they count every failed poll.
+
 ## [0.11.0] – 2026-11-07
 
 ### Action required
