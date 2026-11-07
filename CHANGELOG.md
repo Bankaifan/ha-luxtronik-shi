@@ -11,6 +11,14 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Changed
+- Every platform except `sensor` now declares `PARALLEL_UPDATES` (read-only `binary_sensor`: no limit; `switch`,
+  `number`, `select`, `climate`, `water_heater`: one write at a time). No visible change: the Modbus client already
+  serialised all access to the SHI. `sensor` follows once the open pull request that touches its imports is merged.
+
+### Tests
+- `tests/test_parallel_updates.py`.
+
 ## [0.11.0] – 2026-11-07
 
 ### Action required

@@ -51,6 +51,9 @@ _OPERATING_REG = BY_KEY["operating_mode"]
 # Heat generator bits VD1, VD2, ZWE1, ZWE2, ZWE3 of ``heat_generator_state`` (see binary_sensor.STATUS_BITS).
 _GENERATOR_BITS = 0b11111
 
+# One write at a time per platform; the Modbus client serialises access to the SHI anyway.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
