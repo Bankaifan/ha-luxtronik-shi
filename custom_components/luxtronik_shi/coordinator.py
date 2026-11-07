@@ -9,6 +9,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from time import monotonic as _monotonic
+from time import perf_counter
 from typing import Any
 
 from homeassistant.components import persistent_notification
@@ -82,6 +83,18 @@ WRITABLE_PLATFORMS = ("number", "select", "switch")
 EVENT_LOGBOOK_ENTRY = "logbook_entry"
 # Translation key (category "exceptions") of the logbook text of a change outside Home Assistant.
 LOGBOOK_EXTERNAL_CHANGE = "external_change_logbook"
+
+
+@dataclass
+class PollStats:
+    """Counters of the regular polls for the diagnostics download (kept in memory, no Modbus access)."""
+
+    polls: int = 0
+    failed: int = 0  # includes a failure whose previous values were kept (POLL_FAILURES_TOLERATED)
+    last_duration: float | None = None  # seconds of the latest poll, failed or not
+    last_success: datetime | None = None
+    last_failure: datetime | None = None
+    last_error: str | None = None
 
 
 @dataclass
@@ -167,6 +180,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._main_device_id: str | None = None
         self._sw_version: str | None = None
         self._first_failure: datetime | None = None  # start of the current run of failed polls
+        self.poll_stats = PollStats()
         self._failed_polls = 0  # failed polls in a row; the first POLL_FAILURES_TOLERATED keep the old values
         # Outage notice: watched control values of the last successful poll. Deliberately in memory only, so
         # it is lost on a Home Assistant restart (a change during an outage over a restart is not noticed).
@@ -229,6 +243,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return self.device_info
         return DeviceInfo(identifiers={(DOMAIN, f"{self.config_entry.entry_id}_{area}")})
 
+    def active_areas(self) -> set[str | None]:
+        """Sub-devices that have at least one entity for the configured equipment (``None``: main device)."""
+        return {area_of(reg.key) for reg in self.registers}
+
     def async_setup_devices(self) -> None:
         """Create the main device and the sub-devices that have at least one entity.
 
@@ -245,7 +263,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._main_device_id = main.id
         via_kwarg = "via_device_id" in inspect.signature(registry.async_get_or_create).parameters
-        used = {area_of(reg.key) for reg in self.registers}
+        used = self.active_areas()
         for area in AREAS:
             if area not in used:
                 continue
@@ -260,6 +278,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 **link,
             )
         self._update_firmware()
+
+    @property
+    def failed_in_a_row(self) -> int:
+        """Failed polls since the last successful one."""
+        return self._failed_polls
 
     # ------------------------------------------------------------------ polled registers
     @property
@@ -317,7 +340,19 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_update_listeners()
 
     # ------------------------------------------------------------------ reading
+    def _record_poll(self, started: float, error: str | None = None) -> None:
+        stats = self.poll_stats
+        stats.polls += 1
+        stats.last_duration = round(perf_counter() - started, 3)
+        if error is None:
+            stats.last_success = dt_util.utcnow()
+            return
+        stats.failed += 1
+        stats.last_failure = dt_util.utcnow()
+        stats.last_error = error
+
     async def _async_update_data(self) -> dict[str, Any]:
+        started = perf_counter()
         self._fresh = set()
         self._poll_changes = []
         try:
@@ -325,6 +360,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if self._tick % block.every == 0:
                     await self._read_block(block)
         except ModbusCommError as err:
+            self._record_poll(started, str(err))
             self._update_unreachable_issue(failed=True)
             self._failed_polls += 1
             if self.data is not None and self._failed_polls <= POLL_FAILURES_TOLERATED:
@@ -341,6 +377,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ) from err
         self._tick += 1
         self._failed_polls = 0
+        self._record_poll(started)
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
         reconnected = self._reconnect_signal()

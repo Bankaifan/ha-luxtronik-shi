@@ -7,6 +7,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 
@@ -111,6 +112,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
     entry.async_on_unload(coordinator.async_track_entity_enablement())
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: LuxtronikConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the user delete a sub-device the configured equipment no longer has (cooling or pool switched off).
+
+    The main device and every sub-device that still has entities cannot be deleted.
+    """
+    active = {f"{entry.entry_id}_{area}" for area in entry.runtime_data.active_areas() if area}
+    active.add(entry.entry_id)
+    in_use = (domain == DOMAIN and identifier in active for domain, identifier in device_entry.identifiers)
+    return not any(in_use)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -> bool:

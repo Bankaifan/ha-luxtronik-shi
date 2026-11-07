@@ -56,3 +56,30 @@ async def test_diagnostics(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert "127.0.0.1" not in dump
     assert mac not in dump
     assert entry.unique_id not in dump
+
+
+async def test_diagnostics_polling_section(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Poll duration, failure counters and the last success come from memory (no Modbus access)."""
+    from .test_integration import _setup
+    from .test_repairs import Outage
+
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    polling = diag["polling"]
+    assert polling["polls"] == 1 and polling["failed_polls"] == 0
+    assert polling["last_poll_seconds"] is not None and polling["last_poll_seconds"] >= 0
+    assert polling["last_success"] is not None and polling["last_failure"] is None
+    assert "raw_10354" in polling["registers_not_polled"]  # disabled by default
+    assert polling["registers_polled"] == len(coordinator.polled_registers)
+
+    outage = Outage(coordinator)
+    outage.down()
+    await coordinator.async_refresh()
+    requests_before = len(shi.requests)
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert len(shi.requests) == requests_before
+    polling = diag["polling"]
+    assert polling["failed_polls"] == 1 and polling["failed_in_a_row"] == 1
+    assert polling["last_failure"] is not None and polling["last_error"]
+    assert "127.0.0.1" not in json.dumps(diag)

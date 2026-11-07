@@ -182,3 +182,28 @@ async def test_added_raw_registers_are_read_and_disabled(hass: HomeAssistant, sh
     for address in (*RAW_INPUT_ADDRESSES_ADDED, *RAW_HOLDING_ADDRESSES_ADDED):
         entity = registry.async_get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"))
         assert entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_unused_sub_devices_can_be_removed(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Cooling and pool switched off: their devices may be deleted; the main device and used ones may not."""
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.luxtronik_shi import async_remove_config_entry_device
+
+    entry = _entry(hass, shi, {"scan_interval": 30, "features": ["mk1", "cooling", "pool"]})
+    await _setup(hass, entry)
+    devices = dr.async_get(hass)
+
+    def device(area: str | None):
+        suffix = f"_{area}" if area else ""
+        return devices.async_get_device(identifiers={(DOMAIN, f"{entry.entry_id}{suffix}")})
+
+    assert device("pool") and device("cooling")
+    hass.config_entries.async_update_entry(entry, options={"scan_interval": 30, "features": ["mk1"]})
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data.active_areas() == {None, "heating", "hot_water"}
+    assert await async_remove_config_entry_device(hass, entry, device("pool")) is True
+    assert await async_remove_config_entry_device(hass, entry, device("cooling")) is True
+    assert await async_remove_config_entry_device(hass, entry, device("heating")) is False
+    assert await async_remove_config_entry_device(hass, entry, device(None)) is False

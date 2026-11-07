@@ -9,6 +9,12 @@
           "host": "Host",
           "port": "Port",
           "slave": "Geräte-ID (Slave)"
+        },
+        "data_description": {
+          "name": "Wird in Home Assistant angezeigt und steckt in den Entitäts-IDs, zum Beispiel `sensor.<name>_flow`.",
+          "host": "IP-Adresse oder Hostname der Wärmepumpe.",
+          "port": "Modbus/TCP-Port der Smart-Home-Schnittstelle. Standard ist 502.",
+          "slave": "Modbus-Geräte-ID der Smart-Home-Schnittstelle. Standard ist 1."
         }
       },
       "reconfigure": {
@@ -17,6 +23,11 @@
           "host": "Host",
           "port": "Port",
           "slave": "Geräte-ID (Slave)"
+        },
+        "data_description": {
+          "host": "IP-Adresse oder Hostname der Wärmepumpe.",
+          "port": "Modbus/TCP-Port der Smart-Home-Schnittstelle. Standard ist 502.",
+          "slave": "Modbus-Geräte-ID der Smart-Home-Schnittstelle. Standard ist 1."
         }
       },
       "discovery_confirm": {
