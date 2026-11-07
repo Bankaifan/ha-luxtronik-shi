@@ -385,6 +385,33 @@
       "cooling_release": {
         "name": "Kühlen: freigegeben"
       },
+      "pump_heating": {
+        "name": "Pumpe: Heizung (HUP)"
+      },
+      "pump_hot_water": {
+        "name": "Pumpe: Warmwasser (BUP)"
+      },
+      "pump_circulation": {
+        "name": "Pumpe: Zirkulation (ZIP)"
+      },
+      "output_vbo": {
+        "name": "Ausgang: VBO"
+      },
+      "output_fp1": {
+        "name": "Ausgang: FP1"
+      },
+      "output_fp2": {
+        "name": "Ausgang: FP2"
+      },
+      "output_fp3": {
+        "name": "Ausgang: FP3"
+      },
+      "input_evu": {
+        "name": "Eingang: EVU (Pegel 1 = an)"
+      },
+      "input_evu2": {
+        "name": "Eingang: EVU 2 (Pegel 1 = an)"
+      },
       "cap_heating": {
         "name": "Ausstattung: Heizen"
       },

@@ -57,6 +57,8 @@ class LuxtronikFlag(LuxtronikEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: LuxtronikCoordinator, reg: Register) -> None:
         super().__init__(coordinator, reg)
+        if reg.device_class:
+            self._attr_device_class = BinarySensorDeviceClass(reg.device_class)
 
     @property
     def is_on(self) -> bool | None:

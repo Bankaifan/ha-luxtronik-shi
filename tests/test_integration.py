@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.luxtronik_shi.const import CONF_SLAVE, DOMAIN
+from custom_components.luxtronik_shi.registers import FEATURES, active_registers
 
 from .fake_shi import FakeSHI, free_port
 
@@ -309,7 +310,7 @@ async def test_equipment_off_and_on_keeps_entity_ids(hass: HomeAssistant, shi: F
     entry = await _setup(hass, shi)
     pool_block = _entity_id(hass, entry, "switch", "pool_block")
     mk1_setpoint = _entity_id(hass, entry, "number", "cfg_mk1_setpoint")
-    reads_before = len(entry.runtime_data.registers)
+    reads_before = len(active_registers(set(FEATURES)))  # everything the equipment can have
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
@@ -344,11 +345,12 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
-    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, RENAMED_KEYS
+    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, OUTPUT_FLAGS, RENAMED_KEYS
 
-    # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2).
+    # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2,
+    # output and input flags of 0.13.0).
     # Renamed keys stay in the contract but have no entity of their own any more (see tests/test_migration.py).
-    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED)}
+    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED, *OUTPUT_FLAGS)}
     assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added) - len(RENAMED_KEYS)
     assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
 

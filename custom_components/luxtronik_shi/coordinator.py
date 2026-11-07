@@ -295,7 +295,13 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for key in old - new:
             self._values.pop(key, None)
         self._polled = polled
+        rejected = [(b.kind, b.start, b.start + b.count) for b in self._blocks if b.split]
         self._blocks = plan_blocks(polled)
+        for block in self._blocks:  # a range the SHI rejected as a block stays read register by register
+            block.split = any(
+                kind == block.kind and block.start < end and start < block.start + block.count
+                for kind, start, end in rejected
+            )
         if added:
             self.config_entry.async_create_task(self.hass, self._read_added(added))
 
@@ -371,16 +377,23 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     offset = reg.address - block.start
                     self._store(reg, words[offset : offset + reg.width], poll=True)
                 return
+        shared: dict[int, list[Register]] = {}  # entities that share a register (ALIAS_OF) are read once
         for reg in block.registers:
-            await self._read_single(reg, poll=True)
+            shared.setdefault(reg.address, []).append(reg)
+        for first, *twins in shared.values():
+            await self._read_single(first, poll=True, twins=twins)
 
-    async def _read_single(self, reg: Register, *, poll: bool = False) -> None:
+    async def _read_single(
+        self, reg: Register, *, poll: bool = False, twins: list[Register] | None = None
+    ) -> None:
         try:
             words = await self.client.read(reg.kind, reg.address, reg.width)
         except ModbusIllegalAddress:
-            self._mark_missing(reg)
+            for each in (reg, *(twins or ())):
+                self._mark_missing(each)
             return
-        self._store(reg, words, poll=poll)
+        for each in (reg, *(twins or ())):
+            self._store(each, words, poll=poll)
 
     def _store(self, reg: Register, words: list[Any], *, poll: bool = False) -> None:
         """Keep a value read from the heat pump. ``poll``: read by the regular poll, not as a write's read-

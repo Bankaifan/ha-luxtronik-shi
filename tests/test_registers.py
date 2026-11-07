@@ -2,6 +2,7 @@
 
 from custom_components.luxtronik_shi.coordinator import MAX_BLOCK, plan_blocks
 from custom_components.luxtronik_shi.registers import (
+    ALIAS_OF,
     ALL_REGISTERS,
     BY_KEY,
     decode,
@@ -14,8 +15,23 @@ def test_keys_and_addresses_are_unique():
     seen = set()
     for reg in ALL_REGISTERS:
         ident = (reg.kind, reg.address)
+        if reg.key in ALIAS_OF:
+            continue  # shares the register of a raw value, checked in test_aliases_share_their_register
         assert ident not in seen, ident
         seen.add(ident)
+
+
+def test_aliases_share_their_register():
+    """A binary sensor for a proven output or input reads the register of its raw twin, nothing else."""
+    assert ALIAS_OF
+    for key, raw_key in ALIAS_OF.items():
+        alias, raw = BY_KEY[key], BY_KEY[raw_key]
+        assert alias.platform == "binary_sensor" and raw.platform == "sensor"
+        assert (alias.kind, alias.address, alias.dtype, alias.scale, alias.every) == (
+            raw.kind, raw.address, raw.dtype, raw.scale, raw.every
+        )
+        assert alias.source and alias.source == raw.source  # same proof as the raw value
+        assert not raw.enabled_default  # the raw twin stays as it was (disabled diagnostics)
 
 
 def test_decode():
