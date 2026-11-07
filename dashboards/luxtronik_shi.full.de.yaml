@@ -1,0 +1,731 @@
+# Luxtronik-SHI-Dashboard (Profil full), erzeugt mit tools/gen_dashboard.py. Nicht von Hand ändern.
+# Entity-IDs sind für ein Gerät namens "Wärmepumpe" in Deutsch vorhergesagt. Für die eigenen den Generator mit --registry nutzen.
+# Einfügen unter: Dashboard > drei Punkte > Bearbeiten > drei Punkte > Rohkonfigurations-Editor.
+
+title: Wärmepumpe
+views:
+- type: sections
+  path: overview
+  title: Übersicht
+  icon: mdi:heat-pump
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Status
+      icon: mdi:heat-pump
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_verbindung
+    - type: tile
+      entity: sensor.warmepumpe_status_betriebsart
+    - type: tile
+      entity: sensor.warmepumpe_heizung_status
+    - type: tile
+      entity: sensor.warmepumpe_warmwasser_status
+    - type: tile
+      entity: sensor.warmepumpe_kuhlung_status
+    - type: tile
+      entity: sensor.warmepumpe_pool_status
+    - type: tile
+      entity: sensor.warmepumpe_status_fehlernummer
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: sensor.warmepumpe_status_betriebsart
+        state: evu_lock
+      card:
+        type: markdown
+        content: '**EVU-Sperre ist aktiv.** Der Regler meldet die Betriebsart "EVU-Sperre"; der Verdichter ist durch
+          das Signal des Netzbetreibers gesperrt.'
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.warmepumpe_heizung_sperren
+        state: 'on'
+      card:
+        type: markdown
+        content: '**Heizen ist gesperrt** über das Smart Home Interface (Schalter "Wärmepumpe Heizung Sperren").
+          Ein Skript, eine Automation oder ein Planer hat ihn gesetzt; die Wärmepumpe heizt erst nach der Freigabe
+          wieder.'
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: switch.warmepumpe_warmwasser_sperren
+        state: 'on'
+      card:
+        type: markdown
+        content: '**Warmwasser ist gesperrt** über das Smart Home Interface (Schalter "Wärmepumpe Warmwasser Sperren").'
+  - type: grid
+    cards:
+    - type: heading
+      heading: Pumpen
+      icon: mdi:pump
+    - type: tile
+      entity: binary_sensor.warmepumpe_heizung_pumpe_heizung_hup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip
+  - type: grid
+    cards:
+    - type: heading
+      heading: Temperaturen
+      icon: mdi:thermometer
+    - type: tile
+      entity: sensor.warmepumpe_temperatur_aussen
+    - type: tile
+      entity: sensor.warmepumpe_temperatur_vorlauf
+    - type: tile
+      entity: sensor.warmepumpe_temperatur_rucklauf
+    - type: tile
+      entity: sensor.warmepumpe_warmwasser_temperatur
+    - type: history-graph
+      hours_to_show: 24
+      entities:
+      - sensor.warmepumpe_temperatur_vorlauf
+      - sensor.warmepumpe_temperatur_rucklauf
+      - sensor.warmepumpe_temperatur_aussen
+      - sensor.warmepumpe_warmwasser_temperatur
+  - type: grid
+    cards:
+    - type: heading
+      heading: Leistung und COP
+      icon: mdi:flash
+    - type: gauge
+      entity: sensor.warmepumpe_leistung_elektrisch
+      name: Strom
+      min: 0
+      max: 5000
+      needle: false
+    - type: gauge
+      entity: sensor.warmepumpe_leistung_thermisch
+      name: Wärme
+      min: 0
+      max: 20000
+      needle: false
+    - type: tile
+      entity: sensor.warmepumpe_cop_10_min
+    - type: history-graph
+      hours_to_show: 24
+      entities:
+      - sensor.warmepumpe_leistung_elektrisch
+      - sensor.warmepumpe_leistung_thermisch
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kurzüberblick
+      icon: mdi:eye
+    - type: tile
+      entity: switch.warmepumpe_heizung_sperren
+      tap_action:
+        action: more-info
+    - type: tile
+      entity: switch.warmepumpe_warmwasser_sperren
+      tap_action:
+        action: more-info
+    - type: tile
+      entity: number.warmepumpe_heizung_sollwert
+      state_content:
+      - state
+      - effective_target
+    - type: tile
+      entity: number.warmepumpe_warmwasser_sollwert
+      state_content:
+      - state
+      - effective_target
+    - type: markdown
+      content: 'Reine Anzeige: Ein Tipp auf eine Sperre zeigt Details und schaltet nichts. Bedienung gibt es in
+        den Ansichten *Steuerung* und *Sperren und Netz*. Reparaturen (Verbindung verloren, Werte geändert): [Reparaturen](/config/repairs).'
+- type: sections
+  path: energy
+  title: Energie
+  icon: mdi:lightning-bolt
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Verbrauchte Energie
+      icon: mdi:counter
+    - type: statistic
+      entity: sensor.warmepumpe_energie_strom_gesamt
+      name: 'Heute: Strom'
+      period:
+        calendar:
+          period: day
+      stat_type: change
+    - type: statistic
+      entity: sensor.warmepumpe_energie_strom_gesamt
+      name: 'Diese Woche: Strom'
+      period:
+        calendar:
+          period: week
+      stat_type: change
+    - type: statistic
+      entity: sensor.warmepumpe_energie_strom_gesamt
+      name: 'Dieser Monat: Strom'
+      period:
+        calendar:
+          period: month
+      stat_type: change
+    - type: statistic
+      entity: sensor.warmepumpe_energie_warme_gesamt
+      name: 'Heute: Wärme'
+      period:
+        calendar:
+          period: day
+      stat_type: change
+    - type: statistic
+      entity: sensor.warmepumpe_energie_warme_gesamt
+      name: 'Diese Woche: Wärme'
+      period:
+        calendar:
+          period: week
+      stat_type: change
+    - type: statistic
+      entity: sensor.warmepumpe_energie_warme_gesamt
+      name: 'Dieser Monat: Wärme'
+      period:
+        calendar:
+          period: month
+      stat_type: change
+  - type: grid
+    cards:
+    - type: heading
+      heading: Energie pro Tag
+      icon: mdi:chart-bar
+    - type: statistics-graph
+      entities:
+      - sensor.warmepumpe_heizung_energie_strom
+      - sensor.warmepumpe_warmwasser_energie_strom
+      - sensor.warmepumpe_kuhlung_energie_strom
+      - sensor.warmepumpe_pool_energie_strom
+      chart_type: bar
+      period: day
+      days_to_show: 14
+      stat_types:
+      - change
+    - type: statistics-graph
+      entities:
+      - sensor.warmepumpe_heizung_energie_warme
+      - sensor.warmepumpe_warmwasser_energie_warme
+      - sensor.warmepumpe_kuhlung_energie_warme
+      - sensor.warmepumpe_pool_energie_warme
+      chart_type: bar
+      period: day
+      days_to_show: 14
+      stat_types:
+      - change
+  - type: grid
+    cards:
+    - type: heading
+      heading: COP
+      icon: mdi:speedometer
+    - type: tile
+      entity: sensor.warmepumpe_cop_10_min
+    - type: tile
+      entity: sensor.warmepumpe_heizung_cop_gesamt
+    - type: tile
+      entity: sensor.warmepumpe_warmwasser_cop_gesamt
+    - type: markdown
+      content: Der **COP (10 min)** ist das Energieverhältnis der letzten 10 Minuten (thermisch / elektrisch); er
+        ist unbekannt, solange der Verdichter steht oder gerade erst gestartet ist. **COP gesamt** ist der Quotient
+        der Energiezähler seit Zählerbeginn; er ist keine Jahresarbeitszahl.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Leistung und COP
+      icon: mdi:flash
+    - type: history-graph
+      hours_to_show: 48
+      entities:
+      - sensor.warmepumpe_leistung_elektrisch
+      - sensor.warmepumpe_leistung_thermisch
+    - type: markdown
+      content: '**Energie-Dashboard:** Die Strom-Energiesensoren unter Einstellungen > Dashboards > Energie als
+        *Einzelgerät* hinzufügen. Es sind kWh-Zähler mit Langzeitstatistik, die Karten oben funktionieren daher
+        ohne Hilfsentitäten.'
+- type: sections
+  path: grid
+  title: Sperren und Netz
+  icon: mdi:transmission-tower
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Sperren
+      icon: mdi:lock
+    - type: tile
+      entity: switch.warmepumpe_heizung_sperren
+    - type: tile
+      entity: switch.warmepumpe_warmwasser_sperren
+    - type: tile
+      entity: switch.warmepumpe_kuhlung_sperren
+    - type: tile
+      entity: switch.warmepumpe_pool_sperren
+  - type: grid
+    cards:
+    - type: heading
+      heading: Leistungsbegrenzung
+      icon: mdi:speedometer-slow
+    - type: tile
+      entity: select.warmepumpe_leistungsbegrenzung_modus
+    - type: tile
+      entity: number.warmepumpe_leistungsbegrenzung_wert
+  - type: grid
+    cards:
+    - type: heading
+      heading: Warmwasser
+      icon: mdi:water-boiler
+    - type: tile
+      entity: switch.warmepumpe_warmwasser_zirkulationspumpe
+    - type: tile
+      entity: switch.warmepumpe_warmwasser_extra
+    - type: tile
+      entity: select.warmepumpe_warmwasser_betriebsart
+    - type: tile
+      entity: number.warmepumpe_warmwasser_sollwert
+      state_content:
+      - state
+      - effective_target
+  - type: grid
+    cards:
+    - type: heading
+      heading: Netzbetreiber und PV
+      icon: mdi:transmission-tower
+    - type: tile
+      entity: sensor.warmepumpe_status_betriebsart
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: sensor.warmepumpe_status_betriebsart
+        state: evu_lock
+      card:
+        type: markdown
+        content: '**EVU-Sperre ist aktiv.** Der Regler meldet die Betriebsart "EVU-Sperre"; der Verdichter ist durch
+          das Signal des Netzbetreibers gesperrt.'
+    - type: tile
+      entity: sensor.warmepumpe_leistung_elektrisch
+    - type: tile
+      entity: sensor.warmepumpe_leistung_thermisch
+    - type: tile
+      entity: sensor.warmepumpe_cop_10_min
+    - type: markdown
+      content: '**Was die Integration bietet.** Die Sperren stoppen Heizen, Warmwasser, Kühlen oder Poolheizung.
+        Die Leistungsbegrenzung hat eine Betriebsart (keine, weich, hart) und einen Wert in kW. Eine EVU-Sperre
+        erscheint als Betriebsart "EVU-Sperre". Wie genau der Regler auf die einzelnen Betriebsarten der Leistungsbegrenzung
+        reagiert, ist in diesem Projekt nicht geprüft, siehe die Entitätenreferenz in `docs/`. PV-Überschuss nutzt
+        man mit einer Automation, siehe Ansicht *Automation* und den Blueprint "Auslöser mit Hysterese".'
+    - type: markdown
+      content: '**Planer:** Schreibt ein Planer wie der Heat Pump Optimizer Sperren, Betriebsarten oder Sollwerte
+        eines Kreises, diesen Kreis hier nicht gleichzeitig steuern. Der letzte Schreibvorgang gewinnt.'
+- type: sections
+  path: control
+  title: Steuerung
+  icon: mdi:tune
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kurzüberblick
+      icon: mdi:thermostat
+    - type: thermostat
+      entity: climate.warmepumpe_heizung
+    - type: tile
+      entity: water_heater.warmepumpe_warmwasser
+      features:
+      - type: water-heater-operation-modes
+  - type: grid
+    cards:
+    - type: heading
+      heading: Heizung
+      icon: mdi:tune
+    - type: tile
+      entity: select.warmepumpe_heizung_betriebsart
+    - type: tile
+      entity: number.warmepumpe_heizung_sollwert
+      state_content:
+      - state
+      - effective_target
+    - type: tile
+      entity: number.warmepumpe_heizung_heizkurven_anhebung
+    - type: tile
+      entity: select.warmepumpe_heizung_stufe
+  - type: grid
+    cards:
+    - type: heading
+      heading: Warmwasser
+      icon: mdi:water-boiler
+    - type: tile
+      entity: select.warmepumpe_warmwasser_betriebsart
+    - type: tile
+      entity: number.warmepumpe_warmwasser_sollwert
+      state_content:
+      - state
+      - effective_target
+    - type: tile
+      entity: number.warmepumpe_warmwasser_anhebung
+    - type: tile
+      entity: select.warmepumpe_warmwasser_stufe
+  - type: grid
+    cards:
+    - type: heading
+      heading: Mischkreis 1
+      icon: mdi:radiator
+    - type: tile
+      entity: select.warmepumpe_heizung_mischkreis_1_betriebsart
+    - type: tile
+      entity: number.warmepumpe_heizung_mischkreis_1_sollwert
+    - type: tile
+      entity: number.warmepumpe_heizung_mischkreis_1_anhebung
+    - type: tile
+      entity: select.warmepumpe_heizung_mischkreis_1_stufe
+  - type: grid
+    cards:
+    - type: heading
+      heading: Mischkreis 2
+      icon: mdi:radiator
+    - type: tile
+      entity: select.warmepumpe_heizung_mischkreis_2_betriebsart
+    - type: tile
+      entity: number.warmepumpe_heizung_mischkreis_2_sollwert
+    - type: tile
+      entity: number.warmepumpe_heizung_mischkreis_2_anhebung
+    - type: tile
+      entity: select.warmepumpe_heizung_mischkreis_2_stufe
+  - type: grid
+    cards:
+    - type: heading
+      heading: Mischkreis 3
+      icon: mdi:radiator
+    - type: tile
+      entity: select.warmepumpe_heizung_mischkreis_3_betriebsart
+    - type: tile
+      entity: number.warmepumpe_heizung_mischkreis_3_sollwert
+    - type: tile
+      entity: number.warmepumpe_heizung_mischkreis_3_anhebung
+    - type: tile
+      entity: select.warmepumpe_heizung_mischkreis_3_stufe
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kühlung, Mischkreis 2
+      icon: mdi:snowflake
+    - type: tile
+      entity: select.warmepumpe_kuhlung_mischkreis_2_betriebsart
+    - type: tile
+      entity: number.warmepumpe_kuhlung_mischkreis_2_sollwert
+    - type: tile
+      entity: number.warmepumpe_kuhlung_mischkreis_2_anhebung
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kühlung, Mischkreis 3
+      icon: mdi:snowflake
+    - type: tile
+      entity: select.warmepumpe_kuhlung_mischkreis_3_betriebsart
+    - type: tile
+      entity: number.warmepumpe_kuhlung_mischkreis_3_sollwert
+    - type: tile
+      entity: number.warmepumpe_kuhlung_mischkreis_3_anhebung
+  - type: grid
+    cards:
+    - type: heading
+      heading: Betriebsarten
+      icon: mdi:home-thermometer
+    - type: tile
+      entity: number.warmepumpe_raumtemperatur_sollwert
+  - type: grid
+    cards:
+    - type: heading
+      heading: Betriebsarten
+      icon: mdi:information-outline
+    - type: markdown
+      content: '**Betriebsarten.** *Keine Vorgabe* heißt: Die Wärmepumpe nutzt eigene Werte; es wird nichts ausgeschaltet.
+        Ein Sollwert gilt nur in der Betriebsart *Sollwert*; *Anhebung* und *Stufe* korrigieren den Sollwert der
+        Regelung. Der Heizungs-Sollwert ist ein Rücklauf-Sollwert. Die Kachel zeigt den wirksamen Sollwert der Regelung.'
+    - type: markdown
+      content: '**Planer:** Schreibt ein Planer wie der Heat Pump Optimizer Sperren, Betriebsarten oder Sollwerte
+        eines Kreises, diesen Kreis hier nicht gleichzeitig steuern. Der letzte Schreibvorgang gewinnt.'
+- type: sections
+  path: diagnostics
+  title: Diagnose
+  icon: mdi:stethoscope
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Regler
+      icon: mdi:chip
+    - type: tile
+      entity: sensor.warmepumpe_firmware_version
+    - type: tile
+      entity: sensor.warmepumpe_anlage_puffertyp
+    - type: tile
+      entity: sensor.warmepumpe_status_fehlernummer
+    - type: tile
+      entity: sensor.warmepumpe_status_warmeerzeuger_bitmaske
+  - type: grid
+    cards:
+    - type: heading
+      heading: Ausgänge und Eingänge
+      icon: mdi:electric-switch
+    - type: tile
+      entity: binary_sensor.warmepumpe_heizung_pumpe_heizung_hup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip
+    - type: tile
+      entity: binary_sensor.warmepumpe_ausgang_vbo
+    - type: tile
+      entity: binary_sensor.warmepumpe_ausgang_fp1
+  - type: grid
+    cards:
+    - type: heading
+      heading: Erzeuger
+      icon: mdi:engine
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_verdichter_1_lauft
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_verdichter_2_lauft
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_zusatzheizung_1_zwe_aktiv
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_zusatzheizung_2_zwe_aktiv
+    - type: tile
+      entity: binary_sensor.warmepumpe_kuhlen_freigegeben
+  - type: grid
+    cards:
+    - type: heading
+      heading: Status
+      icon: mdi:timeline-clock
+    - type: history-graph
+      hours_to_show: 24
+      entities:
+      - sensor.warmepumpe_status_betriebsart
+      - sensor.warmepumpe_heizung_status
+      - sensor.warmepumpe_warmwasser_status
+      - sensor.warmepumpe_kuhlung_status
+  - type: grid
+    cards:
+    - type: heading
+      heading: Ausstattung laut Regler
+      icon: mdi:clipboard-check
+    - type: entities
+      entities:
+      - entity: binary_sensor.warmepumpe_ausstattung_heizen
+      - entity: binary_sensor.warmepumpe_ausstattung_warmwasser
+      - entity: binary_sensor.warmepumpe_ausstattung_kuhlen
+      - entity: binary_sensor.warmepumpe_ausstattung_pool
+      - entity: binary_sensor.warmepumpe_ausstattung_raumregler
+      - entity: binary_sensor.warmepumpe_ausstattung_mischkreis_1_heizen
+      - entity: binary_sensor.warmepumpe_ausstattung_mischkreis_1_kuhlen
+      - entity: binary_sensor.warmepumpe_ausstattung_mischkreis_2_heizen
+      - entity: binary_sensor.warmepumpe_ausstattung_mischkreis_2_kuhlen
+      - entity: binary_sensor.warmepumpe_ausstattung_mischkreis_3_heizen
+      - entity: binary_sensor.warmepumpe_ausstattung_mischkreis_3_kuhlen
+      - entity: binary_sensor.warmepumpe_kuhlen_konfiguriert
+      - entity: binary_sensor.warmepumpe_pool_konfiguriert
+  - type: grid
+    cards:
+    - type: heading
+      heading: Fehlersuche
+      icon: mdi:lifebuoy
+    - type: markdown
+      content: |-
+        1. **Entitäten nicht verfügbar?** Die Wärmepumpe hat zweimal hintereinander nicht geantwortet. Nach 10 Minuten erscheint eine Reparatur.
+        2. **Werte nach einer Pause geändert?** Der Regler verwirft alles, was über das Smart Home Interface gesetzt wurde, nach 10 Minuten ohne Zugriff oder nach einem Neustart. Siehe Reparaturen.
+        3. **Fehlerbericht?** Diagnose herunterladen: [Integrationsseite](/config/integrations/integration/luxtronik_shi).
+        4. Die **Fehlernummer** ist der Code des Reglers; die Schnittstelle liefert keinen Text dazu.
+- type: sections
+  path: automation
+  title: Automation
+  icon: mdi:code-braces
+  max_columns: 4
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Entitäten
+      icon: mdi:code-braces
+    - type: markdown
+      content: Jede Entität unten wird über ihre **Entity-ID** angesprochen. Die Tabelle ist für dieses Dashboard
+        erzeugt; die Schlüssel bleiben über Versionen stabil, die Entity-IDs folgen den Namen in deiner Registry.
+    - type: markdown
+      content: |-
+        | Name | Schlüssel | Entity-ID |
+        |---|---|---|
+        | Wärmepumpe Temperatur: Rücklauf | `return` | `sensor.warmepumpe_temperatur_rucklauf` |
+        | Wärmepumpe Temperatur: Rücklauf-Soll | `return_target` | `sensor.warmepumpe_temperatur_rucklauf_soll` |
+        | Wärmepumpe Temperatur: Rücklauf extern | `return_external` | `sensor.warmepumpe_temperatur_rucklauf_extern` |
+        | Wärmepumpe Temperatur: Rücklauf-Begrenzung | `return_limit` | `sensor.warmepumpe_temperatur_rucklauf_begrenzung` |
+        | Wärmepumpe Temperatur: Rücklauf-Soll Minimum | `return_min_target` | `sensor.warmepumpe_temperatur_rucklauf_soll_minimum` |
+        | Wärmepumpe Temperatur: Vorlauf | `flow` | `sensor.warmepumpe_temperatur_vorlauf` |
+        | Wärmepumpe Heizung Grenztemperatur | `heating_limit` | `sensor.warmepumpe_heizung_grenztemperatur` |
+        | Wärmepumpe Temperatur: Außen | `outside` | `sensor.warmepumpe_temperatur_aussen` |
+        | Wärmepumpe Warmwasser Temperatur | `dhw` | `sensor.warmepumpe_warmwasser_temperatur` |
+        | Wärmepumpe Warmwasser Soll | `dhw_target` | `sensor.warmepumpe_warmwasser_soll` |
+        | Wärmepumpe Warmwasser Maximum | `dhw_max` | `sensor.warmepumpe_warmwasser_maximum` |
+        | Wärmepumpe Warmwasser Grenztemperatur | `dhw_limit` | `sensor.warmepumpe_warmwasser_grenztemperatur` |
+        | Wärmepumpe Heizung Mischkreis 1: Vorlauf | `mk1_flow` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf` |
+        | Wärmepumpe Heizung Mischkreis 1: Vorlauf-Soll | `mk1_flow_target` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf_soll` |
+        | Wärmepumpe Heizung Mischkreis 1: Vorlauf Minimum | `mk1_flow_min` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf_minimum` |
+        | Wärmepumpe Heizung Mischkreis 1: Vorlauf Maximum | `mk1_flow_max` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf_maximum` |
+        | Wärmepumpe Status: Fehlernummer | `error_number` | `sensor.warmepumpe_status_fehlernummer` |
+        | Wärmepumpe Anlage: Puffertyp | `buffer_type` | `sensor.warmepumpe_anlage_puffertyp` |
+        | Wärmepumpe Kühlen: konfiguriert | `cooling_configured` | `binary_sensor.warmepumpe_kuhlen_konfiguriert` |
+        | Wärmepumpe Pool: konfiguriert | `pool_configured` | `binary_sensor.warmepumpe_pool_konfiguriert` |
+        | Wärmepumpe Kühlen: freigegeben | `cooling_release` | `binary_sensor.warmepumpe_kuhlen_freigegeben` |
+        | Wärmepumpe Leistung: thermisch | `compressor_thermal_power` | `sensor.warmepumpe_leistung_thermisch` |
+        | Wärmepumpe Leistung: elektrisch | `electric_power` | `sensor.warmepumpe_leistung_elektrisch` |
+        | Wärmepumpe Leistung: elektrisch Minimum | `electric_power_min` | `sensor.warmepumpe_leistung_elektrisch_minimum` |
+        | Wärmepumpe Status: Wärmeerzeuger (Bitmaske) | `heat_generator_state` | `sensor.warmepumpe_status_warmeerzeuger_bitmaske` |
+        | Wärmepumpe Status: Betriebsart | `operating_mode` | `sensor.warmepumpe_status_betriebsart` |
+        | Wärmepumpe Heizung Status | `heating_status` | `sensor.warmepumpe_heizung_status` |
+        | Wärmepumpe Warmwasser Status | `hot_water_status` | `sensor.warmepumpe_warmwasser_status` |
+        | Wärmepumpe Kühlung Status | `cooling_status` | `sensor.warmepumpe_kuhlung_status` |
+        | Wärmepumpe Pool Status | `pool_status` | `sensor.warmepumpe_pool_status` |
+        | Wärmepumpe Energie: Strom gesamt | `energy_el_total` | `sensor.warmepumpe_energie_strom_gesamt` |
+        | Wärmepumpe Heizung Energie: Strom | `energy_el_heating` | `sensor.warmepumpe_heizung_energie_strom` |
+        | Wärmepumpe Warmwasser Energie: Strom | `energy_el_dhw` | `sensor.warmepumpe_warmwasser_energie_strom` |
+        | Wärmepumpe Energie: Wärme gesamt | `energy_th_total` | `sensor.warmepumpe_energie_warme_gesamt` |
+        | Wärmepumpe Heizung Energie: Wärme | `energy_th_heating` | `sensor.warmepumpe_heizung_energie_warme` |
+        | Wärmepumpe Warmwasser Energie: Wärme | `energy_th_dhw` | `sensor.warmepumpe_warmwasser_energie_warme` |
+        | Wärmepumpe Betriebsstunden: Verdichter | `hours_hp` | `sensor.warmepumpe_betriebsstunden_verdichter` |
+        | Wärmepumpe Heizung Betriebsstunden | `hours_heating` | `sensor.warmepumpe_heizung_betriebsstunden` |
+        | Wärmepumpe Warmwasser Betriebsstunden | `hours_dhw` | `sensor.warmepumpe_warmwasser_betriebsstunden` |
+        | Wärmepumpe Heizung Betriebsart | `cfg_heating_mode` | `select.warmepumpe_heizung_betriebsart` |
+        | Wärmepumpe Heizung Sollwert | `cfg_heating_setpoint` | `number.warmepumpe_heizung_sollwert` |
+        | Wärmepumpe Heizung Heizkurven-Anhebung | `cfg_heating_offset` | `number.warmepumpe_heizung_heizkurven_anhebung` |
+        | Wärmepumpe Heizung Stufe | `cfg_heating_level` | `select.warmepumpe_heizung_stufe` |
+        | Wärmepumpe Warmwasser Betriebsart | `cfg_dhw_mode` | `select.warmepumpe_warmwasser_betriebsart` |
+        | Wärmepumpe Warmwasser Sollwert | `cfg_dhw_setpoint` | `number.warmepumpe_warmwasser_sollwert` |
+        | Wärmepumpe Warmwasser Anhebung | `cfg_dhw_offset` | `number.warmepumpe_warmwasser_anhebung` |
+        | Wärmepumpe Warmwasser Stufe | `cfg_dhw_level` | `select.warmepumpe_warmwasser_stufe` |
+        | Wärmepumpe Heizung Mischkreis 1: Betriebsart | `cfg_mk1_mode` | `select.warmepumpe_heizung_mischkreis_1_betriebsart` |
+        | Wärmepumpe Heizung Mischkreis 1: Sollwert | `cfg_mk1_setpoint` | `number.warmepumpe_heizung_mischkreis_1_sollwert` |
+        | Wärmepumpe Heizung Mischkreis 1: Anhebung | `cfg_mk1_offset` | `number.warmepumpe_heizung_mischkreis_1_anhebung` |
+        | Wärmepumpe Heizung Mischkreis 1: Stufe | `cfg_mk1_level` | `select.warmepumpe_heizung_mischkreis_1_stufe` |
+        | Wärmepumpe Leistungsbegrenzung: Modus | `cfg_power_limit_mode` | `select.warmepumpe_leistungsbegrenzung_modus` |
+        | Wärmepumpe Leistungsbegrenzung: Wert | `cfg_power_limit` | `number.warmepumpe_leistungsbegrenzung_wert` |
+        | Wärmepumpe Raumtemperatur-Sollwert | `cfg_room_setpoint` | `number.warmepumpe_raumtemperatur_sollwert` |
+        | Wärmepumpe Heizung Sperren | `heating_block` | `switch.warmepumpe_heizung_sperren` |
+        | Wärmepumpe Warmwasser Sperren | `dhw_block` | `switch.warmepumpe_warmwasser_sperren` |
+        | Wärmepumpe Kühlung Sperren | `cooling_block` | `switch.warmepumpe_kuhlung_sperren` |
+        | Wärmepumpe Pool Sperren | `pool_block` | `switch.warmepumpe_pool_sperren` |
+        | Wärmepumpe Warmwasser Zirkulationspumpe | `circulation` | `switch.warmepumpe_warmwasser_zirkulationspumpe` |
+        | Wärmepumpe Warmwasser Extra | `extra_dhw` | `switch.warmepumpe_warmwasser_extra` |
+        | Wärmepumpe Temperatur: Außen Mittelwert | `outside_temp_average` | `sensor.warmepumpe_temperatur_aussen_mittelwert` |
+        | Wärmepumpe Temperatur: Wärmequelle Eintritt | `heat_source_input` | `sensor.warmepumpe_temperatur_warmequelle_eintritt` |
+        | Wärmepumpe Heizung Mischkreis 2: Betriebsart | `cfg_mk2_mode` | `select.warmepumpe_heizung_mischkreis_2_betriebsart` |
+        | Wärmepumpe Heizung Mischkreis 2: Sollwert | `cfg_mk2_setpoint` | `number.warmepumpe_heizung_mischkreis_2_sollwert` |
+        | Wärmepumpe Heizung Mischkreis 2: Anhebung | `cfg_mk2_offset` | `number.warmepumpe_heizung_mischkreis_2_anhebung` |
+        | Wärmepumpe Heizung Mischkreis 2: Stufe | `cfg_mk2_level` | `select.warmepumpe_heizung_mischkreis_2_stufe` |
+        | Wärmepumpe Kühlung Mischkreis 2: Betriebsart | `cfg_mk2_cool_mode` | `select.warmepumpe_kuhlung_mischkreis_2_betriebsart` |
+        | Wärmepumpe Kühlung Mischkreis 2: Sollwert | `cfg_mk2_cool_setpoint` | `number.warmepumpe_kuhlung_mischkreis_2_sollwert` |
+        | Wärmepumpe Kühlung Mischkreis 2: Anhebung | `cfg_mk2_cool_offset` | `number.warmepumpe_kuhlung_mischkreis_2_anhebung` |
+        | Wärmepumpe Heizung Mischkreis 3: Betriebsart | `cfg_mk3_mode` | `select.warmepumpe_heizung_mischkreis_3_betriebsart` |
+        | Wärmepumpe Heizung Mischkreis 3: Sollwert | `cfg_mk3_setpoint` | `number.warmepumpe_heizung_mischkreis_3_sollwert` |
+        | Wärmepumpe Heizung Mischkreis 3: Anhebung | `cfg_mk3_offset` | `number.warmepumpe_heizung_mischkreis_3_anhebung` |
+        | Wärmepumpe Heizung Mischkreis 3: Stufe | `cfg_mk3_level` | `select.warmepumpe_heizung_mischkreis_3_stufe` |
+        | Wärmepumpe Kühlung Mischkreis 3: Betriebsart | `cfg_mk3_cool_mode` | `select.warmepumpe_kuhlung_mischkreis_3_betriebsart` |
+        | Wärmepumpe Kühlung Mischkreis 3: Sollwert | `cfg_mk3_cool_setpoint` | `number.warmepumpe_kuhlung_mischkreis_3_sollwert` |
+        | Wärmepumpe Kühlung Mischkreis 3: Anhebung | `cfg_mk3_cool_offset` | `number.warmepumpe_kuhlung_mischkreis_3_anhebung` |
+        | Wärmepumpe Temperatur: Wärmequelle Austritt | `heat_source_out` | `sensor.warmepumpe_temperatur_warmequelle_austritt` |
+        | Wärmepumpe Kühlung Energie: Strom | `energy_el_cooling` | `sensor.warmepumpe_kuhlung_energie_strom` |
+        | Wärmepumpe Pool Energie: Strom | `energy_el_pool` | `sensor.warmepumpe_pool_energie_strom` |
+        | Wärmepumpe Kühlung Energie: Wärme | `energy_th_cooling` | `sensor.warmepumpe_kuhlung_energie_warme` |
+        | Wärmepumpe Pool Energie: Wärme | `energy_th_pool` | `sensor.warmepumpe_pool_energie_warme` |
+        | Wärmepumpe Heizung Pumpe: Heizung (HUP) | `pump_heating` | `binary_sensor.warmepumpe_heizung_pumpe_heizung_hup` |
+        | Wärmepumpe Warmwasser Pumpe: Warmwasser (BUP) | `pump_hot_water` | `binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup` |
+        | Wärmepumpe Warmwasser Pumpe: Zirkulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip` |
+        | Wärmepumpe Ausgang: VBO | `output_vbo` | `binary_sensor.warmepumpe_ausgang_vbo` |
+        | Wärmepumpe Ausgang: FP1 | `output_fp1` | `binary_sensor.warmepumpe_ausgang_fp1` |
+        | Wärmepumpe Ausstattung: Heizen | `cap_heating` | `binary_sensor.warmepumpe_ausstattung_heizen` |
+        | Wärmepumpe Ausstattung: Warmwasser | `cap_hot_water` | `binary_sensor.warmepumpe_ausstattung_warmwasser` |
+        | Wärmepumpe Ausstattung: Kühlen | `cap_cooling` | `binary_sensor.warmepumpe_ausstattung_kuhlen` |
+        | Wärmepumpe Ausstattung: Pool | `cap_pool` | `binary_sensor.warmepumpe_ausstattung_pool` |
+        | Wärmepumpe Ausstattung: Raumregler | `cap_room_controller` | `binary_sensor.warmepumpe_ausstattung_raumregler` |
+        | Wärmepumpe Ausstattung: Mischkreis 1 Heizen | `cap_mk1_heating` | `binary_sensor.warmepumpe_ausstattung_mischkreis_1_heizen` |
+        | Wärmepumpe Ausstattung: Mischkreis 1 Kühlen | `cap_mk1_cooling` | `binary_sensor.warmepumpe_ausstattung_mischkreis_1_kuhlen` |
+        | Wärmepumpe Ausstattung: Mischkreis 2 Heizen | `cap_mk2_heating` | `binary_sensor.warmepumpe_ausstattung_mischkreis_2_heizen` |
+        | Wärmepumpe Ausstattung: Mischkreis 2 Kühlen | `cap_mk2_cooling` | `binary_sensor.warmepumpe_ausstattung_mischkreis_2_kuhlen` |
+        | Wärmepumpe Ausstattung: Mischkreis 3 Heizen | `cap_mk3_heating` | `binary_sensor.warmepumpe_ausstattung_mischkreis_3_heizen` |
+        | Wärmepumpe Ausstattung: Mischkreis 3 Kühlen | `cap_mk3_cooling` | `binary_sensor.warmepumpe_ausstattung_mischkreis_3_kuhlen` |
+        | Wärmepumpe COP (10 min) | `cop` | `sensor.warmepumpe_cop_10_min` |
+        | Wärmepumpe Heizung COP gesamt | `cop_heating` | `sensor.warmepumpe_heizung_cop_gesamt` |
+        | Wärmepumpe Warmwasser COP gesamt | `cop_dhw` | `sensor.warmepumpe_warmwasser_cop_gesamt` |
+        | Wärmepumpe Firmware-Version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
+        | Wärmepumpe Status: Verdichter 1 läuft | `compressor_1` | `binary_sensor.warmepumpe_status_verdichter_1_lauft` |
+        | Wärmepumpe Status: Verdichter 2 läuft | `compressor_2` | `binary_sensor.warmepumpe_status_verdichter_2_lauft` |
+        | Wärmepumpe Status: Zusatzheizung 1 (ZWE) aktiv | `aux_heater_1` | `binary_sensor.warmepumpe_status_zusatzheizung_1_zwe_aktiv` |
+        | Wärmepumpe Status: Zusatzheizung 2 (ZWE) aktiv | `aux_heater_2` | `binary_sensor.warmepumpe_status_zusatzheizung_2_zwe_aktiv` |
+        | Wärmepumpe Status: Verbindung | `online` | `binary_sensor.warmepumpe_status_verbindung` |
+        | Wärmepumpe Heizung | `climate_heating` | `climate.warmepumpe_heizung` |
+        | Wärmepumpe Warmwasser | `water_heater_dhw` | `water_heater.warmepumpe_warmwasser` |
+  - type: grid
+    cards:
+    - type: heading
+      heading: Blueprints
+      icon: mdi:puzzle
+    - type: markdown
+      content: |-
+        Blueprint mit einem Klick importieren, dann daraus eine Automation anlegen (Einstellungen > Automationen > Blueprints):
+
+        - [Heizen oder Warmwasser sperren, solange ein Signal an ist](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/Bankaifan/ha-luxtronik-shi/blob/main/blueprints/automation/luxtronik_shi/block_while_signal.yaml)
+        - [Auslöser mit Hysterese (PV-Überschuss, Preis, Leistung)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/Bankaifan/ha-luxtronik-shi/blob/main/blueprints/automation/luxtronik_shi/surplus_trigger.yaml)
+        - [Benachrichtigung bei Verbindungsverlust, Fehlernummer und EVU-Sperre](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/Bankaifan/ha-luxtronik-shi/blob/main/blueprints/automation/luxtronik_shi/notify_problems.yaml)
+  - type: grid
+    cards:
+    - type: heading
+      heading: Beispiele
+      icon: mdi:script-text
+    - type: markdown
+      content: Beispiele für eigene Automationen. Werte und Bereiche vorher für die eigene Anlage prüfen.
+    - type: markdown
+      content: |
+        **Heizungs-Sollwert setzen: Die Betriebsart muss *Sollwert* sein, dann den Wert schreiben (Rücklauftemperatur, Beispielwert)**
+
+        ```yaml
+        actions:
+          - action: select.select_option
+            target:
+              entity_id: select.warmepumpe_heizung_betriebsart
+            data:
+              option: setpoint
+          - action: number.set_value
+            target:
+              entity_id: number.warmepumpe_heizung_sollwert
+            data:
+              value: 30
+        ```
+    - type: markdown
+      content: |
+        **Wirksamen Sollwert der Regelung lesen**
+
+        ```yaml
+        {{ state_attr('number.warmepumpe_heizung_sollwert', 'effective_target') }}
+        ```
+    - type: markdown
+      content: |
+        **Benachrichtigen, wenn die Wärmepumpe nicht erreichbar ist**
+
+        ```yaml
+        triggers:
+          - trigger: state
+            entity_id: binary_sensor.warmepumpe_status_verbindung
+            to: "off"
+            for: "00:10:00"
+        actions:
+          - action: notify.notify
+            data:
+              message: "Heat pump not reachable"
+        ```
+    - type: markdown
+      content: 'Weiter abfragen: Die Integration nie stoppen und Updates nie länger als 10 Minuten pausieren, sonst
+        verwirft der Regler alles, was über die Schnittstelle gesetzt wurde.'

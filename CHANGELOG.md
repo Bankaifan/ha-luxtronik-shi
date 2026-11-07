@@ -11,6 +11,22 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Added
+- **Ready-made dashboards** (`dashboards/`, English and German, profiles *basic* and *full*, plus an optional view
+  with the HACS card apexcharts-card): overview, energy, locks and grid, control, diagnostics and an automation
+  view. Built-in cards only; entity IDs are predicted or, with `tools/gen_dashboard.py --registry ...`, looked up in
+  your entity registry. See `docs/dashboard.md`. The visual rendering in a browser was not checked.
+  Pump (HUP, BUP, ZIP) tiles in the overview, outputs in the diagnostics view and, if enabled, the EVU input levels
+  in the locks and grid view with a note that the EVU polarity is inferred from one measured state.
+  Written for 0.13.0: one *Firmware version* tile, "COP (10 min)", status sensors as text.
+- **Three blueprints** (`blueprints/automation/luxtronik_shi/`): block while a signal is on, trigger with
+  hysteresis, notify about problems. They select entities with an integration filter.
+
+### Tests
+- `tests/test_dashboard.py` (generated files up to date, structure, predicted entity IDs equal the IDs Home
+  Assistant creates, in English and German) and `tests/test_blueprints.py` (validation and behaviour against the
+  simulated heat pump).
+
 ## [0.13.0] – 2026-11-07
 
 ### Added
