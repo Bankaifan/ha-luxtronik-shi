@@ -158,7 +158,6 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_poll: datetime | None = None
         self._last_poll_saved: datetime | None = None
         self._gap_checked = False
-        self._window_groups_forgotten: set[str] = set()  # circuits with an external change in the window
         self._write_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------ devices
@@ -445,6 +444,16 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (KeyError, TypeError, ValueError):
             self._last_poll_saved = None
         values = data.get("values") or {}
+        if self._last_poll_saved is not None and values:
+            age = (dt_util.utcnow() - self._last_poll_saved).total_seconds()
+            if age > RESTORE_MAX_GAP:
+                _LOGGER.info(
+                    "%s: remembered values are %d h old (limit %d h); dropped, nothing will be restored",
+                    self.config_entry.title, age // 3600, RESTORE_MAX_GAP // 3600,
+                )
+                self._remembered = {}
+                await self._save(self._last_poll_saved)
+                return
         restorable = self._restorable()
         # Keys of equipment that was switched off are dropped: their values may be stale when it comes back.
         self._remembered = {
@@ -481,8 +490,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return False
         if gap > RESTORE_MAX_GAP:
             _LOGGER.info(
-                "%s: last successful poll %d s ago, more than %d days; not treated as evidence of a reset",
-                self.config_entry.title, gap, RESTORE_MAX_GAP // 86400,
+                "%s: last successful poll %d s ago, more than %d h; not treated as evidence of a reset",
+                self.config_entry.title, gap, RESTORE_MAX_GAP // 3600,
             )
             return False
         _LOGGER.info(
@@ -522,11 +531,21 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _forget_external(self, key: str, remembered: int, current: int) -> None:
         del self._remembered[key]
-        self._window_groups_forgotten.add(restore_group(key))
         _LOGGER.info(
             "%s: %s was changed outside this integration (%s -> %s) and will not be restored",
             self.config_entry.title, key, remembered, current,
         )
+        self._forget_group_mode(key)
+
+    def _forget_group_mode(self, key: str) -> None:
+        """Group rule: once a member of a circuit changed outside this integration, its mode is not restored
+        until it is written through Home Assistant again (otherwise a combination nobody set could result)."""
+        mode = f"{restore_group(key)}_mode"
+        if mode != key and self._remembered.pop(mode, None) is not None:
+            _LOGGER.info(
+                "%s: %s will not be restored, %s of the same circuit was changed outside this integration",
+                self.config_entry.title, mode, key,
+            )
 
     async def _check_device_reset(self, *, recovered: bool) -> None:
         """Re-apply remembered values when the evidence shows that the device reset them (option on).
@@ -543,11 +562,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         changed = False
         opening = self._window_left == 0
-        if opening:
-            self._window_groups_forgotten = set()
         for key, remembered in list(self._remembered.items()):
             current = self._raw.get(key)
-            if key in self._fresh and current not in (None, 0, remembered):
+            if key in self._remembered and key in self._fresh and current not in (None, 0, remembered):
                 self._forget_external(key, remembered, current)
                 changed = True
         zeros = any(
@@ -590,27 +607,15 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 reset = False
         if not reset:
             for key in pending:
-                del self._remembered[key]
+                self._remembered.pop(key, None)
             _LOGGER.info(
                 "%s: %s read 0 without evidence of a device reset; treated as changed outside this "
                 "integration and will not be restored",
                 title, ", ".join(sorted(pending)),
             )
+            for key in pending:
+                self._forget_group_mode(key)
             return True
-        # Group rule: a mode is not restored when another member of its circuit (setpoint, offset, level)
-        # was changed by someone else in this window; the result would be a combination nobody wrote.
-        held = sorted(
-            k for k in pending if k.endswith("_mode") and restore_group(k) in self._window_groups_forgotten
-        )
-        if held:
-            for key in held:
-                del pending[key]
-                del self._remembered[key]
-            _LOGGER.info(
-                "%s: %s not restored, another value of the same circuit was changed outside this "
-                "integration",
-                title, ", ".join(held),
-            )
         self._last_restore = now
         restored: list[str] = []
         failed: list[str] = []
@@ -647,4 +652,4 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "value); they are forgotten and not retried",
                 title, ", ".join(sorted(failed)),
             )
-        return bool(failed or held)
+        return bool(failed)

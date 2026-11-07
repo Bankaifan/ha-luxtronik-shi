@@ -173,7 +173,9 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint are
   remembered (`RESTORE_KEYS` in `const.py`). Blocks (heating, hot water, cooling, pool), circulation, extra hot water
   and the power limit are **never** restored: an optimizer such as the Heat Pump Optimizer owns them live, and
-  re-applying a block after a long downtime would undo the watchdog's fail-safe (everything released). A failed write or a different read-back forgets the
+  re-applying a block after a long downtime would undo the watchdog's fail-safe (everything released). The modes and
+  setpoints in the list (for example `cfg_heating_mode`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`) are restored
+  even if an optimizer writes them; its next write wins. A failed write or a different read-back forgets the
   key. The values are stored per entry in Home Assistant's storage (`.storage/luxtronik_shi.restore.<entry_id>`), so a
   restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `off`,
   offset 0) is remembered like any other write, so there is nothing left to restore for it.
@@ -184,12 +186,13 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
     two values are remembered. A gap of more than 10 minutes since the last successful poll, for example a long Home
     Assistant downtime, counts as such an outage, because the watchdog has then expired. The time of the last
     successful poll is stored with the values, at most once a minute and on unload; to make up for that, the gap must
-    exceed 11 minutes. A gap of more than 7 days is ignored.
+    exceed 11 minutes. Remembered values older than 24 hours (since the last successful poll) are dropped when the
+    integration starts, so nothing is restored from them.
 * **Changes by others are respected where they can be recognised.** A remembered value that reads a *different
-  non-zero* value was changed by another Modbus client or a person: it is forgotten (logged at info level) and not
-  restored. Zeros without the evidence above are treated the same way. Mode, setpoint, offset and level of one circuit
-  form a group: if any of them was changed by someone else, that circuit's mode is not restored either, so no
-  combination is created that nobody set.
+  non-zero* value was changed outside this integration, for example by another Modbus client: it is forgotten (logged
+  at info level) and not restored. Zeros without the evidence above are treated the same way. Mode, setpoint, offset and level of one circuit
+  form a group: once any of them was changed by someone else, that circuit's mode is forgotten as well and is only
+  restored again after it was written through Home Assistant again, so no combination is created that nobody set.
 * **No write loops.** Each key is restored once per detected reset, with read-back. A restore whose write fails or reads
   back a different value forgets that key and is not retried. A reset detected again within 15 minutes of a restore is
   not restored. Restored keys are logged at warning level.
@@ -200,7 +203,7 @@ poll, because the values match again. *Download diagnostics* lists the remembere
 **Limits:**
 
 * **A change to 0 by someone else can be overwritten.** The controller's reset value is 0, so a value another Modbus
-  client (or a person on the controller) sets to 0 during or right after a connection outage, or two remembered values
+  client sets to 0 during or right after a connection outage, or two remembered values
   set to 0 at the same time, look exactly like a reset and are restored over that change. **Leave the option off if
   another system also writes these registers.**
 

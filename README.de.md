@@ -183,7 +183,9 @@ Integration solche Werte zurückschreibt:
   Kühlen, gesamt) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Sperren (Heizung, Warmwasser, Kühlung, Pool),
   Zirkulation, Warmwasser-Extra und die Leistungsbegrenzung werden **nie** wiederhergestellt: Die gehören live einem
   Optimierer wie dem Heat Pump Optimizer, und eine Sperre nach langem Stillstand wieder zu setzen, würde die
-  Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Ein fehlgeschlagenes Schreiben oder
+  Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Die Betriebsarten und Sollwerte der Liste (etwa
+  `cfg_heating_mode`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`) werden auch dann wiederhergestellt, wenn ein
+  Optimierer sie schreibt; dessen nächster Schreibzugriff gewinnt. Ein fehlgeschlagenes Schreiben oder
   ein abweichender Rücklesewert löscht den Schlüssel. Die Werte liegen je Eintrag im Speicher von Home Assistant
   (`.storage/luxtronik_shi.restore.<entry_id>`), die Wiederherstellung klappt also auch nach einem Neustart von Home
   Assistant. Wer einen Wert auf seinen neutralen Wert zurücksetzt (z. B. Betriebsart `aus`, Offset 0), dem wird das
@@ -195,13 +197,15 @@ Integration solche Werte zurückschreibt:
     liest, wobei mindestens zwei Werte gemerkt sind. Eine Lücke von mehr als 10 Minuten seit der letzten
     erfolgreichen Abfrage, etwa ein langer Stillstand von Home Assistant, zählt als solcher Ausfall, weil der Watchdog
     dann abgelaufen ist. Die Zeit der letzten erfolgreichen Abfrage wird mit den Werten gespeichert, höchstens einmal
-    pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein. Eine Lücke von mehr als
-    7 Tagen wird ignoriert.
+    pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein. Gemerkte Werte, die älter
+    als 24 Stunden sind (seit der letzten erfolgreichen Abfrage), werden beim Start der Integration verworfen; aus
+    ihnen wird nichts wiederhergestellt.
 * **Fremde Änderungen werden respektiert, soweit sie erkennbar sind.** Liest ein gemerkter Wert einen *anderen Wert
-  ungleich 0*, hat ihn ein anderer Modbus-Client oder ein Mensch geändert: Er wird vergessen (Log-Level info) und nicht
+  ungleich 0*, wurde er außerhalb dieser Integration geändert, etwa von einem anderen Modbus-Client: Er wird vergessen (Log-Level info) und nicht
   wiederhergestellt. Nullen ohne die Belege oben werden genauso behandelt. Betriebsart, Sollwert, Offset und Stufe
-  eines Kreises bilden eine Gruppe: Wurde einer davon fremd geändert, wird auch die Betriebsart dieses Kreises nicht
-  wiederhergestellt – so entsteht keine Kombination, die niemand eingestellt hat.
+  eines Kreises bilden eine Gruppe: Sobald einer davon fremd geändert wurde, wird auch die Betriebsart dieses Kreises
+  vergessen und erst wieder wiederhergestellt, nachdem sie erneut über Home Assistant geschrieben wurde – so entsteht
+  keine Kombination, die niemand eingestellt hat.
 * **Keine Schreibschleifen.** Jeder Schlüssel wird pro erkanntem Reset einmal wiederhergestellt, mit Rücklesen.
   Schlägt das Schreiben fehl oder liest es einen anderen Wert zurück, wird der Schlüssel vergessen und nicht erneut
   versucht. Ein Reset, der innerhalb von 15 Minuten nach einer Wiederherstellung erneut erkannt wird, wird nicht
@@ -213,7 +217,7 @@ meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunt
 **Grenzen:**
 
 * **Eine fremde Änderung auf 0 kann überschrieben werden.** Der Reset-Wert der Regelung ist 0. Setzt ein anderer
-  Modbus-Client (oder jemand an der Regelung) einen Wert während oder kurz nach einem Verbindungsausfall auf 0, oder
+  Modbus-Client einen Wert während oder kurz nach einem Verbindungsausfall auf 0, oder
   zwei gemerkte Werte gleichzeitig, sieht das genau wie ein Reset aus und wird über diese Änderung hinweg
   wiederhergestellt. **Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt.**
 

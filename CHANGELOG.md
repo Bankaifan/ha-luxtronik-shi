@@ -63,10 +63,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
   - Evidence of a reset, from the normal poll only: at least two remembered non-zero values reading 0, or a connection
     outage followed by such a zero while at least two values are remembered. A gap of more than 660 s (600 s watchdog
     plus the 60 s save interval) since the last successful poll, e.g. a long Home Assistant downtime, counts like an
-    outage; a gap over 7 days is ignored. The last-poll time is stored at most once a minute, on unload, and only while
+    outage. Remembered values older than 24 hours are dropped at setup. The last-poll time is stored at most once a minute, on unload, and only while
     something is remembered.
   - A different non-zero value, or a lone zero without that evidence, is an external change and is forgotten. If any
-    member of a circuit (mode, setpoint, offset, level) changed externally, that circuit's mode is not restored.
+    member of a circuit (mode, setpoint, offset, level) changed externally, that circuit's mode is forgotten too and
+    only restorable again after the next write through Home Assistant. Modes and setpoints in the list are restored
+    even if an optimizer writes them; its next write wins.
     **Limit:** a value another Modbus client sets to 0 during or right after an outage, or two values set to 0 at
     once, cannot be told apart from a reset and is restored over that change. Leave the option off if another system
     also writes these registers.
@@ -98,7 +100,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ### Tests
 - `tests/test_restore_after_reset.py`: blocks and extra hot water are never remembered or restored, the allow-list only
   names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
-  skipped, a write whose read-back differs is not remembered, the gap boundary at 660/661 s and over 7 days, no
+  skipped, a write whose read-back differs is not remembered, the group rule across windows, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no
   last-poll save while nothing is remembered; watchdog gap after a Home Assistant restart (over 600 s counts as an outage,
   a short restart does not), the last-poll time is written at most once a minute; reboot simulation with restore and read-back, external changes adopted and
   forgotten (also during a reset), the single-register ambiguity, option off writes nothing and stores nothing, no

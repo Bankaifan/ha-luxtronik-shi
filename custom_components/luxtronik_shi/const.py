@@ -83,8 +83,9 @@ RESTORE_KEYS: frozenset[str] = frozenset(
         "cfg_room_setpoint",
     }
 )
-# A gap since the last successful poll longer than this is no evidence (stale store, restored backup).
-RESTORE_MAX_GAP = 7 * 86400  # seconds
+# Remembered values older than this (time since the last successful poll) are dropped at setup: an optimizer
+# such as the Heat Pump Optimizer rewrites modes and setpoints live, so a day-old value is no longer meant.
+RESTORE_MAX_GAP = 24 * 3600  # seconds
 # A device reset detected again within this time after a restore is not restored again (no write loops).
 RESTORE_COOLDOWN = 900  # seconds
 

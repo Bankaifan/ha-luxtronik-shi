@@ -350,11 +350,12 @@ async def test_group_rule_mode_not_restored_over_foreign_setpoint(hass: HomeAssi
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_setpoint", 350)
     await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 450)
     before = len(_writes(shi, MODE))
     await _reboot(entry, shi, {MODE: 0, SETPOINT: 200, DHW_MODE: 0})
     assert (shi.holding[MODE], shi.holding[SETPOINT], shi.holding[DHW_MODE]) == (0, 200, 1)
     assert len(_writes(shi, MODE)) == before
-    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1}
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 450}
 
 
 @pytest.mark.parametrize(("key", "address"), [("heating_block", BLOCK), ("extra_dhw", EXTRA_DHW)])
@@ -437,11 +438,11 @@ async def test_user_write_with_different_read_back_is_not_remembered(
     assert "cfg_heating_level" not in coordinator.remembered
 
 
-@pytest.mark.parametrize(("downtime", "restored"), [(660, False), (661, True), (7 * 86400 + 1, False)])
+@pytest.mark.parametrize(("downtime", "restored"), [(660, False), (661, True), (24 * 3600, True), (24 * 3600 + 1, False)])
 async def test_watchdog_gap_boundary(
     hass: HomeAssistant, shi: FakeSHI, clock: Clock, downtime: int, restored: bool
 ) -> None:
-    """The gap must exceed 600 s plus the 60 s save interval, and is ignored beyond 7 days."""
+    """The gap must exceed 600 s plus the 60 s save interval; beyond 24 hours the values are dropped."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 2)
     await _write(entry, "cfg_heating_offset", 0)
@@ -456,3 +457,39 @@ async def test_last_poll_not_saved_while_nothing_is_remembered(
     clock.tick(timedelta(seconds=120))
     await _polls(entry, 2)
     assert restore_store_key(entry.entry_id) not in hass_storage
+
+
+async def test_group_rule_holds_across_windows(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Review probe p8: the setpoint was changed by another client long before the reboot. The mode is dropped
+    with it and not restored over the default setpoint, until it is written through Home Assistant again."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_setpoint", 350)
+    await _write(entry, "cfg_heating_level", 2)
+    shi.holding[SETPOINT] = 400  # other client
+    await _polls(entry)
+    assert entry.runtime_data.remembered == {"cfg_heating_level": 2}
+    await _reboot(entry, shi, {MODE: 0, SETPOINT: 200, LEVEL: 0})
+    assert (shi.holding[MODE], shi.holding[SETPOINT]) == (0, 200)
+    await _write(entry, "cfg_heating_mode", 1)  # written again through Home Assistant: restorable again
+    await _write(entry, "cfg_heating_setpoint", 350)
+    assert {"cfg_heating_mode", "cfg_heating_setpoint"} <= entry.runtime_data.remembered.keys()
+
+
+@pytest.mark.parametrize("age", [timedelta(days=30), timedelta(hours=25)])
+async def test_stale_store_is_dropped(
+    hass: HomeAssistant, shi: FakeSHI, clock: Clock, hass_storage, age: timedelta
+) -> None:
+    """Review probe p7: values older than 24 hours are dropped at setup, even if two zeros follow."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_level", 2)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    clock.tick(age)
+    shi.holding.update({MODE: 0, LEVEL: 0})
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _polls(entry)
+    assert (shi.holding[MODE], shi.holding[LEVEL]) == (0, 0)
+    assert entry.runtime_data.remembered == {}
+    assert hass_storage[restore_store_key(entry.entry_id)]["data"]["values"] == {}
