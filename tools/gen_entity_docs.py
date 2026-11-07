@@ -68,6 +68,8 @@ def collect() -> list[Entity]:
     bits, disabled = _binary_sensor_constants()
     found: list[Entity] = []
     for reg in registers.ALL_REGISTERS:
+        if reg.platform not in PLATFORM_ORDER:
+            continue  # "internal": read only to compose another entity, no entity of its own
         found.append(
             Entity(
                 reg.key, reg.platform, len(found), reg=reg, enabled_default=reg.enabled_default,
@@ -76,6 +78,9 @@ def collect() -> list[Entity]:
         )
     for sensor in registers.DERIVED_SENSORS:
         found.append(Entity(sensor.key, "sensor", len(found), derived=sensor, area=registers.area_of(sensor.key)))
+    firmware = getattr(registers, "FIRMWARE_SENSOR_KEY", None)  # one firmware sensor, if the integration has it
+    if firmware:
+        found.append(Entity(firmware, "sensor", len(found), diagnostic=True))
     for bit in bits:
         found.append(
             Entity(bit[0], "binary_sensor", len(found), bit=bit[1], enabled_default=bit[0] not in disabled)
@@ -94,6 +99,9 @@ def _translations(lang: str) -> dict:
 
 def _text(entity: Entity) -> texts.Entry:
     entry = entries.ENTRIES.get(entity.key)
+    alternative = entries.ALTERNATIVES.get(entity.key)
+    if alternative is not None and hasattr(registers, alternative[0]):
+        entry = alternative[1]
     if entry is None and entity.reg is not None and entity.key in registers.RAW_KEYS:
         en, de, src = entries.RAW_TEXT.get(entity.reg.address, entries.RAW_DEFAULT)
         entry = texts.Entry("raw", en, de, src)
@@ -146,7 +154,22 @@ def _values(entity: Entity, entry: texts.Entry, lang: str, trans: dict, page: di
             parts.append(("step " if lang == "en" else "Schritt ") + _fmt(reg.step, lang))
         return "<br>".join(parts)
     if _options(entity) and reg is not None:
-        return "<br>".join(f"{i} = `{opt}`: {states.get(opt, opt)}" for i, opt in enumerate(reg.options))
+        lines: list[str] = []
+        run: list[int] = []  # consecutive ``unknown_<n>`` options are shown as one line
+
+        def flush() -> None:
+            if run:
+                lines.append(f"{run[0]} … {run[-1]} = `unknown_N`: " + states.get(reg.options[run[0]], "").replace(str(run[0]), "N"))
+                run.clear()
+
+        for i, opt in enumerate(reg.options):
+            if opt.startswith("unknown_"):
+                run.append(i)
+                continue
+            flush()
+            lines.append(f"{i} = `{opt}`: {states.get(opt, opt)}")
+        flush()
+        return "<br>".join(lines)
     if entity.platform == "switch":
         return page["switch_values"]
     if entity.platform == "binary_sensor":
@@ -192,6 +215,9 @@ def _flags(entity: Entity, lang: str, page: dict) -> str:
             out.append(flags["needs"].format(parts=" + ".join(page["features"][f] for f in needs)))
         if entity.reg.every > 1:
             out.append(flags["every"].format(n=entity.reg.every))
+    source = getattr(entity.reg, "source", None)
+    if source:
+        out.append(("register source: " if lang == "en" else "Registerquelle: ") + source)
     if entity.key in const.RESTORE_KEYS:
         out.append(flags["restored"])
     if entity.key in const.DEFERRED_KEYS:
