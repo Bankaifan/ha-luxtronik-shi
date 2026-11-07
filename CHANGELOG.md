@@ -58,7 +58,11 @@ versioning follows [Semantic Versioning](https://semver.org/):
   `docs/firmware-3.92.3-shi-analysis.md`); measured on the reference installation (LWDV 91-1/3, FW 3.92.3), heating
   mode (10000) read `off` instead of `setpoint` after two reboots and heating level (10003) raw 0 instead of 2.
   - Only an allow-list is remembered and restored (`RESTORE_KEYS` in `const.py`): mode, level, offset and setpoint of
-    each circuit and the room setpoint. Blocks, circulation, extra hot water and the power limit are never restored.
+    each circuit and the room setpoint. Blocks, circulation, extra hot water, the power limit and the overall group
+    (`cfg_overall_*`, 10065–10067, semantics unproven) are never remembered, adopted or restored.
+  - **Info notice when base values change:** if a confirmed reset relearns a setpoint's reset value, one information
+    notice (a persistent notification, not a repair issue, in English or German) lists the changed base values
+    (before -> now) and the restored values, and says that no action is needed. A later relearn replaces it.
   - Only values written through the integration's own entities and read back unchanged are remembered (persisted per
     entry, so it survives a restart); values set back to neutral are remembered as such. Values written by other
     Modbus clients or over port 8889 are not remembered.

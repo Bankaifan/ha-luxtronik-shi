@@ -209,6 +209,28 @@ STATES = {
     },
 }
 
+# Information notices (persistent notifications, not repair issues). Stored under "exceptions", the translation
+# category Home Assistant provides for backend-generated messages.
+NOTICES = {
+    "en": {
+        "base_values_changed_title": {"message": "{name}: base values of setpoints changed"},
+        "base_values_changed": {
+            "message": "After a restart of the heat pump, the base values these setpoints fall back to have changed "
+            "(learned before -> now):\n\n{changes}\n\nThe values set in Home Assistant remain valid and were "
+            "restored:\n\n{restored}\n\nNo action is needed. This is information only."
+        },
+    },
+    "de": {
+        "base_values_changed_title": {"message": "{name}: Grundwerte von Sollwerten geändert"},
+        "base_values_changed": {
+            "message": "Nach einem Neustart der Wärmepumpe haben sich die Grundwerte geändert, auf die diese "
+            "Sollwerte zurückfallen (bisher gelernt -> jetzt):\n\n{changes}\n\nDie in Home Assistant gesetzten "
+            "Werte gelten weiter und wurden wiederhergestellt:\n\n{restored}\n\nEs ist nichts zu tun. Das ist "
+            "nur ein Hinweis."
+        },
+    },
+}
+
 ISSUES = {
     "en": {
         "firmware_old": {
@@ -266,6 +288,7 @@ for lang in ("en", "de"):
     data["options"]["step"]["init"]["description"] = EQUIPMENT_TEXT[lang]["options"]
     data["entity"] = entity
     data["issues"] = ISSUES[lang]
+    data["exceptions"] = NOTICES[lang]
     data["device"] = {area: {"name": name} for area, name in DEVICE_NAMES[lang].items()}
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

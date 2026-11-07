@@ -997,9 +997,12 @@ async def test_7fff_is_never_adopted(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_heating_level": 2}
 
 
-async def test_old_store_without_marker_keeps_its_values(hass: HomeAssistant, shi: FakeSHI, hass_storage) -> None:
-    """A5: a store from before adoption (values, no marker) keeps its remembered values; only other keys are
-    adopted, once."""
+async def test_old_store_without_marker_keeps_its_values(
+    hass: HomeAssistant, shi: FakeSHI, clock: Clock, hass_storage, monkeypatch
+) -> None:
+    """A5: a store from before adoption (values, no marker). The gap since its last poll opens a reset window that
+    is still open when the adoption runs (the room setpoint is not read in that poll). The remembered heating mode 1
+    must be kept, not replaced by the device value 2 the adoption would otherwise take."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="WP",
@@ -1008,11 +1011,109 @@ async def test_old_store_without_marker_keeps_its_values(hass: HomeAssistant, sh
         options={"scan_interval": 30, "restore_after_reset": True},
     )
     key = restore_store_key(entry.entry_id)
-    old = {"cfg_heating_mode": 0, "cfg_heating_offset": 0}  # written as `off` / 0: never adopted by themselves
-    hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": {"values": old}}
-    shi.holding.update({DHW_MODE: 1})
+    last_poll = (clock.now - timedelta(minutes=15)).isoformat()
+    hass_storage[key] = {
+        "version": 1, "minor_version": 1, "key": key,
+        "data": {"values": {"cfg_heating_mode": 1, "cfg_room_setpoint": 250}, "last_poll": last_poll},
+    }
+    shi.holding.update({MODE: 2, DHW_MODE: 1})
+    original = coordinator_module.LuxtronikCoordinator._read_block
+    skipped: list[int] = []
+
+    async def first_poll_skips_room(self, block):
+        if any(r.key == "cfg_room_setpoint" for r in block.registers) and not skipped:
+            skipped.append(block.start)
+            return
+        await original(self, block)
+
+    monkeypatch.setattr(coordinator_module.LuxtronikCoordinator, "_read_block", first_poll_skips_room)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.runtime_data.remembered == {**old, "cfg_dhw_mode": 1, "cfg_dhw_setpoint": 400}
+    coordinator = entry.runtime_data
+    assert skipped and coordinator._window_left > 0  # the reset window is still open
+    assert coordinator.remembered["cfg_heating_mode"] == 1  # kept, not replaced by the adoption
+    assert coordinator.remembered["cfg_dhw_mode"] == 1  # other keys are adopted
     assert hass_storage[key]["data"]["adopted"] is True
+
+
+async def test_overall_group_is_never_remembered_adopted_or_restored(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """cfg_overall_* (10065-10067) has unproven semantics and is out of the allow-list."""
+    shi.holding.update({10065: 1, 10066: 20, 10067: 2})
+    entry = await _setup(hass, shi)
+    assert not any(k.startswith("cfg_overall") for k in entry.runtime_data.remembered)  # not adopted
+    await _write(entry, "cfg_overall_mode", 2)
+    await _write(entry, "cfg_overall_level", 1)
+    await _write(entry, "cfg_heating_mode", 1)
+    assert not any(k.startswith("cfg_overall") for k in entry.runtime_data.remembered)
+    before = len(_writes(shi, 10065)) + len(_writes(shi, 10067))
+    await _reboot(entry, shi, {MODE: 0, 10065: 0, 10066: 0, 10067: 0})
+    assert shi.holding[MODE] == 1
+    assert len(_writes(shi, 10065)) + len(_writes(shi, 10067)) == before
+    assert (shi.holding[10065], shi.holding[10067]) == (0, 0)
+
+
+# ---------------------------------------------------------------- info notice when base values change
+
+
+def _notices(hass: HomeAssistant) -> dict:
+    from homeassistant.components import persistent_notification
+
+    return {
+        k: v for k, v in persistent_notification._async_get_or_create_notifications(hass).items()
+        if k.startswith("luxtronik_shi_base_values_changed")
+    }
+
+
+async def _relearn_both(entry, shi, heating: int, dhw: int) -> None:
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_setpoint", 300)
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 540)
+    await _reboot(entry, shi, {MODE: 0, SETPOINT: heating, DHW_MODE: 0, DHW_SETPOINT: dhw})
+
+
+async def test_relearn_of_two_setpoints_gives_one_notice(hass: HomeAssistant, shi: FakeSHI, clock: Clock) -> None:
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    coordinator._learned = {"cfg_heating_setpoint": 350, "cfg_dhw_setpoint": 450}
+    await _relearn_both(entry, shi, 360, 470)
+    notices = _notices(hass)
+    assert len(notices) == 1
+    notice = next(iter(notices.values()))
+    assert notice["title"] == "WP: base values of setpoints changed"
+    message = notice["message"]
+    assert "- WP Heating Setpoint: 35.0 °C -> 36.0 °C" in message
+    assert "- WP Hot water Setpoint: 45.0 °C -> 47.0 °C" in message
+    assert "- WP Hot water Setpoint: 54.0 °C" in message  # restored values listed
+    assert "- WP Heating Mode: Setpoint" in message
+    assert "No action is needed" in message
+    assert "cfg_" not in message  # no raw keys
+
+    clock.tick(timedelta(seconds=1000))  # a later relearn replaces the notice
+    await _relearn_both(entry, shi, 370, 470)
+    notices = _notices(hass)
+    assert len(notices) == 1
+    message = next(iter(notices.values()))["message"]
+    assert "36.0 °C -> 37.0 °C" in message
+    assert "Hot water Setpoint: 47.0" not in message  # only what changed this time
+
+
+async def test_no_relearn_no_notice(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    await _relearn_both(entry, shi, 360, 470)  # first learning, nothing relearned
+    assert entry.runtime_data.learned == {"cfg_heating_setpoint": 360, "cfg_dhw_setpoint": 470}
+    assert _notices(hass) == {}
+
+
+async def test_notice_in_german(hass: HomeAssistant, shi: FakeSHI) -> None:
+    hass.config.language = "de"
+    entry = await _setup(hass, shi)
+    entry.runtime_data._learned = {"cfg_dhw_setpoint": 450}
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 540)
+    await _reboot(entry, shi, {DHW_MODE: 0, DHW_SETPOINT: 470})
+    notice = next(iter(_notices(hass).values()))
+    assert notice["title"] == "WP: Grundwerte von Sollwerten geändert"
+    assert "- WP Warmwasser Sollwert: 45,0 °C -> 47,0 °C" in notice["message"]
+    assert "Es ist nichts zu tun" in notice["message"]

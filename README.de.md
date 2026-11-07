@@ -185,7 +185,9 @@ Integration solche Werte zurückschreibt:
   Wert, wenn er über eine Entität dieser
   Integration (Number, Select, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Gemerkt werden
   nur **Betriebsart, Stufe, Offset und Sollwert** jedes Kreises (Heizung, Warmwasser, Mischkreise 1–3 Heizen und
-  Kühlen, gesamt) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Sperren (Heizung, Warmwasser, Kühlung, Pool),
+  Kühlen) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Die Gesamt-Gruppe (`cfg_overall_*`, 10065–10067)
+  bleibt außen vor: Ihre Bedeutung ist nicht belegt (an der Referenzanlage fiel 10065 etwa 2 s nach einem Schreiben auf
+  `aus` zurück, und python-luxtronik kennt für die Gesamt-Betriebsart keinen Sollwert). Sperren (Heizung, Warmwasser, Kühlung, Pool),
   Zirkulation, Warmwasser-Extra und die Leistungsbegrenzung werden **nie** wiederhergestellt: Die gehören live einem
   Optimierer wie dem Heat Pump Optimizer, und eine Sperre nach langem Stillstand wieder zu setzen, würde die
   Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Die Betriebsarten und Sollwerte der Liste (etwa
@@ -220,7 +222,8 @@ Integration solche Werte zurückschreibt:
     Gibt es bei 3 der letzten 5 Abfragen eine Wiederverbindung, gilt die Annahme für diese Anlage nicht: Es wird
     einmal gewarnt, und Wiederverbindungen zählen in dieser Sitzung nicht mehr,
   * mehr als 10 Minuten seit der vorigen erfolgreichen Abfrage, während Home Assistant läuft, gemessen mit einer
-    monotonen Uhr, damit ein Verstellen der Systemuhr nicht zählt, oder
+    monotonen Uhr, damit ein Verstellen der Systemuhr nicht zählt (ein angehaltener Host, etwa eine pausierte virtuelle
+    Maschine, wird so nicht erkannt: Dann wird eben nichts wiederhergestellt, was auf der sicheren Seite liegt), oder
   * einer Lücke von mehr als 11 Minuten seit der letzten erfolgreichen Abfrage, etwa einem langen Stillstand von Home
     Assistant (10 Minuten Watchdog plus 1 Minute, weil die Zeit der letzten Abfrage höchstens einmal pro Minute
     gespeichert wird).
@@ -243,7 +246,7 @@ Integration solche Werte zurückschreibt:
   liest; ein anderer Wert heißt, dass ihn jemand geändert hat. Diese Werte sind an deiner Anlage gelernt, nicht aus
   einer Firmware-Tabelle übernommen. Verhindert ein Sollwert einen Reset nur, weil er vom gelernten Wert abweicht,
   nennt ihn eine Warnung. Nach einem Neustart mit fehlgeschlagenen Abfragen, bei dem jede gemerkte Betriebsart und
-  Stufe 0 liest, wird der Reset trotzdem angenommen und der gelernte Wert ersetzt (mit Log-Eintrag). `0x7FFF`
+  Stufe 0 liest, wird der Reset trotzdem angenommen und der gelernte Wert ersetzt; eine Benachrichtigung (kein Reparaturhinweis) nennt dann die geänderten Grundwerte und die wiederhergestellten Werte, zu tun ist nichts. `0x7FFF`
   („nicht verfügbar“) ist nie ein Reset-Wert und wird nie gelernt. Ein gemerktes Register, das nicht mehr verfügbar
   ist, wird vergessen.
 * **Gruppen.** Betriebsart, Sollwert, Offset und Stufe eines Kreises bilden eine Gruppe: Sobald einer davon fremd

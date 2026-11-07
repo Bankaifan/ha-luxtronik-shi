@@ -47,7 +47,9 @@ LAST_POLL_SAVE_INTERVAL = 60  # seconds
 # room setpoint. Blocks (heating_block, dhw_block, cooling_block, pool_block), circulation, extra_dhw (effect
 # open, may be one-shot) and the power limit are deliberately left out: an optimizer such as the Heat Pump
 # Optimizer owns them live, and re-applying a block after a long downtime would invert the fail-safe of the
-# SHI watchdog (all values released). Edit this set to change what is restored.
+# SHI watchdog (all values released). The overall group (cfg_overall_*, 10065-10067) is left out too: its
+# semantics are unproven (on the reference installation 10065 fell back to `off` about 2 s after a write, and
+# python-luxtronik gives the overall mode no setpoint). Edit this set to change what is restored.
 RESTORE_KEYS: frozenset[str] = frozenset(
     {
         "cfg_heating_mode",
@@ -79,9 +81,6 @@ RESTORE_KEYS: frozenset[str] = frozenset(
         "cfg_mk3_cool_mode",
         "cfg_mk3_cool_setpoint",
         "cfg_mk3_cool_offset",
-        "cfg_overall_mode",
-        "cfg_overall_offset",
-        "cfg_overall_level",
         "cfg_room_setpoint",
     }
 )

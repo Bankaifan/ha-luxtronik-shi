@@ -587,6 +587,14 @@
       "description": "Die Smart-Home-Schnittstelle war nicht erreichbar. Seit sie wieder antwortet, unterscheiden sich diese Werte von denen vor dem Ausfall (alt -> neu):\n\n{changes}\n\nDie Integration schreibt nichts zurück. Prüfe die Werte und stelle sie bei Bedarf selbst wieder ein. Dieser Hinweis verschwindet, sobald die Werte wieder denen vor dem Ausfall entsprechen, oder wenn du ihn schließt."
     }
   },
+  "exceptions": {
+    "base_values_changed_title": {
+      "message": "{name}: Grundwerte von Sollwerten geändert"
+    },
+    "base_values_changed": {
+      "message": "Nach einem Neustart der Wärmepumpe haben sich die Grundwerte geändert, auf die diese Sollwerte zurückfallen (bisher gelernt -> jetzt):\n\n{changes}\n\nDie in Home Assistant gesetzten Werte gelten weiter und wurden wiederhergestellt:\n\n{restored}\n\nEs ist nichts zu tun. Das ist nur ein Hinweis."
+    }
+  },
   "device": {
     "heating": {
       "name": "{name} Heizung"

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from time import monotonic as _monotonic
 from typing import Any
 
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -18,6 +19,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -770,12 +772,14 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return True
         self._last_restore = now
         learned_changed = False
+        relearned: list[tuple[str, int, int]] = []  # (key, old learned raw, new raw)
         for key in differ:
             if key.endswith(RESET_TO_DEFAULT_SUFFIXES) and self._learned.get(key) != self._raw[key]:
                 old = self._learned.get(key)
                 self._learned[key] = self._raw[key]
                 learned_changed = True
                 if relearn and old is not None:
+                    relearned.append((key, old, self._raw[key]))
                     _LOGGER.info(
                         "%s: relearned reset value of %s: %s (was %s; failed polls, all modes at 0)",
                         title, key, self._raw[key], old,
@@ -822,4 +826,53 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "value); they are forgotten and not retried",
                 title, ", ".join(sorted(failed)),
             )
+        if relearned:
+            await self._notify_base_values_changed(relearned, {k: differ[k] for k in restored})
         return bool(failed) or learned_changed
+
+    async def _notify_base_values_changed(
+        self, changes: list[tuple[str, int, int]], restored: dict[str, int]
+    ) -> None:
+        """One information notice (persistent notification, not a repair issue) per relearn, translated.
+
+        The id is per entry, so a later relearn replaces the notice.
+        """
+        language = self.hass.config.language
+        texts: dict[str, str] = {}
+        for category in ("exceptions", "entity", "device"):
+            texts.update(await async_get_translations(self.hass, language, category, {DOMAIN}))
+        prefix = f"component.{DOMAIN}."
+        title = self.config_entry.title
+
+        def text(key: str, default: str) -> str:
+            return texts.get(prefix + key, default)
+
+        def name(key: str) -> str:
+            reg = self._reg(key)
+            area = area_of(key)
+            device = text(f"device.{area}.name", "{name}") if area else "{name}"
+            return f"{device.replace('{name}', title)} {text(f'entity.{reg.platform}.{key}.name', key)}"
+
+        def value(key: str, raw: int) -> str:
+            reg = self._reg(key)
+            if reg.options:
+                option = reg.options[raw] if 0 <= raw < len(reg.options) else str(raw)
+                return text(f"entity.{reg.platform}.{key}.state.{option}", option)
+            number = f"{decode(reg, [raw]):.{reg.precision or 0}f}"
+            if language.startswith("de"):
+                number = number.replace(".", ",")
+            return f"{number} {reg.unit}" if reg.unit else number
+
+        changed = "\n".join(f"- {name(k)}: {value(k, old)} -> {value(k, new)}" for k, old, new in changes)
+        restored_text = "\n".join(f"- {name(k)}: {value(k, raw)}" for k, raw in sorted(restored.items()))
+        message = (
+            text("exceptions.base_values_changed.message", "{changes}\n\n{restored}")
+            .replace("{changes}", changed)
+            .replace("{restored}", restored_text or "-")
+        )
+        persistent_notification.async_create(
+            self.hass,
+            message,
+            title=text("exceptions.base_values_changed_title.message", "{name}").replace("{name}", title),
+            notification_id=f"{DOMAIN}_base_values_changed_{self.config_entry.entry_id}",
+        )

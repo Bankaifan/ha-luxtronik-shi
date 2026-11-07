@@ -174,9 +174,11 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
 * **Its own values, plus a one-time snapshot at switch-on, and only settings.** It remembers a value after it was
   written through one of its own
   entities (number, select, climate, water heater) and read back unchanged. Only the **mode, level, offset and setpoint**
-  of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint are
-  remembered (`RESTORE_KEYS` in `const.py`). Blocks (heating, hot water, cooling, pool), circulation, extra hot water
-  and the power limit are **never** restored: an optimizer such as the Heat Pump Optimizer owns them live, and
+  of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling) and the room setpoint are
+  remembered (`RESTORE_KEYS` in `const.py`). The overall group (`cfg_overall_*`, 10065–10067) is left out: its
+  meaning is unproven (on the reference installation 10065 fell back to `off` about 2 s after a write, and
+  python-luxtronik gives the overall mode no setpoint). Blocks (heating, hot water, cooling, pool), circulation, extra
+  hot water and the power limit are **never** restored: an optimizer such as the Heat Pump Optimizer owns them live, and
   re-applying a block after a long downtime would undo the watchdog's fail-safe (everything released). The modes and
   setpoints in the list (for example `cfg_heating_mode`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`) are restored
   even if an optimizer writes them; its next write wins. A failed write or a different read-back forgets the
@@ -204,7 +206,8 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
     means the controller dropped it. If reconnects happen on 3 of the last 5 polls, the assumption does not hold for
     the setup: a warning is logged once and reconnects no longer count in that session,
   * more than 10 minutes since the previous successful poll while Home Assistant runs, measured with a monotonic
-    clock so that a change of the system clock does not count, or
+    clock so that a change of the system clock does not count (a suspended host, for example a paused virtual
+    machine, is not seen this way: the restore then simply does not happen, which errs on the safe side), or
   * a gap of more than 11 minutes since the last successful poll, for example a long Home Assistant downtime (10
     minutes watchdog plus 1 minute, because the time of the last poll is stored at most once a minute).
 
@@ -223,7 +226,7 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   to. From then on a setpoint only counts as reverted if it reads exactly that value; another value means someone
   changed it. These values are learned on your device, not taken from a firmware table. If a setpoint blocks a reset
   only because it differs from its learned value, a warning names it. After a reboot with failed polls in which every
-  remembered mode and level reads 0, the reset is accepted anyway and the learned value is replaced (logged). `0x7FFF`
+  remembered mode and level reads 0, the reset is accepted anyway and the learned value is replaced; an information notice (not a repair issue) then lists the changed base values and the restored values, no action needed. `0x7FFF`
   ("not available") is never a reset value and never learned. A remembered register that becomes unavailable is
   forgotten.
 * **Groups.** Mode, setpoint, offset and level of one circuit form a group: once any of them was changed by someone
