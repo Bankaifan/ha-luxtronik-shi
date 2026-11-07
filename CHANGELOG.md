@@ -11,6 +11,17 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Documentation
+- **Entity reference** ([docs/entities.md](docs/entities.md), German: [docs/entities.de.md](docs/entities.de.md)):
+  every entity sorted by topic with key, unit, value range, meaning and pitfalls, plus short background on heat
+  pumps (heating curve, hysteresis, buffer tank, COP and JAZ, defrost, Legionella protection). The page is generated
+  by `tools/gen_entity_docs.py` from the register map, the platforms and the translations, so the list cannot go
+  stale; the prose is in `tools/entity_docs_texts.py` and `tools/entity_docs_entries.py`. Linked from both READMEs.
+
+### Tests
+- `tests/test_entity_docs.py`: both pages match the generator, every key of the entity contract is documented, every
+  entity has an explanation and no explanation belongs to an unknown key.
+
 ## [0.10.1] – 2026-11-07
 
 ### Fixed

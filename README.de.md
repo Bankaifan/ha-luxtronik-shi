@@ -85,6 +85,10 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser* |
 | Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
 
+**Jede Entität erklärt:** Die [Entitäten-Referenz](docs/entities.de.md) (auch auf [Englisch](docs/entities.md)) listet jede
+Entität nach Thema mit Schlüssel, Einheit, Wertebereich, Bedeutung und Fallstricken, dazu kurze Hintergründe zur
+Funktionsweise von Wärmepumpen.
+
 Mischkreis 2 und 3 haben dieselben schreibbaren Entitäten wie Mischkreis 1 (Betriebsart, Sollwert, Anhebung, Stufe sowie
 Betriebsart, Sollwert und Anhebung für Kühlen). Alle Schreibbereiche folgen python-luxtronik (holdings.py): Heizen
 Sollwert 20–65 °C und Anhebung −5 … +5 K, Kühlen Sollwert 5–25 °C und Anhebung −5 … +5 K. Mischkreis 1 hat dieselben Bereiche. Sie existieren nur, wenn der Mischkreis in der [Ausstattung](#ausstattung-der-anlage) gewählt ist (die
@@ -404,6 +408,7 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
 * Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
   (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402, stimmt mit der Anzeige der Regelung
   überein) und die Deutung von 10404/10406/10408 als Betriebsstunden.
+* Jede Entität erklärt (aus dem Code erzeugt): [docs/entities.de.md](docs/entities.de.md).
 * Vollständige Tabelle aller Register (Typ, Adresse, Datentyp, Skalierung, Einheit, Bereich): [docs/registers.md](docs/registers.md).
 
 ## Hinweise und Grenzen
