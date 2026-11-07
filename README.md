@@ -75,10 +75,10 @@ that is already set up.
 | Temperatures | flow, return, heat source inlet/outlet, outside average, return target/limit/minimum, return external, outside, room (room unit only), heating/hot water limit temperatures, hot water (actual, target, min, max), mixing circuits 1–3 (flow, target, min, max; disabled by default for circuits 2 and 3) |
 | Power & energy | electric and thermal power, minimum electric power, electric/thermal energy counters (total, heating, hot water, cooling, pool), operating hours |
 | Calculated COP | **COP** (thermal / electric power, main device) and **COP overall** for heating and hot water (thermal / electric energy counters, in the *Heating* / *Hot water* device); unknown instead of a number when electric power is below 200 W, values are zero, negative or implausible, or a counter was reset |
-| Status | operating mode as text (heating, hot water, pool, utility lockout, defrost, off, external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status, connection |
-| **Climate / water heater** | heating circuit (off / heat, setpoint 15–75 °C) and hot water (off / setpoint / offset / level, setpoint 30–75 °C), see below |
+| Status | operating mode as text (heating, hot water, pool / solar, utility lockout, defrost, no request, heating from external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status, connection |
+| **Climate / water heater** | heating circuit (auto / heat, setpoint 15–75 °C) and hot water (no influence / setpoint / offset / level, setpoint 30–75 °C), see below |
 | **Write: numbers** | **heating curve offset** (−20 … +20 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
-| **Write: selects** | mode (off / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (utility lockout / reduced / normal / boost); power limit mode (none / soft / hard) |
+| **Write: selects** | mode (no influence / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (normal / increased / increased step 2 / decreased); power limit mode (none / soft / hard) |
 | **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water* |
 | Diagnostic | buffer tank type, switching lock, minimum runtime, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default) |
 
@@ -93,17 +93,48 @@ the real device state. Negative values (heating curve offset) are written correc
 
 ### Climate and water heater
 
-A **climate entity** for the heating circuit combines the heating mode (off / heat) and heating setpoint (15–75 °C) with
-the flow temperature as current value. A **water heater entity** in the *Hot water* device combines the hot water mode
-(off / setpoint / offset / level) and hot water setpoint (30–75 °C) with the hot water temperature as current value.
-Both write the same registers as the matching mode select and setpoint number.
+A **climate entity** for the heating circuit and a **water heater entity** in the *Hot water* device are views on the
+mode select and the setpoint number of their circuit. They write the same registers.
+
+**Modes say what they do** (python-luxtronik `ControlMode`). Raw 0 of every mode select is **No influence**: the heat
+pump works with its own values. It does not switch anything off. The selects show:
+
+| Raw | Option key | Shown as |
+|---|---|---|
+| 0 | `off` | No influence |
+| 1 | `setpoint` | Setpoint (replaces the controller's target) |
+| 2 | `offset` | Offset (controller's target plus offset) |
+| 3 | `level` | Level (controller's target corrected by the level) |
+
+The option keys stay the same for automations; only the shown text changed.
+
+* **Climate:** HVAC mode `auto` is control mode 0 (*the heat pump controls itself*), `heat` is setpoint, offset or
+  level. There is **no `off`**: blocking heating is the *block heating* switch, which an optimizer owns. Choosing
+  `heat` (or `climate.turn_on`) from `auto` writes `setpoint`; an offset or level mode stays as it is. The current
+  temperature is the **return temperature**, because the heating setpoint is a return temperature setpoint (tRL).
+  `hvac_action` is `heating` while the heat pump heats, `idle` otherwise and `off` while heating is blocked.
+* **Water heater:** the operation modes are `no_influence` (raw 0), `setpoint`, `offset` and `level`.
+* **A target only applies in mode `setpoint`.** Climate and water heater refuse a target in any other mode with an
+  error that names the mode select; nothing is written. Set the mode select to *Setpoint* first. The heating and hot
+  water setpoint **numbers** still write in every mode, because optimizers write them and set the mode themselves.
+* Climate, water heater and the two setpoint numbers have the attributes `setpoint_active` (the mode is `setpoint`) and
+  `effective_target` (the controller's target: return target 10101 for heating, hot water target 10121). After a
+  setpoint write the effective target is read once more, so it follows without waiting for the next poll.
 
 Both are enabled by default on new installations. For entries created before they existed they are disabled by default
 (enable them in the entity settings).
 
 > Planners such as the Heat Pump Optimizer write the same registers. Do not use these entities and such a planner for
-> the same circuit at the same time, or they overwrite each other. The Heat Pump Optimizer does not control hot water
-> through the water heater entity.
+> the same circuit at the same time, or they overwrite each other; the last write wins. Writes through Home Assistant
+> show in the logbook with who made them (user, automation, script). Changes made outside Home Assistant are reported,
+> see [repair issues](#repair-issues). The Heat Pump Optimizer does not control hot water through the water heater
+> entity.
+
+Coming from 0.9 or earlier: use `hvac_mode: auto` instead of `off` (or the *block heating* switch to stop heating),
+and `no_influence` instead of the water heater operation `off`.
+
+**Overall heating** (mode, offset and level, 10065–10067) is disabled by default: its effect is not proven, and it
+overrides the per-circuit settings.
 
 ### Structure in Home Assistant
 
@@ -150,8 +181,19 @@ The integration raises these issues under *Settings → System → Repairs*:
 | Heat pump firmware is outdated | warning | Firmware is older than 3.92.0: circulation pump and extra hot water have no values. |
 | Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
 | Values changed after connection outage | warning | After an outage, the heating block, hot water block, heating mode or hot water mode differs from the last value read before the outage. |
+| Value changed outside Home Assistant | warning | A writable setting (mode, level, setpoint, offset, block, circulation, power limit) changed between two polls without a write through Home Assistant. |
 
 The first two disappear by themselves when their condition ends.
+
+**Value changed outside Home Assistant:** another Modbus client, the native Luxtronik protocol (port 8889), OpenEMS or
+the controller panel changed a setting. The issue lists the setting, old and new value and the time; further changes
+are added while it is open, and each change also gets a logbook entry. Dismiss it once you have checked the values;
+the next change raises it again. It is a notice only, nothing is written back. Not reported: the first poll after
+setup, everything after an outage (failed polls, a reconnect or a gap beyond the SHI watchdog, the same signal as the
+restore) until every setting was read again, values the integration itself tried to write within the last 10 minutes,
+and *extra hot water*, which the controller ends by itself. Without an outage the device cannot revert values, so a
+change is always reported. Writes through Home Assistant are never reported; they show in the logbook with
+who made them. Works with and without the restore option.
 
 **Values changed after an outage:** if the controller was unreachable (e.g. restart or power cut, the SHI holding
 registers are volatile) and comes back with different values, a warning lists the old and new values. **This is a
@@ -339,8 +381,8 @@ those who deliberately stay on YAML, no longer used in production and not tested
   followed the written value). It only applies with heating mode `setpoint` (reg. 10000 = 1).
 * **Block heating:** `switch.<name>_heating_block` only blocks heating; hot water keeps running. A planner (e.g. Heat
   Pump Optimizer) can block at a planned 0 W and release again if the planner fails or the room gets too cold.
-* The *level* values (utility lockout / reduced / normal / boost) come from community documentation (probably
-  SG-Ready) and are not confirmed on every firmware. Circulation pump and extra hot water require firmware 3.92.0.
+* The *level* options (normal / increased / increased step 2 / decreased) follow python-luxtronik `LevelMode`, which
+  marks the effect of the non-normal levels as not yet analysed. Circulation pump and extra hot water require firmware 3.92.0.
 * **Status bits VD2, ZWE2, ZWE3:** the binary sensors `heatpump_vd2_status`, `heatpump_zwe2_status` and
   `heatpump_zwe3_status` come from python-luxtronik (bits 1, 3 and 4 of register 10000) and are disabled by default.
   VD2 and ZWE2 show the same bits as *compressor 2* and *auxiliary heater 2*; ZWE3 needs firmware 3.90.1 or later
@@ -359,7 +401,7 @@ those who deliberately stay on YAML, no longer used in production and not tested
   position and no "valve always open" switch. That is configured on the controller (installer level).
 * **Heating circulation pumps** (HUP) cannot be controlled via the SHI, only the hot water circulation pump. The native
   Luxtronik protocol (port 8889, e.g. the integration by BenPru) offers many more parameters.
-* With hot water mode 0 ("off") the heat pump ignores the setpoint; the actual target is in the *hot water target*
+* In every hot water mode other than *Setpoint* (raw 0 is *No influence*) the heat pump ignores the setpoint; the actual target is in the *hot water target*
   sensor.
 * Writes act directly on the heat pump. Automate blocks and offsets with care.
 

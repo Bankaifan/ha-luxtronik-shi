@@ -24,6 +24,16 @@ UNREACHABLE_AFTER = 600  # seconds of consecutive failed polls before the "SHI u
 ISSUE_FIRMWARE_OLD = "firmware_old"
 ISSUE_UNREACHABLE = "shi_unreachable"
 ISSUE_VALUES_CHANGED = "values_changed_after_outage"
+# A writable holding changed between two polls without a write through Home Assistant (another Modbus client,
+# the native Luxtronik protocol on port 8889, OpenEMS, the controller panel). Notice only, nothing is written
+# back.
+ISSUE_EXTERNAL_CHANGE = "values_changed_externally"
+# A polled value equal to a value this integration tried to write within this time counts as its own write
+# (covers a write that reached the device although its answer was lost).
+OWN_WRITE_WINDOW = 600  # seconds
+# Writable keys the controller changes by itself, so a change is no evidence of another writer. ``extra_dhw``
+# may be a one-shot that the controller resets (effect open, see const RESTORE_KEYS note).
+EXTERNAL_CHANGE_EXCLUDED: frozenset[str] = frozenset({"extra_dhw"})
 # Control keys compared before and after an outage (notice only, never written back), with issue text labels.
 OUTAGE_WATCH_KEYS = {
     "heating_block": "heating block",

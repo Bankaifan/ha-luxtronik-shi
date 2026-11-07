@@ -95,11 +95,11 @@ The integration uses these facts for the optional *restore after a device reset*
 
 ## Open questions / proposed follow-ups
 
-1. **Level option order (`_LEVELS`).** The firmware proves the level feature has one *increase* and one
-   *decrease* direction (strings `Increase`, `Decrease`, `Absenkung`), but the exact value→meaning table is not
-   in the static image. The current `_LEVELS = ("evu_lock", "reduced", "normal", "boost")` does **not** agree
-   with `python-luxtronik` `LevelMode` (`0 Normal, 1 Increased, 2 Increased2, 3 Decreased`). These should be
-   reconciled, ideally confirmed on the device display, before relying on the labels.
+1. **Level option order (`_LEVELS`)** – *resolved in 0.9.0 (#44).* The firmware proves the level feature has one
+   *increase* and one *decrease* direction (strings `Increase`, `Decrease`, `Absenkung`), but the exact value→meaning
+   table is not in the static image. `_LEVELS` now follows `python-luxtronik` `LevelMode`
+   (`0 Normal, 1 Increased, 2 Increased2, 3 Decreased`); the effect of the non-normal levels is still open there
+   and here.
 2. **10060 is a writable room-temperature setpoint**, not an unknown read-only value. The firmware instantiates
    it as `RBE_RoomTemperatureSetpointRegister` (`0x000dd478`, target `RBE_RT_Soll`), `uint16`, °C/10, in the
    *holdings* (writable) array. It is currently exposed as `raw_10060` (read-only). Promoting it to a real

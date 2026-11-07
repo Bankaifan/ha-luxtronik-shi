@@ -20,13 +20,17 @@ async def test_climate_new_installation_is_enabled(hass: HomeAssistant, shi: Fak
     registry_entry = er.async_get(hass).async_get(entity_id)
     assert registry_entry.disabled_by is None
     state = hass.states.get(entity_id)
-    assert state.state == "off"  # holding 10000 = 0 (off)
+    assert state.state == "auto"  # holding 10000 = 0 (no influence: the heat pump controls itself)
     assert state.attributes["temperature"] == 22.0  # holding 10001 = 220
-    assert state.attributes["current_temperature"] == 35.1  # input flow, 10105 = 351
+    assert state.attributes["current_temperature"] == 28.5  # input return, 10100 = 285 (setpoint is tRL)
     assert state.attributes["min_temp"] == 15
     assert state.attributes["max_temp"] == 75
     assert state.attributes["controller_mode"] == "off"
-    assert set(state.attributes["hvac_modes"]) == {"off", "heat"}
+    assert state.attributes["setpoint_active"] is False
+    assert state.attributes["effective_target"] == 30.0  # input return target, 10101 = 300
+    assert state.attributes["heating_block"] is False
+    assert state.attributes["hvac_action"] == "idle"  # operating mode hot water
+    assert set(state.attributes["hvac_modes"]) == {"auto", "heat"}
 
 
 async def test_climate_disabled_for_entry_that_existed_before(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -53,6 +57,7 @@ async def test_climate_disabled_for_entry_that_existed_before(hass: HomeAssistan
 
 
 async def test_climate_set_temperature_writes_and_reads_back(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.holding[10000] = 1  # mode setpoint: the only mode in which the setpoint applies
     entry = await _setup(hass, shi)
     entity_id = _entity_id(hass, entry, "climate", "climate_heating")
     await hass.services.async_call(
@@ -65,7 +70,7 @@ async def test_climate_set_temperature_writes_and_reads_back(hass: HomeAssistant
     number = _entity_id(hass, entry, "number", "cfg_heating_setpoint")
     assert hass.states.get(number).state == "35.5"
     # the mode register was not touched
-    assert shi.holding_value(10000) == 0
+    assert shi.holding_value(10000) == 1
 
 
 @pytest.mark.parametrize("value", [14.5, 75.5, 0, 100, -5])
@@ -86,6 +91,7 @@ async def test_climate_set_temperature_out_of_range_is_rejected(
 async def test_climate_set_temperature_limits_are_accepted(
     hass: HomeAssistant, shi: FakeSHI, value: float, expected: int
 ) -> None:
+    shi.holding[10000] = 1
     entry = await _setup(hass, shi)
     entity_id = _entity_id(hass, entry, "climate", "climate_heating")
     await hass.services.async_call(
@@ -110,10 +116,11 @@ async def test_climate_hvac_mode_writes_mode_register(hass: HomeAssistant, shi: 
     assert hass.states.get(select).state == "setpoint"
 
     await hass.services.async_call(
-        "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "off"}, blocking=True
+        "climate", "set_hvac_mode", {"entity_id": entity_id, "hvac_mode": "auto"}, blocking=True
     )
     assert shi.holding_value(10000) == 0
-    assert hass.states.get(entity_id).state == "off"
+    assert hass.states.get(entity_id).state == "auto"
+    assert hass.states.get(select).state == "off"
 
 
 async def test_climate_other_controller_modes_count_as_heat(hass: HomeAssistant, shi: FakeSHI) -> None:

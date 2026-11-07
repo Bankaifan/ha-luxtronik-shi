@@ -187,11 +187,11 @@
         "state": {
           "heating": "Heizen",
           "hot_water": "Warmwasser",
-          "pool": "Schwimmbad",
+          "pool": "Schwimmbad / Solar",
           "evu_lock": "EVU-Sperre",
           "defrost": "Abtauen",
-          "off": "Aus",
-          "external_source": "Externe Quelle",
+          "off": "Keine Anforderung",
+          "external_source": "Heizen (externe Quelle)",
           "cooling": "Kühlen"
         }
       },
@@ -370,13 +370,29 @@
     },
     "number": {
       "cfg_heating_setpoint": {
-        "name": "Sollwert"
+        "name": "Sollwert",
+        "state_attributes": {
+          "setpoint_active": {
+            "name": "Sollwert wirksam"
+          },
+          "effective_target": {
+            "name": "Wirksamer Sollwert"
+          }
+        }
       },
       "cfg_heating_offset": {
         "name": "Heizkurven-Anhebung"
       },
       "cfg_dhw_setpoint": {
-        "name": "Sollwert"
+        "name": "Sollwert",
+        "state_attributes": {
+          "setpoint_active": {
+            "name": "Sollwert wirksam"
+          },
+          "effective_target": {
+            "name": "Wirksamer Sollwert"
+          }
+        }
       },
       "cfg_dhw_offset": {
         "name": "Anhebung"
@@ -431,64 +447,64 @@
       "cfg_heating_mode": {
         "name": "Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_heating_level": {
         "name": "Stufe",
         "state": {
-          "normal": "Normal",
-          "increased": "Anhebung",
-          "increased2": "Anhebung (Stufe 2)",
-          "decreased": "Absenkung"
+          "normal": "Normal (keine Korrektur)",
+          "increased": "Erhöht",
+          "increased2": "Erhöht (Stufe 2)",
+          "decreased": "Abgesenkt"
         }
       },
       "cfg_dhw_mode": {
         "name": "Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_dhw_level": {
         "name": "Stufe",
         "state": {
-          "normal": "Normal",
-          "increased": "Anhebung",
-          "increased2": "Anhebung (Stufe 2)",
-          "decreased": "Absenkung"
+          "normal": "Normal (keine Korrektur)",
+          "increased": "Erhöht",
+          "increased2": "Erhöht (Stufe 2)",
+          "decreased": "Abgesenkt"
         }
       },
       "cfg_mk1_mode": {
         "name": "Mischkreis 1: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_mk1_level": {
         "name": "Mischkreis 1: Stufe",
         "state": {
-          "normal": "Normal",
-          "increased": "Anhebung",
-          "increased2": "Anhebung (Stufe 2)",
-          "decreased": "Absenkung"
+          "normal": "Normal (keine Korrektur)",
+          "increased": "Erhöht",
+          "increased2": "Erhöht (Stufe 2)",
+          "decreased": "Abgesenkt"
         }
       },
       "cfg_mk1_cool_mode": {
         "name": "Mischkreis 1: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_power_limit_mode": {
@@ -502,73 +518,127 @@
       "cfg_overall_mode": {
         "name": "Gesamt: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_overall_level": {
         "name": "Gesamt: Stufe",
         "state": {
-          "normal": "Normal",
-          "increased": "Anhebung",
-          "increased2": "Anhebung (Stufe 2)",
-          "decreased": "Absenkung"
+          "normal": "Normal (keine Korrektur)",
+          "increased": "Erhöht",
+          "increased2": "Erhöht (Stufe 2)",
+          "decreased": "Abgesenkt"
         }
       },
       "cfg_mk2_mode": {
         "name": "Mischkreis 2: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_mk2_level": {
         "name": "Mischkreis 2: Stufe",
         "state": {
-          "normal": "Normal",
-          "increased": "Anhebung",
-          "increased2": "Anhebung (Stufe 2)",
-          "decreased": "Absenkung"
+          "normal": "Normal (keine Korrektur)",
+          "increased": "Erhöht",
+          "increased2": "Erhöht (Stufe 2)",
+          "decreased": "Abgesenkt"
         }
       },
       "cfg_mk2_cool_mode": {
         "name": "Mischkreis 2: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_mk3_mode": {
         "name": "Mischkreis 3: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
       },
       "cfg_mk3_level": {
         "name": "Mischkreis 3: Stufe",
         "state": {
-          "normal": "Normal",
-          "increased": "Anhebung",
-          "increased2": "Anhebung (Stufe 2)",
-          "decreased": "Absenkung"
+          "normal": "Normal (keine Korrektur)",
+          "increased": "Erhöht",
+          "increased2": "Erhöht (Stufe 2)",
+          "decreased": "Abgesenkt"
         }
       },
       "cfg_mk3_cool_mode": {
         "name": "Mischkreis 3: Betriebsart",
         "state": {
-          "off": "Aus",
-          "setpoint": "Sollwert",
-          "offset": "Anhebung",
-          "level": "Stufe"
+          "off": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+        }
+      }
+    },
+    "climate": {
+      "climate_heating": {
+        "state": {
+          "auto": "Wärmepumpe regelt selbst",
+          "heat": "Vorgabe durch Home Assistant"
+        },
+        "state_attributes": {
+          "controller_mode": {
+            "name": "Betriebsart der Schnittstelle",
+            "state": {
+              "off": "Keine Vorgabe",
+              "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+              "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+              "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+            }
+          },
+          "setpoint_active": {
+            "name": "Sollwert wirksam"
+          },
+          "effective_target": {
+            "name": "Wirksamer Sollwert"
+          },
+          "heating_block": {
+            "name": "Heizen gesperrt"
+          }
+        }
+      }
+    },
+    "water_heater": {
+      "water_heater_dhw": {
+        "state": {
+          "no_influence": "Keine Vorgabe",
+          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+        },
+        "state_attributes": {
+          "operation_mode": {
+            "state": {
+              "no_influence": "Keine Vorgabe",
+              "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+              "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+              "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+            }
+          },
+          "setpoint_active": {
+            "name": "Sollwert wirksam"
+          },
+          "effective_target": {
+            "name": "Wirksamer Sollwert"
+          }
         }
       }
     }
@@ -582,6 +652,10 @@
       "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
       "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet."
     },
+    "values_changed_externally": {
+      "title": "{name}: Wert außerhalb von Home Assistant geändert",
+      "description": "Diese Einstellungen der Wärmepumpe haben sich geändert, ohne dass Home Assistant geschrieben hat, zum Beispiel durch einen anderen Modbus-Client, das native Luxtronik-Protokoll (Port 8889), OpenEMS oder das Bedienteil (Einstellung: alt -> neu, Zeit der letzten Änderung):\n\n{changes}\n\nDie Integration schreibt nichts zurück. Schreibt ein anderes System dieselben Einstellungen, überschreiben sie sich gegenseitig; der letzte Schreibzugriff gewinnt. Weitere Änderungen werden ergänzt, solange dieser Hinweis offen ist. Schließe ihn, wenn du die Werte geprüft hast."
+    },
     "values_changed_after_outage": {
       "title": "{name}: Werte nach Verbindungsausfall geändert",
       "description": "Die Smart-Home-Schnittstelle war nicht erreichbar. Seit sie wieder antwortet, unterscheiden sich diese Werte von denen vor dem Ausfall (alt -> neu):\n\n{changes}\n\nDie Integration schreibt nichts zurück. Prüfe die Werte und stelle sie bei Bedarf selbst wieder ein. Dieser Hinweis verschwindet, sobald die Werte wieder denen vor dem Ausfall entsprechen, oder wenn du ihn schließt."
@@ -593,6 +667,48 @@
     },
     "base_values_changed": {
       "message": "Nach einem Neustart der Wärmepumpe haben sich die Grundwerte geändert, auf die diese Sollwerte zurückfallen (bisher gelernt -> jetzt):\n\n{changes}\n\nDie in Home Assistant gesetzten Werte gelten weiter und wurden wiederhergestellt:\n\n{restored}\n\nEs ist nichts zu tun. Das ist nur ein Hinweis."
+    },
+    "setpoint_not_active_off": {
+      "message": "Der Sollwert wirkt nur in der Betriebsart „Sollwert“. {select} steht auf „Keine Vorgabe“, deshalb wurde nichts geschrieben. Stelle {select} zuerst auf „Sollwert“."
+    },
+    "setpoint_not_active_offset": {
+      "message": "Der Sollwert wirkt nur in der Betriebsart „Sollwert“. {select} steht auf „Anhebung“, deshalb wurde nichts geschrieben. Stelle {select} zuerst auf „Sollwert“."
+    },
+    "setpoint_not_active_level": {
+      "message": "Der Sollwert wirkt nur in der Betriebsart „Sollwert“. {select} steht auf „Stufe“, deshalb wurde nichts geschrieben. Stelle {select} zuerst auf „Sollwert“."
+    },
+    "setpoint_not_active_unknown": {
+      "message": "Der Sollwert wirkt nur in der Betriebsart „Sollwert“. {select} steht auf „unbekannt“, deshalb wurde nichts geschrieben. Stelle {select} zuerst auf „Sollwert“."
+    },
+    "setpoint_out_of_range": {
+      "message": "Sollwert {value} liegt außerhalb von {min} … {max} °C."
+    },
+    "unsupported_hvac_mode": {
+      "message": "HVAC-Modus {mode} wird nicht unterstützt. Verwende auto oder heat."
+    },
+    "unsupported_operation_mode": {
+      "message": "Betriebsart {mode} wird nicht unterstützt."
+    },
+    "control_mode_unknown": {
+      "message": "Die Betriebsart der Heizung ist noch nicht bekannt. Versuche es nach der nächsten Aktualisierung erneut."
+    },
+    "external_change_logbook": {
+      "message": "{name} außerhalb von Home Assistant geändert: {old} -> {new}"
+    },
+    "write_failed": {
+      "message": "Schreiben von {key} fehlgeschlagen: {error}"
+    },
+    "not_writable": {
+      "message": "Register {key} kann nicht geschrieben werden."
+    },
+    "poll_failed": {
+      "message": "Keine Verbindung zur Wärmepumpe: {error}"
+    },
+    "state_on": {
+      "message": "an"
+    },
+    "state_off": {
+      "message": "aus"
     }
   },
   "device": {

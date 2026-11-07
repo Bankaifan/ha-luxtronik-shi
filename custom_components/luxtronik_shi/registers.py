@@ -104,7 +104,11 @@ _HOURS = {
     "every": 10,
 }
 _SETTING = {"config": True, "every": 2}
+# Control mode of a circuit (python-luxtronik ``ControlMode``). Raw 0 ("off") means "no influence": the controller
+# uses its own values. It does NOT switch the circuit off. The option keys stay for compatibility; the display text
+# says what each option does (tools/gen_translations.py).
 _MODES = ("off", "setpoint", "offset", "level")
+CONTROL_MODES: tuple[str, ...] = _MODES
 _LEVELS = ("normal", "increased", "increased2", "decreased")
 _OPERATING_MODES = (
     "heating",
@@ -472,7 +476,12 @@ REGISTERS: tuple[Register, ...] = (
         unit="kW",
     ),
     # overall heating (firmware 3.92.0 or later)
-    _select("cfg_overall_mode", 10065, "Gesamt: Betriebsart", "Overall: mode", _MODES),
+# Overall heating (10065-10067) acts on all heating functions and overrides the per-circuit settings
+    # (python-luxtronik: "Operating mode of all heating functions"). Its effect is not proven on the reference
+    # installation, so the entities are disabled by default (owner decision).
+        _select(
+        "cfg_overall_mode", 10065, "Gesamt: Betriebsart", "Overall: mode", _MODES, enabled_default=False
+    ),
     _number(
         "cfg_overall_offset",
         10066,
@@ -483,8 +492,11 @@ REGISTERS: tuple[Register, ...] = (
         step=0.5,
         unit="K",
         signed=True,
+        enabled_default=False,
     ),
-    _select("cfg_overall_level", 10067, "Gesamt: Stufe", "Overall: level", _LEVELS),
+    _select(
+        "cfg_overall_level", 10067, "Gesamt: Stufe", "Overall: level", _LEVELS, enabled_default=False
+    ),
     # room temperature setpoint of the room control unit (RBE). Firmware V3.92.3 exposes this as the
     # writable holding RBE_RoomTemperatureSetpointRegister (target RBE_RT_Soll); see
     # docs/firmware-3.92.3-shi-analysis.md. python-luxtronik lists 10060 only as read-only "unknown".
@@ -783,6 +795,15 @@ BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}
 # (``cfg_heating_mode``, ``cfg_heating_setpoint``, ``flow``). Their keys are part of the entity contract.
 CLIMATE_HEATING_KEY = "climate_heating"
 CLIMATE_KEYS: tuple[str, ...] = (CLIMATE_HEATING_KEY,)
+
+# Setpoint registers whose value only applies in control mode ``setpoint`` (python-luxtronik holdings.py:
+# "Requires heating_mode = setpoint" / "Requires dhw_mode = setpoint"): setpoint key -> (mode key, key of the
+# controller's effective target). 10101 is the return target the heating setpoint (tRL) overrides; 10121 is the hot
+# water target.
+SETPOINT_GROUPS: dict[str, tuple[str, str]] = {
+    "cfg_heating_setpoint": ("cfg_heating_mode", "return_target"),
+    "cfg_dhw_setpoint": ("cfg_dhw_mode", "dhw_target"),
+}
 
 # Entities of the water_heater platform: a view on ``cfg_dhw_mode``, ``cfg_dhw_setpoint`` and ``dhw``.
 WATER_HEATER_DHW_KEY = "water_heater_dhw"

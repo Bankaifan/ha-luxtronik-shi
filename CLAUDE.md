@@ -26,6 +26,9 @@ Heat Pump Optimizer (HPO). Stability comes before features.
    without a value range.
 5. **Never test against real devices or a real Home Assistant.** Simulation only.
 6. **Do not increase polling load** without reason: block reads, `every` for rarely needed values.
+7. **Everything a user sees exists in English and German:** entity, option, state and attribute names, errors
+   (`ServiceValidationError`/`HomeAssistantError` via `translation_key`), repair issues, logbook texts, flow and option
+   texts, and both READMEs. Generate them with `python tools/gen_translations.py`; no user-facing literal in code.
 
 ## Versioning
 

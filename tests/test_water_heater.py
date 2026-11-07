@@ -19,12 +19,14 @@ async def test_water_heater_new_installation_is_enabled(hass: HomeAssistant, shi
     entity_id = _entity_id(hass, entry, "water_heater", "water_heater_dhw")
     assert er.async_get(hass).async_get(entity_id).disabled_by is None
     state = hass.states.get(entity_id)
-    assert state.state == "off"  # holding 10005 = 0
+    assert state.state == "no_influence"  # holding 10005 = 0: the controller uses its own values
     assert state.attributes["temperature"] == 40.0  # holding 10006 = 400
     assert state.attributes["current_temperature"] == 48.2  # input 10120 = 482
     assert state.attributes["min_temp"] == 30
     assert state.attributes["max_temp"] == 75
-    assert state.attributes["operation_list"] == ["off", "setpoint", "offset", "level"]
+    assert state.attributes["operation_list"] == ["no_influence", "setpoint", "offset", "level"]
+    assert state.attributes["setpoint_active"] is False
+    assert state.attributes["effective_target"] == 55.0  # input 10121 = 550
     # lives in the hot water device, next to the existing hot water entities
     registry = er.async_get(hass)
     number = registry.async_get(_entity_id(hass, entry, "number", "cfg_dhw_setpoint"))
@@ -54,6 +56,7 @@ async def test_water_heater_disabled_for_entry_that_existed_before(hass: HomeAss
 
 
 async def test_water_heater_set_temperature_writes_and_reads_back(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.holding[10005] = 1  # mode setpoint
     entry = await _setup(hass, shi)
     entity_id = _entity_id(hass, entry, "water_heater", "water_heater_dhw")
     await hass.services.async_call(
@@ -64,7 +67,7 @@ async def test_water_heater_set_temperature_writes_and_reads_back(hass: HomeAssi
     assert hass.states.get(entity_id).attributes["temperature"] == 52.5
     number = _entity_id(hass, entry, "number", "cfg_dhw_setpoint")
     assert hass.states.get(number).state == "52.5"
-    assert shi.holding_value(10005) == 0  # mode untouched
+    assert shi.holding_value(10005) == 1  # mode untouched
 
 
 @pytest.mark.parametrize("value", [29.5, 75.5, 0, 100, -5])
@@ -85,6 +88,7 @@ async def test_water_heater_set_temperature_out_of_range_is_rejected(
 async def test_water_heater_set_temperature_limits_are_accepted(
     hass: HomeAssistant, shi: FakeSHI, value: float, expected: int
 ) -> None:
+    shi.holding[10005] = 1
     entry = await _setup(hass, shi)
     entity_id = _entity_id(hass, entry, "water_heater", "water_heater_dhw")
     await hass.services.async_call(
@@ -94,10 +98,14 @@ async def test_water_heater_set_temperature_limits_are_accepted(
     assert hass.states.get(entity_id).attributes["temperature"] == value
 
 
-@pytest.mark.parametrize(("mode", "raw"), [("setpoint", 1), ("offset", 2), ("level", 3), ("off", 0)])
+@pytest.mark.parametrize(
+    ("mode", "raw", "option"),
+    [("setpoint", 1, "setpoint"), ("offset", 2, "offset"), ("level", 3, "level"), ("no_influence", 0, "off")],
+)
 async def test_water_heater_operation_mode_writes_mode_register(
-    hass: HomeAssistant, shi: FakeSHI, mode: str, raw: int
+    hass: HomeAssistant, shi: FakeSHI, mode: str, raw: int, option: str
 ) -> None:
+    shi.holding[10005] = 2 if raw != 2 else 1
     entry = await _setup(hass, shi)
     entity_id = _entity_id(hass, entry, "water_heater", "water_heater_dhw")
     await hass.services.async_call(
@@ -107,7 +115,7 @@ async def test_water_heater_operation_mode_writes_mode_register(
     assert (6, 10005, raw) in shi.requests
     assert hass.states.get(entity_id).state == mode
     select = _entity_id(hass, entry, "select", "cfg_dhw_mode")
-    assert hass.states.get(select).state == mode
+    assert hass.states.get(select).state == option  # select option keys are unchanged
     assert shi.holding_value(10006) == 400  # setpoint untouched
 
 

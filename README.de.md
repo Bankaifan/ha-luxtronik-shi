@@ -78,10 +78,10 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 | Temperaturen | Vorlauf, Rücklauf, Wärmequelle Ein-/Austritt, Außen-Mittelwert, Rücklauf-Soll/-Begrenzung/-Minimum, Rücklauf extern, Außen, Raum (nur mit Raumeinheit), Grenztemperaturen Heizen/Warmwasser, Warmwasser (Ist, Soll, Min, Max), Mischkreise 1–3 (Vorlauf, Soll, Min, Max; bei Mischkreis 2 und 3 standardmäßig deaktiviert) |
 | Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser, Kühlen, Pool), Betriebsstunden |
 | Berechneter COP | **COP** (thermische / elektrische Leistung, Gerät der Wärmepumpe) und **COP gesamt** für Heizen und Warmwasser (thermische / elektrische Energiezähler, im Gerät *Heizung* / *Warmwasser*); unbekannt statt einer Zahl bei elektrischer Leistung unter 200 W, Nullwerten, negativen oder unplausiblen Werten oder nach einem Zählerreset |
-| Status | Betriebsart als Klartext (Heizen, Warmwasser, Pool, EVU-Sperre, Abtauen, Aus, externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv** (zusätzliche Statusbits für VD2, ZWE2 und ZWE3 sind standardmäßig deaktiviert), Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool, Verbindung |
-| **Climate / Water Heater** | Heizkreis (Aus / Heizen, Sollwert 15–75 °C) und Warmwasser (Aus / Sollwert / Anhebung / Stufe, Sollwert 30–75 °C), siehe unten |
+| Status | Betriebsart als Klartext (Heizen, Warmwasser, Schwimmbad / Solar, EVU-Sperre, Abtauen, Keine Anforderung, Heizen über externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv** (zusätzliche Statusbits für VD2, ZWE2 und ZWE3 sind standardmäßig deaktiviert), Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool, Verbindung |
+| **Climate / Water Heater** | Heizkreis (Auto / Heizen, Sollwert 15–75 °C) und Warmwasser (Keine Vorgabe / Sollwert / Anhebung / Stufe, Sollwert 30–75 °C), siehe unten |
 | **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
-| **Schreiben: Auswahl** | Betriebsart (Aus / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (EVU-Sperre / Absenkung / Normal / Boost); Modus der Leistungsbegrenzung (keine / weich / hart) |
+| **Schreiben: Auswahl** | Betriebsart (Keine Vorgabe / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt); Modus der Leistungsbegrenzung (keine / weich / hart) |
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser* |
 | Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
 
@@ -97,18 +97,51 @@ Schreibzugriff wird der Wert zurückgelesen, die Oberfläche zeigt also immer de
 
 ### Climate und Water Heater
 
-Eine **Climate-Entität** für den Heizkreis fasst die Betriebsart (Aus / Heizen) und den Heizungs-Sollwert (15–75 °C)
-zusammen und zeigt die Vorlauftemperatur als Istwert. Eine **Water-Heater-Entität** im Gerät *Warmwasser* fasst die
-Warmwasser-Betriebsart (Aus / Sollwert / Anhebung / Stufe) und den Warmwasser-Sollwert (30–75 °C) zusammen und zeigt die
-Warmwassertemperatur als Istwert. Beide schreiben dieselben Register wie die passende Auswahl „Betriebsart" und die Zahl
-„Sollwert".
+Eine **Climate-Entität** für den Heizkreis und eine **Water-Heater-Entität** im Gerät *Warmwasser* zeigen die Auswahl
+„Betriebsart" und die Zahl „Sollwert" ihres Kreises. Sie schreiben dieselben Register.
+
+**Betriebsarten sagen, was sie tun** (python-luxtronik `ControlMode`). Rohwert 0 jeder Betriebsart-Auswahl heißt
+**Keine Vorgabe**: Die Wärmepumpe arbeitet mit ihren eigenen Werten. Ausgeschaltet wird dabei nichts. Die Auswahlen
+zeigen:
+
+| Rohwert | Options-Schlüssel | Anzeige |
+|---|---|---|
+| 0 | `off` | Keine Vorgabe |
+| 1 | `setpoint` | Sollwert (ersetzt den Sollwert der Regelung) |
+| 2 | `offset` | Anhebung (Sollwert der Regelung plus Anhebung) |
+| 3 | `level` | Stufe (Sollwert der Regelung, um die Stufe korrigiert) |
+
+Die Options-Schlüssel für Automationen bleiben gleich; geändert hat sich nur der angezeigte Text.
+
+* **Climate:** HVAC-Modus `auto` ist Betriebsart 0 (*Wärmepumpe regelt selbst*), `heat` ist Sollwert, Anhebung oder
+  Stufe. Ein **`off` gibt es nicht**: Heizen sperrt der Schalter *Heizung sperren*, und den bedient ein Optimierer.
+  `heat` (oder `climate.turn_on`) schreibt aus `auto` heraus `setpoint`; eine Anhebung oder Stufe bleibt, wie sie ist.
+  Als Istwert zeigt die Entität die **Rücklauftemperatur**, denn der Heizungs-Sollwert ist ein Rücklauf-Sollwert (tRL).
+  `hvac_action` ist `heating`, solange die Wärmepumpe heizt, sonst `idle`, und `off`, solange Heizen gesperrt ist.
+* **Water Heater:** Die Betriebsarten heißen `no_influence` (Rohwert 0), `setpoint`, `offset` und `level`.
+* **Ein Sollwert wirkt nur in der Betriebsart `setpoint`.** In jeder anderen Betriebsart lehnen Climate und Water Heater
+  einen Sollwert mit einer Fehlermeldung ab, die die Betriebsart-Auswahl nennt; geschrieben wird nichts. Stell die
+  Auswahl zuerst auf *Sollwert*. Die **Zahlen** für Heizungs- und Warmwasser-Sollwert schreiben weiter in jeder
+  Betriebsart, weil Optimierer sie schreiben und die Betriebsart selbst setzen.
+* Climate, Water Heater und die beiden Sollwert-Zahlen haben die Attribute `setpoint_active` (Betriebsart ist
+  `setpoint`) und `effective_target` (Sollwert der Regelung: Rücklauf-Soll 10101 beim Heizen, Warmwasser-Soll 10121).
+  Nach dem Schreiben eines Sollwerts wird der wirksame Sollwert einmal nachgelesen und folgt ohne Warten auf die
+  nächste Abfrage.
 
 Bei neuen Installationen sind beide standardmäßig aktiviert. Bei Einträgen, die vor ihrer Einführung angelegt wurden, sind
 sie standardmäßig deaktiviert (in den Entitäts-Einstellungen aktivierbar).
 
 > Planer wie der Heat Pump Optimizer schreiben dieselben Register. Diese Entitäten und einen solchen Planer nicht
-> gleichzeitig für denselben Kreis verwenden, sonst überschreiben sie sich gegenseitig. Der Heat Pump Optimizer steuert
-> das Warmwasser nicht über die Water-Heater-Entität.
+> gleichzeitig für denselben Kreis verwenden, sonst überschreiben sie sich gegenseitig; der letzte Schreibzugriff
+> gewinnt. Schreibzugriffe über Home Assistant stehen mit Urheber (Benutzer, Automation, Skript) im Logbuch.
+> Änderungen außerhalb von Home Assistant werden gemeldet, siehe [Reparaturhinweise](#reparaturhinweise). Der Heat
+> Pump Optimizer steuert das Warmwasser nicht über die Water-Heater-Entität.
+
+Wer von 0.9 oder älter kommt: `hvac_mode: auto` statt `off` (oder den Schalter *Heizung sperren*, um das Heizen zu
+stoppen) und beim Water Heater `no_influence` statt der Betriebsart `off`.
+
+**Gesamt-Heizung** (Betriebsart, Anhebung und Stufe, 10065–10067) ist standardmäßig deaktiviert: Ihre Wirkung ist
+nicht belegt, und sie übersteuert die Einstellungen der einzelnen Kreise.
 
 ### Gliederung in Home Assistant
 
@@ -158,8 +191,20 @@ Die Integration meldet diese Hinweise unter *Einstellungen → System → Repara
 | Firmware der Wärmepumpe ist veraltet | Warnung | Firmware älter als 3.92.0: Zirkulationspumpe und Extra-Warmwasser haben keine Werte. |
 | Smart-Home-Schnittstelle nicht erreichbar | Fehler | Alle Abfragen sind 10 Minuten in Folge fehlgeschlagen. |
 | Werte nach Verbindungsausfall geändert | Warnung | Nach einem Ausfall weichen Heizungssperre, Warmwassersperre, Heizungs-Betriebsart oder Warmwasser-Betriebsart vom zuletzt vor dem Ausfall gelesenen Wert ab. |
+| Wert außerhalb von Home Assistant geändert | Warnung | Eine beschreibbare Einstellung (Betriebsart, Stufe, Sollwert, Anhebung, Sperre, Zirkulation, Leistungsbegrenzung) hat sich zwischen zwei Abfragen geändert, ohne dass Home Assistant geschrieben hat. |
 
 Die ersten beiden verschwinden von selbst, sobald ihre Ursache weg ist.
+
+**Wert außerhalb von Home Assistant geändert:** Ein anderer Modbus-Client, das native Luxtronik-Protokoll (Port 8889),
+OpenEMS oder das Bedienteil hat eine Einstellung geändert. Der Hinweis nennt die Einstellung, alten und neuen Wert
+und die Uhrzeit; weitere Änderungen werden ergänzt, solange er offen ist, und jede Änderung bekommt zusätzlich einen
+Logbuch-Eintrag. Schließ ihn, wenn du die Werte geprüft hast; die nächste Änderung meldet ihn erneut. Das ist nur ein
+Hinweis, zurückgeschrieben wird nichts. Nicht gemeldet werden: die erste Abfrage nach dem Einrichten, alles nach
+einem Ausfall (fehlgeschlagene Abfragen, ein Neuaufbau der Verbindung oder eine Lücke über den SHI-Watchdog hinaus,
+dasselbe Signal wie bei der Wiederherstellung), bis jede Einstellung wieder gelesen wurde, Werte, die die Integration
+selbst in den letzten 10 Minuten zu schreiben versucht hat, und *Extra-Warmwasser*, das die Regelung selbst beendet.
+Ohne Ausfall kann das Gerät keine Werte zurücksetzen, deshalb wird eine Änderung dann immer gemeldet. Schreibzugriffe über Home Assistant werden nie
+gemeldet; sie stehen mit Urheber im Logbuch. Funktioniert mit und ohne die Wiederherstellungs-Option.
 
 **Werte nach einem Ausfall geändert:** War die Regelung nicht erreichbar (z. B. Neustart oder Stromausfall, die
 SHI-Holding-Register sind flüchtig) und meldet sich mit anderen Werten zurück, zeigt eine Warnung die alten und neuen
@@ -368,8 +413,8 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
 * **Heizung sperren:** `switch.<name>_heating_block` sperrt nur das Heizen; Warmwasser läuft weiter. Wer die Heizung von einem
   Planer (z. B. Heat Pump Optimizer) steuern lässt, kann bei geplanten 0 W sperren und bei Ausfall des Planers oder zu kaltem
   Raum wieder freigeben.
-* Die *Stufe*-Werte (EVU-Sperre / Absenkung / Normal / Boost) sind aus der Community-Dokumentation übernommen (vermutlich
-  SG-Ready) und nicht an jeder Firmware bestätigt. Zirkulationspumpe und Extra-Warmwasser gibt es erst ab Firmware 3.92.0.
+* Die *Stufe*-Optionen (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt) folgen python-luxtronik `LevelMode`; dort ist
+  die Wirkung der Stufen außer *Normal* noch als nicht analysiert vermerkt. Zirkulationspumpe und Extra-Warmwasser gibt es erst ab Firmware 3.92.0.
 * **Statusbits VD2, ZWE2, ZWE3:** Die Binärsensoren `heatpump_vd2_status`, `heatpump_zwe2_status` und
   `heatpump_zwe3_status` stammen aus python-luxtronik (Bit 1, 3 und 4 von Register 10000) und sind standardmäßig
   deaktiviert. VD2 und ZWE2 zeigen dieselben Bits wie *Verdichter 2* und *Zusatzheizung 2*; ZWE3 gibt es laut
@@ -390,7 +435,7 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   keine Umschaltung „Ventil immer offen". Das wird in der Regelung am Gerät (Installateur-Ebene) eingestellt.
 * **Heizungsumwälzpumpen** (HUP/Heizkreispumpe) sind über das SHI nicht steuerbar, nur die Zirkulationspumpe des Warmwassers.
   Darüber hinaus bietet das native Luxtronik-Protokoll (Port 8889, z. B. die Integration von BenPru) deutlich mehr Parameter.
-* Bei Warmwasser-Betriebsart 0 („Aus") ignoriert die Wärmepumpe den Sollwert; das tatsächliche Ziel steht im Sensor *Warmwasser Soll*.
+* In jeder Warmwasser-Betriebsart außer *Sollwert* (Rohwert 0 ist *Keine Vorgabe*) ignoriert die Wärmepumpe den Sollwert; das tatsächliche Ziel steht im Sensor *Warmwasser Soll*.
 * Schreibzugriffe wirken direkt auf die Wärmepumpe. Wer Heizungs-/Warmwassersperre oder Offset automatisiert, sollte
   das mit Bedacht tun.
 

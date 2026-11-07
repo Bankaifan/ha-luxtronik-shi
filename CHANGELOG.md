@@ -11,6 +11,44 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.10.0] – 2026-11-07
+
+### Action required
+- **Climate: `off` is gone, mode 0 is `auto`.** Raw 0 means "no influence": the heat pump keeps heating with its own
+  values. Use `hvac_mode: auto` instead of `off`, or the *block heating* switch to stop heating.
+- **Water heater: operation `off` is now `no_influence`** (same raw 0).
+- **Climate and water heater refuse a target outside mode `setpoint`** (the heat pump ignores it there). Set the mode
+  first; the setpoint numbers still write in every mode.
+- **Climate `current_temperature` is the return temperature** (the heating setpoint is a return setpoint, tRL).
+- °C setpoint numbers have the temperature device class (°F installations now see °F). Option keys are unchanged;
+  only the shown labels changed.
+- **Overall heating (10065–10067) is disabled by default** for new entities; already registered ones stay enabled
+  until you disable them.
+
+### Added
+- Repair issue and logbook entry "Value changed outside Home Assistant" for writable settings changed by another
+  writer (port 8889, OpenEMS, another Modbus client, the panel), with translated names and labels. It uses the same
+  outage signal as the restore (failed polls, reconnect, watchdog gap) and the same record of this integration's
+  writes, and works with the restore option on or off.
+- Attributes `setpoint_active` and `effective_target` (climate, water heater, both setpoint numbers); climate
+  `hvac_action` and `heating_block`.
+
+### Changed
+- Every mode select shows raw 0 as *No influence* / *Keine Vorgabe* and says what each mode does; clearer German
+  level labels; the operating mode sensor shows *No request* instead of *Off*.
+- Climate `heat` / `turn_on` write `setpoint` only from mode 0 and keep an active offset or level.
+- A write no longer postpones the next poll; the effective target is read once after a setpoint write.
+- All user-visible texts exist in English and German, including poll, write and range errors (new hard rule in
+  `CLAUDE.md`).
+
+### Documentation
+- `docs/firmware-3.92.3-shi-analysis.md`: open question 1 (level order) marked as resolved by #44.
+
+### Tests
+- `tests/test_entity_semantics.py`: modes, setpoint refusal, attributes, labels in both languages, changes outside
+  Home Assistant (own writes, lost answers, reconnect, session gap without the option, outage, `extra_dhw`), the poll
+  schedule, °F numbers, overall heating disabled by default.
+
 ## [0.9.0] – 2026-11-07
 
 ### Action required
@@ -358,7 +396,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.0...v0.8.1
