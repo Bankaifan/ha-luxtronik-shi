@@ -578,3 +578,16 @@ async def test_buffer_type_mapping(hass: HomeAssistant, shi: FakeSHI, raw: int, 
     shi.input[10202] = raw
     entry = await _setup(hass, shi)
     assert hass.states.get(_entity_id(hass, entry, "sensor", "buffer_type")).state == expected
+
+
+async def test_named_raw_values_decode(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Raw 10113 is the calculated heating flow target in 0.1 degC; outputs and inputs are plain 0/1 values."""
+    shi.input[10113] = 253
+    shi.input[10354] = 1
+    entry = await _setup(hass, shi)
+    data = entry.runtime_data.data
+    assert data["raw_10113"] == 25.3
+    assert data["raw_10354"] == 1
+    registry = er.async_get(hass)
+    reg = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10354"))
+    assert reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION

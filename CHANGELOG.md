@@ -11,7 +11,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
-## [0.10.2] – 2026-11-07
+## [0.11.0] – 2026-11-07
 
 ### Action required
 - None. The *System: buffer tank type* sensor now reports the correct type (a separation buffer was shown as
@@ -22,11 +22,17 @@ versioning follows [Semantic Versioning](https://semver.org/):
   buffer (python-luxtronik `BufferType`). The option list started with an extra "unknown" entry, so a separation
   buffer was shown as "series buffer". Raw values outside 0 to 2 now have no state.
 
+### Changed
+- **Raw values with a proven meaning get a name, unit and scale** (keys stay `raw_<address>`, entities stay disabled
+  diagnostics, entity IDs unchanged): 10113 is the calculated heating flow target (0.1 degC, return target plus the
+  moving average of the flow-return spread); 10350 `VBOout`, 10351 `FP1out`, 10352 `FP2out`, 10353 `FP3out`,
+  10354 `HUPout`, 10355 `BUPout`, 10356 `ZIPout` are controller outputs (0/1); 10360 `EVUin` and 10361 `EVU2in` are
+  inputs (0/1). Source: firmware 3.92.3 analysis plus measurement on the reference installation.
+
 ### Added
-- `docs/firmware-3.92.3-register-meanings.md`: measured meanings of the raw values 10350, 10351, 10354, 10355 and
-  10356 (they follow the additional circulation pump or compressor, the heating circulation pump (twice), the DHW
-  recirculation pump and the DHW charging pump outputs). 10113 stays open. The raw sensors keep their keys and
-  names; `docs/registers.md` shows the `derived:` source (rule 3: nothing is promoted without a vendor source).
+- `docs/firmware-3.92.3-register-meanings.md`: the firmware names behind these values, grades, and the names of
+  further counters (cooling, "SW", solar hours, extra hot water timer) that stay raw. `docs/registers.md` shows the
+  source of each register.
 
 ## [0.10.1] – 2026-11-07
 
@@ -436,8 +442,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.2...HEAD
-[0.10.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.1...v0.10.2
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.2...v0.9.0

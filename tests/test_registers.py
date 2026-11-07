@@ -69,13 +69,16 @@ def test_buffer_type_options_follow_python_luxtronik():
     assert BY_KEY["buffer_type"].options == ("series", "separation", "multi")
 
 
-def test_derived_raw_meanings_are_only_documented_not_named():
-    # Rule 3: derived meanings stay raw_<address> (disabled, no scale/unit) and carry a "derived:" source.
-    from custom_components.luxtronik_shi.registers import RAW_SOURCES
+def test_raw_meanings_keep_key_and_stay_disabled():
+    # Rule 3: a meaning needs a source; the key stays raw_<address> and the entity stays disabled diagnostics.
+    from custom_components.luxtronik_shi.registers import RAW_KEYS, RAW_MEANINGS
 
-    for address, text in RAW_SOURCES.items():
+    for address, meaning in RAW_MEANINGS.items():
         reg = BY_KEY[f"raw_{address}"]
-        assert text.startswith("derived:")
-        assert reg.source == text
-        assert reg.scale == 1.0 and reg.unit is None and not reg.enabled_default
-    assert BY_KEY["raw_10113"].source is None  # still open: no measurement explains it
+        assert reg.source and reg.source.startswith("proven:")
+        assert reg.name_de == meaning["name_de"] and reg.name_en == meaning["name_en"]
+        assert not reg.enabled_default and reg.diagnostic
+        assert reg.key not in RAW_KEYS
+    assert BY_KEY["raw_10113"].scale == 0.1 and BY_KEY["raw_10113"].dtype == "int16"
+    assert decode(BY_KEY["raw_10113"], [253]) == 25.3
+    assert BY_KEY["raw_10500"].source is None and BY_KEY["raw_10500"].key in RAW_KEYS  # still open

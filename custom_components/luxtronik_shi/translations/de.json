@@ -266,6 +266,36 @@
       "energy_th_pool": {
         "name": "Energie: Wärme"
       },
+      "raw_10113": {
+        "name": "Vorlauf: Soll Heizen (berechnet)"
+      },
+      "raw_10350": {
+        "name": "Ausgang: VBO"
+      },
+      "raw_10351": {
+        "name": "Ausgang: FP1"
+      },
+      "raw_10354": {
+        "name": "Ausgang: Heizungsumwälzpumpe (HUP)"
+      },
+      "raw_10355": {
+        "name": "Ausgang: Brauchwasserumwälzpumpe (BUP)"
+      },
+      "raw_10356": {
+        "name": "Ausgang: Zirkulationspumpe (ZIP)"
+      },
+      "raw_10360": {
+        "name": "Eingang: EVU"
+      },
+      "raw_10361": {
+        "name": "Eingang: EVU 2"
+      },
+      "raw_10352": {
+        "name": "Ausgang: FP2"
+      },
+      "raw_10353": {
+        "name": "Ausgang: FP3"
+      },
       "raw": {
         "name": "Rohwert: {address}"
       },
