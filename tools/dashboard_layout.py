@@ -45,8 +45,9 @@ TXT: dict[str, dict[str, str]] = {
             "*Control* and *Locks and grid*. Repairs (connection lost, values changed): [Repairs](/config/repairs)."
         ),
         "t_cop": (
-            "**COP** is calculated from the thermal and electric values the heat pump reports. **COP overall** is the "
-            "quotient of the energy counters since the counters started; it is not a seasonal performance factor."
+            "**COP (10 min)** is the energy ratio of the last 10 minutes (thermal / electric); it is unknown while the "
+            "compressor is stopped or just started. **COP overall** is the quotient of the energy counters since the "
+            "counters started; it is not a seasonal performance factor."
         ),
         "t_energy": (
             "**Energy dashboard:** add the electric energy sensors as *Individual device* consumption under Settings > "
@@ -123,8 +124,9 @@ TXT: dict[str, dict[str, str]] = {
             "Ansichten *Steuerung* und *Sperren und Netz*. Reparaturen (Verbindung verloren, Werte geändert): [Reparaturen](/config/repairs)."
         ),
         "t_cop": (
-            "Der **COP** wird aus den thermischen und elektrischen Werten der Wärmepumpe berechnet. **COP gesamt** ist der "
-            "Quotient der Energiezähler seit Zählerbeginn; er ist keine Jahresarbeitszahl."
+            "Der **COP (10 min)** ist das Energieverhältnis der letzten 10 Minuten (thermisch / elektrisch); er ist "
+            "unbekannt, solange der Verdichter steht oder gerade erst gestartet ist. **COP gesamt** ist der Quotient "
+            "der Energiezähler seit Zählerbeginn; er ist keine Jahresarbeitszahl."
         ),
         "t_energy": (
             "**Energie-Dashboard:** Die Strom-Energiesensoren unter Einstellungen > Dashboards > Energie als *Einzelgerät* "

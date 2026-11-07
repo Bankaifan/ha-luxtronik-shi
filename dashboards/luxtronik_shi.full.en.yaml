@@ -93,7 +93,7 @@ views:
       max: 20000
       needle: false
     - type: tile
-      entity: sensor.warmepumpe_cop
+      entity: sensor.warmepumpe_cop_10_min
     - type: history-graph
       hours_to_show: 24
       entities:
@@ -211,14 +211,15 @@ views:
       heading: COP
       icon: mdi:speedometer
     - type: tile
-      entity: sensor.warmepumpe_cop
+      entity: sensor.warmepumpe_cop_10_min
     - type: tile
       entity: sensor.warmepumpe_heating_cop_overall
     - type: tile
       entity: sensor.warmepumpe_hot_water_cop_overall
     - type: markdown
-      content: '**COP** is calculated from the thermal and electric values the heat pump reports. **COP overall**
-        is the quotient of the energy counters since the counters started; it is not a seasonal performance factor.'
+      content: '**COP (10 min)** is the energy ratio of the last 10 minutes (thermal / electric); it is unknown
+        while the compressor is stopped or just started. **COP overall** is the quotient of the energy counters
+        since the counters started; it is not a seasonal performance factor.'
   - type: grid
     cards:
     - type: heading
@@ -298,7 +299,7 @@ views:
     - type: tile
       entity: sensor.warmepumpe_power_thermal
     - type: tile
-      entity: sensor.warmepumpe_cop
+      entity: sensor.warmepumpe_cop_10_min
     - type: markdown
       content: '**What the integration provides.** The blocks stop heating, hot water, cooling or pool heating.
         The power limit has a mode (none, soft, hard) and a value in kW. A utility lockout shows as the operating
@@ -449,11 +450,7 @@ views:
       heading: Controller
       icon: mdi:chip
     - type: tile
-      entity: sensor.warmepumpe_firmware_platform
-    - type: tile
-      entity: sensor.warmepumpe_firmware_major_version
-    - type: tile
-      entity: sensor.warmepumpe_firmware_minor_version
+      entity: sensor.warmepumpe_firmware_version
     - type: tile
       entity: sensor.warmepumpe_system_buffer_tank_type
     - type: tile
@@ -597,9 +594,6 @@ views:
         | Wärmepumpe Power limit: mode | `cfg_power_limit_mode` | `select.warmepumpe_power_limit_mode` |
         | Wärmepumpe Power limit: value | `cfg_power_limit` | `number.warmepumpe_power_limit_value` |
         | Wärmepumpe Room temperature setpoint | `cfg_room_setpoint` | `number.warmepumpe_room_temperature_setpoint` |
-        | Wärmepumpe Firmware: platform | `fw_platform` | `sensor.warmepumpe_firmware_platform` |
-        | Wärmepumpe Firmware: major version | `fw_major` | `sensor.warmepumpe_firmware_major_version` |
-        | Wärmepumpe Firmware: minor version | `fw_minor` | `sensor.warmepumpe_firmware_minor_version` |
         | Wärmepumpe Heating Block | `heating_block` | `switch.warmepumpe_heating_block` |
         | Wärmepumpe Hot water Block | `dhw_block` | `switch.warmepumpe_hot_water_block` |
         | Wärmepumpe Cooling Block | `cooling_block` | `switch.warmepumpe_cooling_block` |
@@ -638,9 +632,10 @@ views:
         | Wärmepumpe Equipment: mixing circuit 2 cooling | `cap_mk2_cooling` | `binary_sensor.warmepumpe_equipment_mixing_circuit_2_cooling` |
         | Wärmepumpe Equipment: mixing circuit 3 heating | `cap_mk3_heating` | `binary_sensor.warmepumpe_equipment_mixing_circuit_3_heating` |
         | Wärmepumpe Equipment: mixing circuit 3 cooling | `cap_mk3_cooling` | `binary_sensor.warmepumpe_equipment_mixing_circuit_3_cooling` |
-        | Wärmepumpe COP | `cop` | `sensor.warmepumpe_cop` |
+        | Wärmepumpe COP (10 min) | `cop` | `sensor.warmepumpe_cop_10_min` |
         | Wärmepumpe Heating COP overall | `cop_heating` | `sensor.warmepumpe_heating_cop_overall` |
         | Wärmepumpe Hot water COP overall | `cop_dhw` | `sensor.warmepumpe_hot_water_cop_overall` |
+        | Wärmepumpe Firmware version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
         | Wärmepumpe Status: compressor 1 running | `compressor_1` | `binary_sensor.warmepumpe_status_compressor_1_running` |
         | Wärmepumpe Status: compressor 2 running | `compressor_2` | `binary_sensor.warmepumpe_status_compressor_2_running` |
         | Wärmepumpe Status: auxiliary heater 1 active | `aux_heater_1` | `binary_sensor.warmepumpe_status_auxiliary_heater_1_active` |

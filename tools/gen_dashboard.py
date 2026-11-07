@@ -97,6 +97,9 @@ def universe() -> dict[str, Info]:
         )
     for sensor in registers.DERIVED_SENSORS:
         found[sensor.key] = Info(sensor.key, "sensor", registers.area_of(sensor.key), (), True, False)
+    firmware = getattr(registers, "FIRMWARE_SENSOR_KEY", None)  # one text sensor since 0.12.0
+    if firmware:
+        found[firmware] = Info(firmware, "sensor", None, (), True, False)
     bits, disabled = _status_bits()
     for bit in bits:
         found[bit[0]] = Info(bit[0], "binary_sensor", None, (), bit[0] not in disabled, False)
