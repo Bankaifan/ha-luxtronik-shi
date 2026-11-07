@@ -72,7 +72,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
     **Limit:** a value another Modbus client sets to 0 during or right after an outage, or two values set to 0 at
     once, cannot be told apart from a reset and is restored over that change. Leave the option off if another system
     also writes these registers.
-  - Restores run with read-back, once per reset. A failed restore is not retried, and a reset seen again within
+  - Restores run with read-back, once per reset. Modes are written last, and a mode is not restored (and is
+    forgotten) if another value of its circuit failed to restore in the same run. A failed restore is not retried, and a reset seen again within
     15 minutes is not restored. Writes from Home Assistant and restores are serialised by a lock.
   - Diagnostics list the remembered values. No extra polling, no new entities.
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
@@ -100,7 +101,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ### Tests
 - `tests/test_restore_after_reset.py`: blocks and extra hot water are never remembered or restored, the allow-list only
   names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
-  skipped, a write whose read-back differs is not remembered, the group rule across windows, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no
+  skipped, a write whose read-back differs is not remembered, the group rule across windows, modes restored last and skipped after a failed value of their circuit, a lone zero forgets its circuit's mode, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no
   last-poll save while nothing is remembered; watchdog gap after a Home Assistant restart (over 600 s counts as an outage,
   a short restart does not), the last-poll time is written at most once a minute; reboot simulation with restore and read-back, external changes adopted and
   forgotten (also during a reset), the single-register ambiguity, option off writes nothing and stores nothing, no

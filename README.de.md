@@ -207,6 +207,8 @@ Integration solche Werte zurückschreibt:
   vergessen und erst wieder wiederhergestellt, nachdem sie erneut über Home Assistant geschrieben wurde – so entsteht
   keine Kombination, die niemand eingestellt hat.
 * **Keine Schreibschleifen.** Jeder Schlüssel wird pro erkanntem Reset einmal wiederhergestellt, mit Rücklesen.
+  Betriebsarten kommen zuletzt; eine Betriebsart wird nicht wiederhergestellt, wenn ein anderer Wert ihres Kreises
+  nicht wiederhergestellt werden konnte.
   Schlägt das Schreiben fehl oder liest es einen anderen Wert zurück, wird der Schlüssel vergessen und nicht erneut
   versucht. Ein Reset, der innerhalb von 15 Minuten nach einer Wiederherstellung erneut erkannt wird, wird nicht
   wiederhergestellt. Wiederhergestellte Schlüssel stehen mit Log-Level warning im Log.

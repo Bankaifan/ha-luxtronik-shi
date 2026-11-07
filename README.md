@@ -193,7 +193,8 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   at info level) and not restored. Zeros without the evidence above are treated the same way. Mode, setpoint, offset and level of one circuit
   form a group: once any of them was changed by someone else, that circuit's mode is forgotten as well and is only
   restored again after it was written through Home Assistant again, so no combination is created that nobody set.
-* **No write loops.** Each key is restored once per detected reset, with read-back. A restore whose write fails or reads
+* **No write loops.** Each key is restored once per detected reset, with read-back. Modes are written last; a mode
+  is not restored if another value of its circuit failed to restore. A restore whose write fails or reads
   back a different value forgets that key and is not retried. A reset detected again within 15 minutes of a restore is
   not restored. Restored keys are logged at warning level.
 

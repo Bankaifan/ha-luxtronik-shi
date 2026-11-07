@@ -620,11 +620,16 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         restored: list[str] = []
         failed: list[str] = []
         lost = False  # connection lost: the remaining keys are not tried either
+        # Modes last: a mode is only re-applied if every other restored value of its circuit came back.
+        order = sorted(pending, key=lambda k: k.endswith("_mode"))
         async with self._write_lock:
-            for key, raw in pending.items():
+            for key in order:
+                raw = pending[key]
                 if self._remembered.get(key) != raw:
                     continue  # written (or forgotten) through Home Assistant since the snapshot
-                if lost:
+                if lost or (
+                    key.endswith("_mode") and any(restore_group(f) == restore_group(key) for f in failed)
+                ):
                     failed.append(key)
                     continue
                 reg = self._reg(key)

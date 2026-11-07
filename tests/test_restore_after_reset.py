@@ -205,7 +205,7 @@ async def test_wrong_read_back_is_not_retried(
     with caplog.at_level(logging.WARNING):
         await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
         await _polls(entry, 4)
-    assert sorted(attempts) == [MODE, LEVEL]
+    assert attempts == [LEVEL]  # the level failed, so the mode of the same circuit is not tried (modes last)
     assert entry.runtime_data.remembered == {}
     assert "could not restore cfg_heating_level, cfg_heating_mode" in caplog.text
     assert "restored" not in caplog.text
@@ -412,13 +412,13 @@ async def test_restore_skips_key_written_since_snapshot(hass: HomeAssistant, shi
 
     async def wrapped(address, value):
         written.append(address)
-        if address == MODE:  # meanwhile Home Assistant set the level to 3 (store updated, device not yet)
-            coordinator._remembered["cfg_heating_level"] = 3
+        if address == LEVEL:  # meanwhile Home Assistant set the mode to 2 (store updated, device not yet)
+            coordinator._remembered["cfg_heating_mode"] = 2
         await original(address, value)
 
     monkeypatch.setattr(coordinator.client, "write_register", wrapped)
     await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
-    assert MODE in written and LEVEL not in written
+    assert LEVEL in written and MODE not in written
 
 
 async def test_user_write_with_different_read_back_is_not_remembered(
@@ -493,3 +493,37 @@ async def test_stale_store_is_dropped(
     assert (shi.holding[MODE], shi.holding[LEVEL]) == (0, 0)
     assert entry.runtime_data.remembered == {}
     assert hass_storage[restore_store_key(entry.entry_id)]["data"]["values"] == {}
+
+
+async def test_mode_not_restored_when_its_setpoint_restore_fails(
+    hass: HomeAssistant, shi: FakeSHI, monkeypatch
+) -> None:
+    """Review probe p10: modes are restored last, and not at all if a value of their circuit failed."""
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_setpoint", 350)
+    original = coordinator.client.write_register
+
+    async def clamping(address, value):
+        await original(address, min(value, 300) if address == SETPOINT else value)
+
+    monkeypatch.setattr(coordinator.client, "write_register", clamping)
+    before = len(_writes(shi, MODE))
+    await _reboot(entry, shi, {MODE: 0, SETPOINT: 0})
+    assert shi.holding[SETPOINT] == 300
+    assert shi.holding[MODE] == 0
+    assert len(_writes(shi, MODE)) == before
+    assert coordinator.remembered == {}
+
+
+async def test_lone_zero_forgets_the_mode_of_its_circuit(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Review probe p11: a level set to 0 by someone else (no outage) also forgets the circuit's mode."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_level", 2)
+    before = len(_writes(shi))
+    shi.holding[LEVEL] = 0
+    await _polls(entry)
+    assert entry.runtime_data.remembered == {}
+    assert len(_writes(shi)) == before
