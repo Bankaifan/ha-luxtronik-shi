@@ -529,7 +529,53 @@ RAW_TEXT: dict[int, tuple[str, str, str]] = {
             "ungeklärt.", "FW"),
 }
 RAW_DEFAULT = (
-    "Unknown input register, function not analysed. Nothing is known beyond the address.",
-    "Unbekanntes Eingangsregister, Funktion nicht analysiert. Außer der Adresse ist nichts bekannt.",
+    "Undocumented input register (python-luxtronik: function unknown). No vendor source for its meaning; a "
+    "register source below, if any, is a derived observation, not a specification.",
+    "Undokumentiertes Eingangsregister (python-luxtronik: Funktion unbekannt). Keine Herstellerquelle für die "
+    "Bedeutung; eine Registerquelle darunter ist, falls vorhanden, eine abgeleitete Beobachtung, keine "
+    "Spezifikation.",
     "PL",
 )
+
+
+# ------------------------------------------------------------------ text that depends on the code state
+# Keys that exist only on a branch that is not merged yet. Describing them here keeps the page correct the moment
+# that branch lands; until then ``tests/test_entity_docs.py`` does not count them as stale.
+FORWARD_KEYS: frozenset[str] = frozenset({"firmware_version"})
+_add("firmware_version", "system",
+     "Firmware version of the controller as text, for example `3.92.3`, composed of the registers 10400, 10401 and "
+     "10402 (they read 3, 92 and 3 on the reference installation). Unknown until all three are read. The three "
+     "registers have no entities of their own. The integration needs 3.92 or newer for the circulation pump and "
+     "extra hot water; with older firmware it raises a repair issue.",
+     "Firmware-Version der Regelung als Text, zum Beispiel `3.92.3`, zusammengesetzt aus den Registern 10400, 10401 "
+     "und 10402 (sie lesen an der Referenzanlage 3, 92 und 3). Unbekannt, bis alle drei gelesen sind. Die drei "
+     "Register haben keine eigenen Entitäten. Die Integration braucht 3.92 oder neuer für Zirkulationspumpe und "
+     "Extra-Warmwasser; bei älterer Firmware erzeugt sie einen Reparaturhinweis.", "FW, OBS")
+
+# An entry that replaces the one above as soon as ``registers.<attribute>`` exists.
+ALTERNATIVES: dict[str, tuple[str, Entry]] = {
+    "cop": (
+        "WindowedCop",
+        Entry(
+            "power",
+            "COP over the last 10 minutes: thermal energy divided by electrical energy, both integrated from the "
+            "two power sensors over a trailing window. A window instead of one quotient, because both registers "
+            "have a resolution of 100 W and are not sampled at the same instant, which made the instantaneous "
+            "ratio jump (8.0 or more right after a compressor start). Shown as *unknown* while the window holds "
+            "too little electrical energy (compressor off or just started), after a gap in the readings, and "
+            "when the result is not plausible, which includes a net thermal energy that is not positive (a long "
+            "defrost). Defrost inside a run counts, it is real consumption. The window and limits are a design "
+            "choice of the integration, not a register fact.",
+            "COP der letzten 10 Minuten: Wärmeenergie geteilt durch elektrische Energie, beide aus den zwei "
+            "Leistungssensoren über ein mitlaufendes Fenster aufsummiert. Ein Fenster statt eines einzelnen "
+            "Quotienten, weil beide Register 100 W Auflösung haben und nicht im selben Augenblick abgetastet "
+            "werden; das ließ den Momentanwert springen (8,0 oder mehr direkt nach dem Verdichterstart). Wird als "
+            "*unbekannt* gezeigt, solange das Fenster zu wenig elektrische Energie enthält (Verdichter aus oder "
+            "gerade gestartet), nach einer Lücke in den Messwerten und wenn das Ergebnis nicht plausibel ist, "
+            "wozu eine nicht positive Netto-Wärmeenergie gehört (langes Abtauen). Abtauen innerhalb eines Laufs "
+            "zählt, es ist echter Verbrauch. Fenster und Grenzen sind eine Festlegung der Integration, kein "
+            "Registerfakt.",
+            "INT",
+        ),
+    ),
+}
