@@ -26,6 +26,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
+    MAX_RESTORE_SCAN_INTERVAL,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
@@ -239,19 +240,27 @@ class LuxtronikOptionsFlow(OptionsFlowWithReload):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(
-                data={
-                    CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
-                    CONF_FEATURES: _selected(user_input),
-                    CONF_RESTORE_AFTER_RESET: user_input[CONF_RESTORE_AFTER_RESET],
-                }
-            )
+        errors: dict[str, str] = {}
         options = self.config_entry.options
         restore = options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET)
         current = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         # Entries created before 0.3.0 have no equipment option and still show everything.
         selected = options.get(CONF_FEATURES, list(FEATURES))
+        if user_input is not None:
+            too_slow = user_input[CONF_SCAN_INTERVAL] > MAX_RESTORE_SCAN_INTERVAL
+            if user_input[CONF_RESTORE_AFTER_RESET] and too_slow:
+                errors[CONF_RESTORE_AFTER_RESET] = "restore_scan_interval"
+                restore = True
+                current = user_input[CONF_SCAN_INTERVAL]
+                selected = _selected(user_input)
+            else:
+                return self.async_create_entry(
+                    data={
+                        CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                        CONF_FEATURES: _selected(user_input),
+                        CONF_RESTORE_AFTER_RESET: user_input[CONF_RESTORE_AFTER_RESET],
+                    }
+                )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -261,4 +270,6 @@ class LuxtronikOptionsFlow(OptionsFlowWithReload):
                     vol.Required(CONF_RESTORE_AFTER_RESET, default=restore): bool,
                 }
             ),
+            errors=errors,
+            description_placeholders={"max": str(MAX_RESTORE_SCAN_INTERVAL)},
         )

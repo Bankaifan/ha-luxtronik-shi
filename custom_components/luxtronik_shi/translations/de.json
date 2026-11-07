@@ -66,10 +66,13 @@
         },
         "data_description": {
           "scan_interval": "Basisintervall. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
-          "restore_after_reset": "Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet oder 10 Minuten lang niemand zugreift. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur nach einem Verbindungsausfall und nur, wenn jeder davon seinen Reset-Wert liest; jede Änderung bei durchgehender Abfrage gilt als fremd. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus."
+          "restore_after_reset": "Erfordert ein Aktualisierungsintervall von höchstens 540 Sekunden. Die Wärmepumpe vergisst über die Smart-Home-Schnittstelle gesetzte Werte, wenn sie neu startet oder 10 Minuten lang niemand zugreift. Ist die Option an, schreibt die Integration die zuletzt selbst gesetzten Werte zurück – aber nur nach einem Verbindungsausfall und nur, wenn jeder davon seinen Reset-Wert liest; jede Änderung bei durchgehender Abfrage gilt als fremd. Wiederhergestellt werden nur Betriebsarten, Stufen, Offsets und Sollwerte, nie Sperren. Lass die Option aus, wenn ein anderes System diese Register ebenfalls schreibt. Standardmäßig aus."
         },
         "description": "Abgewählte Teile der Anlage werden nicht abgefragt und bekommen keine Entitäten. Ihre Entity-IDs bleiben reserviert und kommen beim Wiedereinschalten zurück."
       }
+    },
+    "error": {
+      "restore_scan_interval": "Das Wiederherstellen nach einem Geräte-Reset erfordert ein Aktualisierungsintervall von höchstens {max} Sekunden, deutlich unter dem 600-Sekunden-Watchdog der Wärmepumpe."
     }
   },
   "entity": {

@@ -34,6 +34,10 @@ OUTAGE_WATCH_KEYS = {
 # controller reboots or its watchdog expires; the holding registers then read their reset value 0.
 DEFAULT_RESTORE_AFTER_RESET = False
 STORE_VERSION = 1
+# The restore option needs polls well inside the SHI watchdog (600 s): at longer scan intervals the watchdog
+# may expire between two polls, every poll would count as an outage and "polling continuously" would never
+# hold.
+MAX_RESTORE_SCAN_INTERVAL = 540  # seconds
 # SHI watchdog: without any Modbus access for this long the SHI discards every value set over it
 # (docs/firmware-3.92.3-shi-analysis.md, section "SHI watchdog"). A longer gap since the last successful poll,
 # e.g. a Home Assistant downtime, counts like an observed communication outage for the reset detection.

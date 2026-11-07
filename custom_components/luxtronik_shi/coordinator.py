@@ -8,6 +8,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from time import monotonic as _monotonic
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -29,6 +30,7 @@ from .const import (
     ISSUE_VALUES_CHANGED,
     LAST_POLL_SAVE_INTERVAL,
     MANUFACTURER,
+    MAX_RESTORE_SCAN_INTERVAL,
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
@@ -44,7 +46,7 @@ from .const import (
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
-from .registers import ALL_REGISTERS, AREAS, Register, area_of, decode
+from .registers import ALL_REGISTERS, AREAS, BY_KEY, Register, area_of, decode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -147,7 +149,17 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Same for the water heater entity.
         self.water_heater_enabled_default = True
         # Restore after a device reset (option): raw values this integration wrote and read back, per key.
-        self.restore_enabled = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
+        restore = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
+        # The options flow refuses the option above MAX_RESTORE_SCAN_INTERVAL; an entry that has both anyway
+        # (edited or older) runs with the option off. Its store is kept, not deleted.
+        self._restore_refused = restore and scan_interval > MAX_RESTORE_SCAN_INTERVAL
+        if self._restore_refused:
+            _LOGGER.warning(
+                "%s: restore after a device reset needs an update interval of at most %d s (set: %d s); "
+                "the option is treated as off",
+                entry.title, MAX_RESTORE_SCAN_INTERVAL, scan_interval,
+            )
+        self.restore_enabled = restore and not self._restore_refused
         self._restore_store: Store[dict[str, Any]] = Store(
             hass, STORE_VERSION, restore_store_key(entry.entry_id)
         )
@@ -162,6 +174,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._reconnect_history: deque[bool] = deque(maxlen=RECONNECT_GUARD_POLLS)
         self.reconnect_signal_active = True  # False once reconnects happen on most polls (see const.py)
         self._remembered_dirty = False
+        self._adopt_pending = False
+        self._last_poll_mono: float | None = None
         self._window_failed = False  # the current window followed failed polls (not only a reconnect or gap)
         self._last_restore: datetime | None = None
         # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
@@ -231,6 +245,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._remembered_dirty:
             self._remembered_dirty = False
             await self._save()
+        if self.restore_enabled and self._adopt_pending:
+            await self._adopt_device_values()
         await self._save_last_poll()
         self._check_outage_changes(recovered=recovered)
         self._update_firmware()
@@ -460,9 +476,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_load_remembered(self) -> None:
         """Load the remembered values (option on) or delete them (option off), before the first poll."""
         if not self.restore_enabled:
-            await self._restore_store.async_remove()
+            if not self._restore_refused:
+                await self._restore_store.async_remove()
             return
         data = await self._restore_store.async_load() or {}
+        # Adopt the device values once when the option is switched on (no store yet, or one from before).
+        self._adopt_pending = not data.get("adopted")
         try:
             self._last_poll_saved = datetime.fromisoformat(data["last_poll"])
         except (KeyError, TypeError, ValueError):
@@ -507,7 +526,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _save(self, last_poll: datetime | None = None) -> None:
         """Persist the remembered values and the time of the last successful poll."""
         last_poll = last_poll or self._last_poll or self._last_poll_saved
-        data: dict[str, Any] = {"values": dict(self._remembered), "learned": dict(self._learned)}
+        data: dict[str, Any] = {
+            "values": dict(self._remembered),
+            "learned": dict(self._learned),
+            "adopted": not self._adopt_pending,
+        }
         if last_poll is not None:
             data["last_poll"] = last_poll.isoformat()
             self._last_poll_saved = last_poll
@@ -541,6 +564,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self.restore_enabled:
             return
         self._last_poll = dt_util.utcnow()
+        self._last_poll_mono = _monotonic()
         if not self._remembered:
             return
         saved = self._last_poll_saved
@@ -620,11 +644,41 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         return True
 
+    async def _adopt_device_values(self) -> None:
+        """Option switched on: remember what the device holds now, once, as if written by this integration.
+
+        Runs on the first successful poll after setup, which reads every block. Modes, levels and offsets are
+        adopted when they read non-zero. A setpoint is adopted only if its circuit's mode is `setpoint`: an
+        unset setpoint reads its boot default, and restoring that would make the SHI own it.
+        """
+        adopted: dict[str, int] = {}
+        for key in sorted(self._restorable()):
+            raw = self._raw.get(key)
+            if key in self._remembered or key not in self._fresh or raw in (None, 0, SHI_NOT_AVAILABLE):
+                continue
+            if key.endswith(RESET_TO_DEFAULT_SUFFIXES):
+                mode = f"{restore_group(key)}_mode"
+                mode_reg = BY_KEY.get(mode)
+                if mode_reg is None or mode_reg.options is None:
+                    continue
+                if self._raw.get(mode) != mode_reg.options.index("setpoint"):
+                    continue
+            adopted[key] = raw
+        self._remembered.update(adopted)
+        self._adopt_pending = False
+        await self._save()
+        _LOGGER.info(
+            "%s: restore option switched on; adopted the current device values: %s",
+            self.config_entry.title, ", ".join(f"{k}={v}" for k, v in adopted.items()) or "none",
+        )
+
     def _session_gap(self) -> bool:
         """Within a session: more than the watchdog time since the previous successful poll."""
-        if not self.restore_enabled or self._last_poll is None:
+        if not self.restore_enabled or self._last_poll_mono is None:
             return False
-        gap = (dt_util.utcnow() - self._last_poll).total_seconds()
+        # Monotonic: a wall-clock step (NTP) must not look like a gap. Wall-clock time is only used across a
+        # restart (_watchdog_gap), where no monotonic reference survives.
+        gap = _monotonic() - self._last_poll_mono
         if gap <= SHI_WATCHDOG_TIMEOUT:
             return False
         _LOGGER.info(

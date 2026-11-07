@@ -179,9 +179,16 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   key. The values are stored per entry in Home Assistant's storage (`.storage/luxtronik_shi.restore.<entry_id>`), so a
   restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `off`,
   offset 0) is remembered like any other write, so there is nothing left to restore for it.
-  Values written by others are not remembered: another Modbus client's values are out of scope, and values another
+  Apart from the one-time adoption below, values written by others are not remembered: another Modbus client's values are out of scope, and values another
   integration writes over the native port 8889 are controller parameters, not values set over the SHI, so a reset
   does not revert them.
+* **Adopting the current values once.** When the option is switched on (in the options, or on the first setup with
+  it on), the first full read cycle is taken as a snapshot and remembered as if written by the integration: every
+  mode, level and offset of the allow-list that reads non-zero, and a setpoint only if its circuit's mode reads
+  `setpoint` (an unset setpoint reads its boot default, and restoring that would make the SHI own it). The adopted
+  keys are logged. This happens once; a restart or reload with the option still on does not adopt again.
+* **Needs an update interval of at most 540 seconds.** The options refuse the restore option above that, well inside
+  the 600 s watchdog; an entry that has both anyway runs with the option off (warning in the log).
 * **Only after an outage.** The controller reverts the SHI values for exactly two reasons: a reboot, which drops the
   connection, and 10 minutes without any Modbus access
   ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). So a reset is only considered after
@@ -191,8 +198,8 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
     **assumption that is not measured yet**: the SHI keeps the TCP connection open between polls, so a reconnect
     means the controller dropped it. If reconnects happen on 3 of the last 5 polls, the assumption does not hold for
     the setup: a warning is logged once and reconnects no longer count in that session,
-  * more than 10 minutes since the previous successful poll while Home Assistant runs (possible with a long scan
-    interval: the watchdog can expire between two polls), or
+  * more than 10 minutes since the previous successful poll while Home Assistant runs, measured with a monotonic
+    clock so that a change of the system clock does not count, or
   * a gap of more than 11 minutes since the last successful poll, for example a long Home Assistant downtime (10
     minutes watchdog plus 1 minute, because the time of the last poll is stored at most once a minute).
 

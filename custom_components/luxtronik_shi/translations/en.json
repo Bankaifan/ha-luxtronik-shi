@@ -66,10 +66,13 @@
         },
         "data_description": {
           "scan_interval": "Base interval. Slowly changing values (counters, settings, firmware) are read less often automatically.",
-          "restore_after_reset": "The heat pump forgets values set over the Smart Home Interface when it restarts or nothing has accessed it for 10 minutes. When on, the integration writes the values it last set itself back, but only after a connection outage and only if every one of them reads its reset value; any change seen while polling continuously is treated as someone else's. Only modes, levels, offsets and setpoints are restored, never blocks. Leave this off if another system also writes these registers. Off by default."
+          "restore_after_reset": "Needs an update interval of at most 540 seconds. The heat pump forgets values set over the Smart Home Interface when it restarts or nothing has accessed it for 10 minutes. When on, the integration writes the values it last set itself back, but only after a connection outage and only if every one of them reads its reset value; any change seen while polling continuously is treated as someone else's. Only modes, levels, offsets and setpoints are restored, never blocks. Leave this off if another system also writes these registers. Off by default."
         },
         "description": "Parts of the installation that are switched off are not polled and get no entities. Their entity IDs stay reserved and come back when the part is switched on again."
       }
+    },
+    "error": {
+      "restore_scan_interval": "Restoring after a device reset needs an update interval of at most {max} seconds, well inside the 600 second watchdog of the heat pump."
     }
   },
   "entity": {

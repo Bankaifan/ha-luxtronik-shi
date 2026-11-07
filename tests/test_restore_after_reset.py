@@ -25,6 +25,24 @@ from .test_repairs import Clock, Outage
 
 MODE, SETPOINT, OFFSET, LEVEL, DHW_MODE, BLOCK, EXTRA_DHW = 10000, 10001, 10002, 10003, 10005, 10050, 10071
 DHW_SETPOINT = 10006
+ROOM_SETPOINT = 10060
+
+
+class Mono:
+    """Controllable monotonic clock for the in-session gap (asyncio keeps the real one)."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def mono(monkeypatch: pytest.MonkeyPatch) -> Mono:
+    fake = Mono()
+    monkeypatch.setattr(coordinator_module, "_monotonic", fake)
+    return fake
 
 
 @pytest.fixture
@@ -521,10 +539,14 @@ async def test_watchdog_gap_boundary(
 async def test_last_poll_not_saved_while_nothing_is_remembered(
     hass: HomeAssistant, shi: FakeSHI, clock: Clock, hass_storage
 ) -> None:
+    """Only the one-time adoption marker is written at setup; polls write nothing while nothing is remembered."""
     entry = await _setup(hass, shi)
+    key = restore_store_key(entry.entry_id)
+    stored = dict(hass_storage[key]["data"])
     clock.tick(timedelta(seconds=120))
     await _polls(entry, 2)
-    assert restore_store_key(entry.entry_id) not in hass_storage
+    assert hass_storage[key]["data"] == stored
+    assert "last_poll" not in stored
 
 
 async def test_group_rule_holds_across_windows(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -778,19 +800,18 @@ async def test_unavailable_remembered_key_is_dropped(hass: HomeAssistant, shi: F
 
 
 async def test_unseen_remembered_key_blocks_the_restore(hass: HomeAssistant, shi: FakeSHI, monkeypatch) -> None:
-    """N3: a remembered register that was not read in the window (here its block is skipped) means the window is
-    incomplete: no reset, nothing restored."""
+    """N3: a remembered register outside the heating block (room setpoint, 10060) is not read in the window: the
+    window is incomplete, so no reset and nothing restored, although the heating mode alone would qualify."""
     entry = await _setup(hass, shi)
     coordinator = entry.runtime_data
     await _write(entry, "cfg_heating_mode", 1)
-    await _write(entry, "cfg_dhw_setpoint", 500)
+    await _write(entry, "cfg_room_setpoint", 250)
     blocks = coordinator._blocks
-    monkeypatch.setattr(
-        coordinator, "_blocks",
-        [b for b in blocks if not any(r.key == "cfg_dhw_setpoint" for r in b.registers)],
-    )
+    skipped = [b for b in blocks if any(r.key == "cfg_room_setpoint" for r in b.registers)]
+    assert skipped and all(r.key != "cfg_heating_mode" for b in skipped for r in b.registers)
+    monkeypatch.setattr(coordinator, "_blocks", [b for b in blocks if b not in skipped])
     before = len(_writes(shi))
-    await _reboot(entry, shi, {MODE: 0, DHW_SETPOINT: 450})
+    await _reboot(entry, shi, {MODE: 0, ROOM_SETPOINT: 210})
     assert shi.holding[MODE] == 0
     assert len(_writes(shi)) == before
 
@@ -819,17 +840,30 @@ async def test_setpoint_reading_zero_after_outage_is_not_reverted(hass: HomeAssi
 
 @pytest.mark.parametrize(("interval", "restored"), [(500, False), (601, True)])
 async def test_watchdog_between_two_polls_of_a_long_interval(
-    hass: HomeAssistant, shi: FakeSHI, clock: Clock, interval: int, restored: bool
+    hass: HomeAssistant, shi: FakeSHI, mono: Mono, interval: int, restored: bool
 ) -> None:
-    """Review q9: with a long scan interval the watchdog can expire between two successful polls; more than 600 s
-    since the previous successful poll counts as an outage."""
+    """Review q9: the watchdog can expire between two successful polls; more than 600 s (monotonic) since the
+    previous successful poll counts as an outage."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _polls(entry, 1)
     shi.holding[MODE] = 0
-    clock.tick(timedelta(seconds=interval))
+    mono.now += interval
     await _polls(entry, 2)
     assert (shi.holding[MODE] == 1) is restored
+
+
+async def test_wall_clock_step_is_no_gap(hass: HomeAssistant, shi: FakeSHI, clock: Clock, mono: Mono) -> None:
+    """Review q15: an NTP step of 15 minutes between two 30 s polls is no watchdog gap; the change is external."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _polls(entry, 1)
+    shi.holding[MODE] = 0
+    clock.tick(timedelta(minutes=15))
+    mono.now += 30
+    await _polls(entry, 2)
+    assert shi.holding[MODE] == 0
+    assert entry.runtime_data.remembered == {}
 
 
 async def test_learned_values_are_exempt_from_the_age_limit(
@@ -846,3 +880,124 @@ async def test_learned_values_are_exempt_from_the_age_limit(
     await hass.async_block_till_done()
     assert entry.runtime_data.remembered == {}
     assert entry.runtime_data.learned == {"cfg_dhw_setpoint": 500}
+
+
+
+async def test_no_relearning_without_a_non_zero_mode(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """R2: relearning needs a remembered mode or level that was non-zero and reads 0. With the hot water mode
+    remembered as `off`, a setpoint that differs from its learned value is not relearned and nothing is written."""
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    coordinator._learned = {"cfg_dhw_setpoint": 450}
+    await _write(entry, "cfg_dhw_mode", 0)
+    await _write(entry, "cfg_dhw_setpoint", 540)
+    before = len(_writes(shi))
+    await _reboot(entry, shi, {DHW_SETPOINT: 480})
+    assert len(_writes(shi)) == before
+    assert coordinator.learned == {"cfg_dhw_setpoint": 450}
+
+
+# ---------------------------------------------------------------- long scan interval refused
+
+
+async def test_options_flow_refuses_restore_at_long_interval(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Review q12: above 540 s the watchdog could expire between polls; the option is refused."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    entry = await _setup(hass, shi, restore=False)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 600, "restore_after_reset": True}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"restore_after_reset": "restore_scan_interval"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 540, "restore_after_reset": True}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.runtime_data.restore_enabled
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 600, "restore_after_reset": False}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY  # a long interval alone is fine
+
+
+async def test_setup_with_long_interval_treats_restore_as_off(
+    hass: HomeAssistant, shi: FakeSHI, hass_storage, caplog: pytest.LogCaptureFixture
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="WP",
+        unique_id=f"127.0.0.1:{shi.port}:1",
+        data={CONF_HOST: "127.0.0.1", CONF_PORT: shi.port, CONF_SLAVE: 1},
+        options={"scan_interval": 600, "restore_after_reset": True},
+    )
+    key = restore_store_key(entry.entry_id)
+    hass_storage[key] = {"version": 1, "minor_version": 1, "key": key, "data": {"values": {"cfg_heating_mode": 1}}}
+    entry.add_to_hass(hass)
+    with caplog.at_level(logging.WARNING):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    assert not coordinator.restore_enabled
+    assert "the option is treated as off" in caplog.text
+    await _write(entry, "cfg_dhw_mode", 1)
+    assert coordinator.remembered == {}
+    assert hass_storage[key]["data"] == {"values": {"cfg_heating_mode": 1}}  # kept, not deleted
+
+
+# ---------------------------------------------------------------- adopt the device values when switched on
+
+
+async def test_adopts_device_values_when_switched_on(
+    hass: HomeAssistant, shi: FakeSHI, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Owner case: heating mode `offset` with offset 0, hot water mode `setpoint` at 54.0 °C. The modes and the
+    hot water setpoint are adopted, the offset 0 is not (nothing to restore), the heating setpoint neither (its
+    mode is not `setpoint`, so it may be an unset boot default)."""
+    shi.holding.update({MODE: 2, OFFSET: 0, DHW_MODE: 1, DHW_SETPOINT: 540})
+    with caplog.at_level(logging.INFO):
+        entry = await _setup(hass, shi)
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 540, "cfg_heating_mode": 2}
+    assert "adopted the current device values: cfg_dhw_mode=1, cfg_dhw_setpoint=540, cfg_heating_mode=2" in caplog.text
+    await _reboot(entry, shi, {MODE: 0, DHW_MODE: 0, DHW_SETPOINT: 500})
+    assert (shi.holding[MODE], shi.holding[DHW_MODE], shi.holding[DHW_SETPOINT]) == (2, 1, 540)
+
+
+async def test_setpoint_with_its_mode_off_is_not_adopted(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.holding.update({DHW_MODE: 0, DHW_SETPOINT: 540, MODE: 2, SETPOINT: 350})
+    entry = await _setup(hass, shi)
+    assert entry.runtime_data.remembered == {"cfg_heating_mode": 2}
+
+
+async def test_no_second_adoption_after_reload(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.holding.update({DHW_MODE: 1, DHW_SETPOINT: 540})
+    entry = await _setup(hass, shi)
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 540}
+    shi.holding[MODE] = 2  # set by someone else later
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert "cfg_heating_mode" not in entry.runtime_data.remembered
+
+
+async def test_switching_on_in_the_options_adopts(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.holding.update({DHW_MODE: 1, DHW_SETPOINT: 540})
+    entry = await _setup(hass, shi, restore=False)
+    assert entry.runtime_data.remembered == {}
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {"scan_interval": 30, "restore_after_reset": True}
+    )
+    await hass.async_block_till_done()
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 540}
+
+
+async def test_option_off_adopts_and_stores_nothing(hass: HomeAssistant, shi: FakeSHI, hass_storage) -> None:
+    shi.holding.update({MODE: 2, DHW_MODE: 1, DHW_SETPOINT: 540})
+    entry = await _setup(hass, shi, restore=False)
+    await _polls(entry)
+    assert entry.runtime_data.remembered == {}
+    assert restore_store_key(entry.entry_id) not in hass_storage
+    assert [r for r in shi.requests if r[0] == 6] == []

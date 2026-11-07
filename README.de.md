@@ -190,9 +190,18 @@ Integration solche Werte zurückschreibt:
   (`.storage/luxtronik_shi.restore.<entry_id>`), die Wiederherstellung klappt also auch nach einem Neustart von Home
   Assistant. Wer einen Wert auf seinen neutralen Wert zurücksetzt (z. B. Betriebsart `aus`, Offset 0), dem wird das
   wie jedes andere Schreiben gemerkt – danach gibt es für diesen Wert nichts mehr wiederherzustellen.
-  Von anderen geschriebene Werte werden nicht gemerkt: Werte eines anderen Modbus-Clients sind nicht Sache dieser
+  Abgesehen von der einmaligen Übernahme unten werden von anderen geschriebene Werte nicht gemerkt: Werte eines anderen Modbus-Clients sind nicht Sache dieser
   Integration, und was eine andere Integration über den nativen Port 8889 schreibt, sind Parameter der Regelung, keine
   über die SHI gesetzten Werte – ein Reset setzt sie nicht zurück.
+* **Einmalige Übernahme der aktuellen Werte.** Wird die Option eingeschaltet (in den Optionen oder bei der ersten
+  Einrichtung mit eingeschalteter Option), dient der erste vollständige Lesezyklus als Momentaufnahme und wird gemerkt,
+  als hätte die Integration ihn geschrieben: jede Betriebsart, Stufe und jeder Offset der Liste, die nicht 0 lesen,
+  und ein Sollwert nur, wenn die Betriebsart seines Kreises `Sollwert` liest (ein nie gesetzter Sollwert liest seinen
+  Startwert, und ihn wiederherzustellen würde ihn der SHI unterstellen). Die übernommenen Schlüssel stehen im Log. Das
+  passiert einmal; ein Neustart oder Neuladen bei weiter eingeschalteter Option übernimmt nichts erneut.
+* **Erfordert ein Aktualisierungsintervall von höchstens 540 Sekunden.** Darüber lehnen die Optionen die
+  Wiederherstellung ab, deutlich unter dem 600-Sekunden-Watchdog; ein Eintrag, der beides trotzdem hat, läuft mit
+  ausgeschalteter Option (Warnung im Log).
 * **Nur nach einem Ausfall.** Die Regelung setzt die SHI-Werte aus genau zwei Gründen zurück: bei einem Neustart, der
   die Verbindung trennt, und nach 10 Minuten ganz ohne Modbus-Zugriff
   ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein Reset kommt deshalb nur in Frage
@@ -204,8 +213,8 @@ Integration solche Werte zurückschreibt:
     TCP-Verbindung zwischen den Abfragen offen, eine Wiederverbindung heißt also, dass die Regelung sie getrennt hat.
     Gibt es bei 3 der letzten 5 Abfragen eine Wiederverbindung, gilt die Annahme für diese Anlage nicht: Es wird
     einmal gewarnt, und Wiederverbindungen zählen in dieser Sitzung nicht mehr,
-  * mehr als 10 Minuten seit der vorigen erfolgreichen Abfrage, während Home Assistant läuft (möglich bei einem langen
-    Abfrageintervall: Der Watchdog kann zwischen zwei Abfragen ablaufen), oder
+  * mehr als 10 Minuten seit der vorigen erfolgreichen Abfrage, während Home Assistant läuft, gemessen mit einer
+    monotonen Uhr, damit ein Verstellen der Systemuhr nicht zählt, oder
   * einer Lücke von mehr als 11 Minuten seit der letzten erfolgreichen Abfrage, etwa einem langen Stillstand von Home
     Assistant (10 Minuten Watchdog plus 1 Minute, weil die Zeit der letzten Abfrage höchstens einmal pro Minute
     gespeichert wird).
