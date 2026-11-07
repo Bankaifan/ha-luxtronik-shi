@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -97,13 +98,17 @@ async def test_reboot_restores_with_read_back(
     assert len(_writes(shi)) == before + 3  # once per reset
 
 
-async def test_two_zeros_without_outage_count_as_reset(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_two_zeros_without_outage_are_external(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Rule 1 (review probe p2): while polling continuously nothing can be reverted, so zeros are external."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_level", 2)
+    before = len(_writes(shi))
     shi.holding.update({MODE: 0, LEVEL: 0})
     await _polls(entry)
-    assert (shi.holding[MODE], shi.holding[LEVEL]) == (1, 2)
+    assert (shi.holding[MODE], shi.holding[LEVEL]) == (0, 0)
+    assert len(_writes(shi)) == before
+    assert entry.runtime_data.remembered == {}
 
 
 async def test_single_external_change_is_adopted_and_forgotten(
@@ -124,32 +129,34 @@ async def test_single_external_change_is_adopted_and_forgotten(
     assert (shi.holding[MODE], shi.holding[LEVEL]) == (2, 0)
     assert entry.runtime_data.remembered == {}
     assert "cfg_heating_mode was changed outside this integration (1 -> 2)" in caplog.text
-    assert "cfg_heating_level read 0 without evidence of a device reset" in caplog.text
+    assert "cfg_heating_level was changed outside this integration (2 -> 0)" in caplog.text
     # A later reboot has nothing left to restore.
     await _reboot(entry, shi, {MODE: 0})
     assert len(_writes(shi)) == before
 
 
-async def test_external_non_zero_change_during_reset_is_not_overwritten(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """Level of the heating circuit changed by someone else: kept, and (group rule) its mode is not restored."""
+async def test_partial_revert_after_outage_restores_nothing(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Rule 2: a real revert changes every SHI value at once. Here the level reads 3, not its reset value 0, so it
+    is no reset: the changed values are forgotten (with their circuit's mode), nothing is restored."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_level", 2)
     await _write(entry, "cfg_dhw_mode", 1)
     await _write(entry, "cfg_dhw_setpoint", 450)
+    before = len(_writes(shi))
     await _reboot(entry, shi, {MODE: 0, LEVEL: 3, DHW_MODE: 0})
-    assert (shi.holding[MODE], shi.holding[LEVEL], shi.holding[DHW_MODE]) == (0, 3, 1)
-    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 450}
+    assert (shi.holding[MODE], shi.holding[LEVEL], shi.holding[DHW_MODE]) == (0, 3, 0)
+    assert len(_writes(shi)) == before
+    assert entry.runtime_data.remembered == {"cfg_dhw_setpoint": 450}
 
 
-async def test_single_remembered_register_is_ambiguous(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_single_remembered_mode_after_outage_is_restored(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Rule 2: outage plus all-of-one is the evidence; a single remembered mode reading 0 is restored."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
-    before = len(_writes(shi))
     await _reboot(entry, shi, {MODE: 0})
-    assert shi.holding[MODE] == 0
-    assert len(_writes(shi)) == before
-    assert entry.runtime_data.remembered == {}
+    assert shi.holding[MODE] == 1
+    assert entry.runtime_data.remembered == {"cfg_heating_mode": 1}
 
 
 async def test_outage_with_one_zero_and_a_neutral_value_restores(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -224,7 +231,10 @@ async def test_reset_again_within_cooldown_is_not_restored(hass: HomeAssistant, 
     assert entry.runtime_data.remembered == {}
 
 
-async def test_restore_after_home_assistant_restart(hass: HomeAssistant, shi: FakeSHI, hass_storage) -> None:
+async def test_restore_after_home_assistant_restart(
+    hass: HomeAssistant, shi: FakeSHI, clock: Clock, hass_storage
+) -> None:
+    """Home Assistant down longer than the watchdog: the values are restored from the store."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_level", 2)
@@ -233,6 +243,7 @@ async def test_restore_after_home_assistant_restart(hass: HomeAssistant, shi: Fa
         "cfg_heating_level": 2,
     }
     assert await hass.config_entries.async_unload(entry.entry_id)
+    clock.tick(timedelta(seconds=900))
     shi.holding.update({MODE: 0, LEVEL: 0})  # watchdog expired while Home Assistant was down
 
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -572,17 +583,18 @@ async def test_lone_zero_forgets_the_mode_of_its_circuit(hass: HomeAssistant, sh
     assert len(_writes(shi)) == before
 
 
-async def test_offset_changed_in_a_reset_window_is_external(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """Only setpoints are proven to revert to a non-zero default. An offset reading another non-zero value in a
-    confirmed reset window is someone else's change: forgotten, not restored (and the group rule drops its mode)."""
+async def test_offset_changed_after_outage_is_external(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Offsets read 0 after a revert. An offset at another non-zero value means no reset: nothing is restored."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 2)
     await _write(entry, "cfg_heating_offset", 20)
     await _write(entry, "cfg_dhw_mode", 1)
     await _write(entry, "cfg_dhw_setpoint", 450)
+    before = len(_writes(shi))
     await _reboot(entry, shi, {MODE: 0, OFFSET: 30, DHW_MODE: 0})
-    assert (shi.holding[MODE], shi.holding[OFFSET], shi.holding[DHW_MODE]) == (0, 30, 1)
-    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 450}
+    assert (shi.holding[MODE], shi.holding[OFFSET], shi.holding[DHW_MODE]) == (0, 30, 0)
+    assert len(_writes(shi)) == before
+    assert entry.runtime_data.remembered == {"cfg_dhw_setpoint": 450}
 
 
 async def test_setpoints_reading_zero_are_external_not_evidence(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -596,3 +608,83 @@ async def test_setpoints_reading_zero_are_external_not_evidence(hass: HomeAssist
     assert (shi.holding[SETPOINT], shi.holding[DHW_SETPOINT]) == (0, 0)
     assert len(_writes(shi)) == before
     assert entry.runtime_data.remembered == {}
+
+
+# ---------------------------------------------------------------- reset detection v2
+
+
+async def test_network_blip_with_unchanged_values_does_nothing(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 450)
+    before = len(_writes(shi))
+    await _reboot(entry, shi, {})
+    assert len(_writes(shi)) == before
+    assert entry.runtime_data.remembered == {"cfg_heating_mode": 1, "cfg_dhw_setpoint": 450}
+
+
+async def test_blip_with_one_external_change_is_forgotten(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Outage, but the hot water mode still reads 1: not every value reverted, so the zero is someone else's."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_dhw_mode", 1)
+    before = len(_writes(shi))
+    await _reboot(entry, shi, {MODE: 0})
+    assert (shi.holding[MODE], shi.holding[DHW_MODE]) == (0, 1)
+    assert len(_writes(shi)) == before
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1}
+
+
+async def test_reconnect_without_failed_poll_counts_as_outage(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """A reboot shorter than the poll interval: the TCP connection drops and is re-established before the next
+    poll, which succeeds. The reconnect is the outage signal."""
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_level", 2)
+    reconnects = coordinator.client.reconnects
+    shi.holding.update({MODE: 0, LEVEL: 0})
+    for writer in list(shi._writers):  # the controller drops every connection while rebooting
+        writer.close()
+    await asyncio.sleep(0.3)
+    await _polls(entry)
+    assert coordinator.last_update_success
+    assert coordinator.client.reconnects > reconnects
+    assert (shi.holding[MODE], shi.holding[LEVEL]) == (1, 2)
+
+
+async def test_setpoint_reset_value_is_learned_and_then_required(
+    hass: HomeAssistant, shi: FakeSHI, clock: Clock, hass_storage
+) -> None:
+    """Rule 3: after a confirmed reset the value a setpoint reverted to is learned. A later reset is only one if
+    the setpoint reads exactly that value; another value is an external change (and its mode is not restored)."""
+    entry = await _setup(hass, shi)
+    coordinator = entry.runtime_data
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 540)
+    await _reboot(entry, shi, {DHW_MODE: 0, DHW_SETPOINT: 500})
+    assert (shi.holding[DHW_MODE], shi.holding[DHW_SETPOINT]) == (1, 540)
+    assert coordinator._learned == {"cfg_dhw_setpoint": 500}
+    assert hass_storage[restore_store_key(entry.entry_id)]["data"]["learned"] == {"cfg_dhw_setpoint": 500}
+
+    clock.tick(timedelta(seconds=1000))  # past the cooldown
+    await _reboot(entry, shi, {DHW_MODE: 0, DHW_SETPOINT: 500})  # same learned value: a reset
+    assert (shi.holding[DHW_MODE], shi.holding[DHW_SETPOINT]) == (1, 540)
+
+    clock.tick(timedelta(seconds=1000))
+    before = len(_writes(shi))
+    await _reboot(entry, shi, {DHW_MODE: 0, DHW_SETPOINT: 480})  # not the learned value: someone else
+    assert (shi.holding[DHW_MODE], shi.holding[DHW_SETPOINT]) == (0, 480)
+    assert len(_writes(shi)) == before
+    assert coordinator.remembered == {}
+
+
+async def test_learned_value_survives_a_restart(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 540)
+    await _reboot(entry, shi, {DHW_MODE: 0, DHW_SETPOINT: 500})
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data._learned == {"cfg_dhw_setpoint": 500}

@@ -54,33 +54,28 @@ versioning follows [Semantic Versioning](https://semver.org/):
   `docs/firmware-3.92.3-shi-analysis.md`); measured on the reference installation (LWDV 91-1/3, FW 3.92.3), heating
   mode (10000) read `off` instead of `setpoint` after two reboots and heating level (10003) raw 0 instead of 2.
   - Only an allow-list is remembered and restored (`RESTORE_KEYS` in `const.py`): mode, level, offset and setpoint of
-    each circuit (heating, hot water, mixing circuits 1–3 heating and cooling, overall) and the room setpoint. Blocks,
-    circulation, extra hot water and the power limit are never restored, because an optimizer owns them live and
-    re-applying a block would undo the watchdog's fail-safe.
-  - A value is remembered after a write through the integration's own entities whose read-back matches (persisted per
-    entry with Home Assistant's storage, so it survives a restart). Values set back to neutral (e.g. mode `off`) are
-    remembered as such and so not restored.
-  - Evidence of a reset, from the normal poll only: at least two remembered non-zero values reading 0, or a connection
-    outage followed by such a zero while at least two values are remembered. A gap of more than 660 s (600 s watchdog
-    plus the 60 s save interval) since the last successful poll, e.g. a long Home Assistant downtime, counts like an
-    outage. Remembered values older than 24 hours are dropped at setup. The last-poll time is stored at most once a minute, on unload, and only while
-    something is remembered.
-  - A reset reverts setpoints to their persisted or default value, not 0 (firmware analysis). When the evidence
-    confirms a reset, a remembered setpoint that reads a different non-zero value in the same read cycle is
-    part of the reset and is restored with its circuit (values first, mode last), e.g. hot water mode `setpoint` with
-    54 °C and heating mode `offset` both come back after a reboot. Only setpoints are treated this way (offsets have no
-    proven reset value), and a setpoint reading 0 is always an external change and never counts as reset evidence.
-  - Without that evidence, a different non-zero value, or a lone zero, is an external change and is forgotten. If any
-    member of a circuit (mode, setpoint, offset, level) changed externally, that circuit's mode is forgotten too and
-    only restorable again after the next write through Home Assistant. Modes and setpoints in the list are restored
-    even if an optimizer writes them; its next write wins.
-    **Limit:** a value another Modbus client sets to 0 during or right after an outage, or two values set to 0 at
-    once, cannot be told apart from a reset and is restored over that change. Leave the option off if another system
-    also writes these registers.
-  - Restores run with read-back, once per reset. Modes are written last, and a mode is not restored (and is
-    forgotten) if another value of its circuit failed to restore in the same run. A failed restore is not retried, and a reset seen again within
-    15 minutes is not restored. Writes from Home Assistant and restores are serialised by a lock.
+    each circuit and the room setpoint. Blocks, circulation, extra hot water and the power limit are never restored.
+  - Only values written through the integration's own entities and read back unchanged are remembered (persisted per
+    entry, so it survives a restart); values set back to neutral are remembered as such. Values written by other
+    Modbus clients or over port 8889 are not remembered.
+  - **A reset is only considered after an outage**: failed polls, a re-established Modbus connection (counted in the
+    client, so a reboot shorter than the poll interval is not missed), or a gap of more than 660 s since the last
+    successful poll. Any change seen while polling continuously is an external change and is forgotten.
+  - **All or nothing**: after an outage it is a reset only if every remembered value reads its reset value (0 for
+    modes, levels and offsets; for setpoints any non-zero value, or exactly the learned value). Then the differing
+    values are restored, values first and modes last; otherwise the changed values are forgotten and nothing is
+    restored. A single remembered mode reading 0 after an outage is enough.
+  - **Learned setpoint reset values**: after a confirmed reset the value each setpoint reverted to is stored; later a
+    setpoint only counts as reverted if it reads exactly that value. Learned on the device, not a firmware table.
+  - Group rule: once a member of a circuit changed externally, the circuit's mode is forgotten until it is written
+    through Home Assistant again. A mode is not restored if another value of its circuit failed to restore.
+  - Restores run with read-back, once per reset; failures are not retried; no second restore within 15 minutes;
+    remembered values older than 24 hours are dropped; Home Assistant writes and restores are serialised by a lock.
   - Diagnostics list the remembered values. No extra polling, no new entities.
+  - **Changed since #45 (not released yet):** two zeros without an outage are no longer a reset (they are external
+    changes); after an outage a partial revert restores nothing instead of the zeros; a single remembered mode or
+    level reading 0 after an outage is now restored (it used to need two remembered values); a reconnect without a
+    failed poll now counts as an outage; setpoint reset values are learned.
 - Binary sensors for the status bits of heat generator state (10000): `heatpump_vd2_status`, `heatpump_zwe2_status`
   and `heatpump_zwe3_status`, from python-luxtronik (bit 1, bit 3 and bit 4). All three are disabled by default.
   `heatpump_vd2_status` and `heatpump_zwe2_status` show the same bits as `compressor_2` and `aux_heater_2`.
@@ -104,7 +99,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   registers still open). The README cites it.
 
 ### Tests
-- `tests/test_restore_after_reset.py`: setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
+- `tests/test_restore_after_reset.py` (reset detection v2): zeros without an outage are external, a partial revert restores nothing, a single remembered mode is restored after an outage, a network blip with unchanged values does nothing, a blip with one external change is forgotten, a reconnect without a failed poll counts as an outage, setpoint reset values are learned, required and persisted; setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; an offset changed in a reset window and setpoints reading 0 are
   external changes; blocks and extra hot water are never remembered or restored, the allow-list only
   names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
   skipped, a write whose read-back differs is not remembered, the group rule across windows, modes restored last and skipped after a failed value of their circuit, a lone zero forgets its circuit's mode, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no

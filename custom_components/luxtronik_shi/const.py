@@ -84,11 +84,10 @@ RESTORE_KEYS: frozenset[str] = frozenset(
     }
 )
 # Keys whose reset value is not 0: on watchdog expiry and at boot the controller reverts setpoints to their
-# persisted parameter or fixed default, while modes, levels and blocks read 0
-# (docs/firmware-3.92.3-shi-analysis.md, "SHI watchdog"). A different non-zero value of these keys in a window
-# with reset evidence is part of the reset and is restored with it. A setpoint reading 0 is never a reset
-# (0 is outside every setpoint range), so it is an external change and does not count as evidence. Offsets
-# are not listed: their reset value is not proven.
+# persisted parameter or fixed default, while modes and levels read 0 (docs/firmware-3.92.3-shi-analysis.md,
+# "SHI watchdog"). After an outage such a key counts as reverted if it reads any non-zero value, or exactly
+# its learned value once one was observed in a confirmed reset. Offsets are *assumed* to revert to 0 (not
+# proven): if not, a reset with a non-zero offset remembered is not recognised and nothing is overwritten.
 RESET_TO_DEFAULT_SUFFIXES = ("_setpoint",)
 # Remembered values older than this (time since the last successful poll) are dropped at setup: an optimizer
 # such as the Heat Pump Optimizer rewrites modes and setpoints live, so a day-old value is no longer meant.

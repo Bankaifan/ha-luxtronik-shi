@@ -153,8 +153,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Comparison window: polls left until every remembered register was read once after the trigger.
         self._window_left = 0
         self._window_seen: set[str] = set()
-        self._window_outage = False
-        self._window_changed: set[str] = set()  # setpoints/offsets that read another non-zero value
+        self._learned: dict[str, int] = {}  # setpoint key -> raw value it reverted to in a confirmed reset
+        self._reconnects_seen = 0
         self._last_restore: datetime | None = None
         # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
         self._last_poll: datetime | None = None
@@ -215,7 +215,13 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._tick += 1
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
-        await self._check_device_reset(recovered=recovered or self._watchdog_gap())
+        reconnected = self.client.reconnects != self._reconnects_seen
+        self._reconnects_seen = self.client.reconnects
+        if reconnected and not recovered:
+            _LOGGER.info(
+                "%s: connection to the SHI was re-established; treated as an outage", self.config_entry.title
+            )
+        await self._check_device_reset(outage=recovered or reconnected or self._watchdog_gap())
         await self._save_last_poll()
         self._check_outage_changes(recovered=recovered)
         self._update_firmware()
@@ -446,6 +452,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (KeyError, TypeError, ValueError):
             self._last_poll_saved = None
         values = data.get("values") or {}
+        # Learned setpoint reset values are facts about this device: kept regardless of age.
+        self._learned = {
+            k: v
+            for k, v in (data.get("learned") or {}).items()
+            if k in self._restorable() and isinstance(v, int) and not isinstance(v, bool)
+        }
         if self._last_poll_saved is not None and values:
             age = (dt_util.utcnow() - self._last_poll_saved).total_seconds()
             if age > RESTORE_MAX_GAP:
@@ -474,7 +486,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _save(self, last_poll: datetime | None = None) -> None:
         """Persist the remembered values and the time of the last successful poll."""
         last_poll = last_poll or self._last_poll or self._last_poll_saved
-        data: dict[str, Any] = {"values": dict(self._remembered)}
+        data: dict[str, Any] = {"values": dict(self._remembered), "learned": dict(self._learned)}
         if last_poll is not None:
             data["last_poll"] = last_poll.isoformat()
             self._last_poll_saved = last_poll
@@ -531,8 +543,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _reg(self, key: str) -> Register:
         return next(r for r in self.registers if r.key == key)
 
-    def _forget_external(self, key: str, remembered: int, current: int) -> None:
-        del self._remembered[key]
+    def _forget_external(self, key: str, remembered: int, current: int | None) -> None:
+        self._remembered.pop(key, None)
         _LOGGER.info(
             "%s: %s was changed outside this integration (%s -> %s) and will not be restored",
             self.config_entry.title, key, remembered, current,
@@ -549,46 +561,46 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.config_entry.title, mode, key,
             )
 
-    async def _check_device_reset(self, *, recovered: bool) -> None:
-        """Re-apply remembered values when the evidence shows that the device reset them (option on).
+    def _reads_reset_value(self, key: str, current: int | None) -> bool:
+        """Whether ``current`` is what this key reads after a revert of the SHI values.
 
-        * A remembered register that reads a different non-zero value was changed by someone else: forgotten.
-        * Registers whose non-zero remembered value reads 0 are collected until every remembered register was
-          read once (settings are only read every few polls). A reset is assumed when at least two of them
-          read 0, or when a communication outage (or a gap beyond the SHI watchdog) came first and at least
-          two keys are remembered. Otherwise the zeros count as external changes and are forgotten.
+        Modes and levels read 0, offsets are assumed to (not proven). Setpoints read their persisted or
+        default value, never 0: before one was observed any non-zero value counts, afterwards only the
+        learned one (learned on this device).
+        """
+        if current is None:
+            return False
+        if key.endswith(RESET_TO_DEFAULT_SUFFIXES):
+            learned = self._learned.get(key)
+            return current != 0 if learned is None else current == learned
+        return current == 0
+
+    async def _check_device_reset(self, *, outage: bool) -> None:
+        """Re-apply remembered values when the evidence shows that the device reverted them (option on).
+
+        * Without an observed outage (failed polls, a reconnect, or a gap beyond the SHI watchdog) the values
+          cannot have been reverted: any difference is an external change and is forgotten.
+        * After an outage, the remembered registers are collected until each was read once (settings are only
+          read every few polls). It is a reset only if every remembered register reads its reset value
+          (all or nothing, because the controller reverts all SHI values at once); otherwise the registers
+          that changed are external changes and nothing is restored.
         No extra Modbus reads: the values come from the normal poll.
         """
         if not self.restore_enabled or not self._remembered:
             self._window_left = 0
             return
         changed = False
-        zeros = any(
-            self._raw.get(k) == 0 and v != 0
-            for k, v in self._remembered.items()
-            if k in self._fresh and not k.endswith(RESET_TO_DEFAULT_SUFFIXES)
-        )
-        if self._window_left == 0 and (recovered or zeros):
+        if outage:
+            if self._window_left == 0:
+                self._window_seen = set()
             self._window_left = max((self._reg(k).every for k in self._remembered), default=1)
-            self._window_seen = set()
-            self._window_changed = set()
-            self._window_outage = recovered
-        elif recovered:
-            self._window_outage = True
-        for key, remembered in list(self._remembered.items()):
-            current = self._raw.get(key)
-            if key not in self._remembered or key not in self._fresh or current in (None, remembered):
-                continue
-            resets_to_default = key.endswith(RESET_TO_DEFAULT_SUFFIXES)
-            if current != 0 or resets_to_default:  # a setpoint never resets to 0: that is someone else
-                if current != 0 and self._window_left > 0 and resets_to_default:
-                    # The watchdog and a reboot revert setpoints to their persisted or default value, not 0:
-                    # decided with the rest of the window (part of a confirmed reset or not).
-                    self._window_changed.add(key)
-                    continue
-                self._forget_external(key, remembered, current)
-                changed = True
-        if self._window_left > 0:
+        if self._window_left == 0:
+            for key, remembered in list(self._remembered.items()):
+                current = self._raw.get(key)
+                if key in self._fresh and current not in (None, remembered) and key in self._remembered:
+                    self._forget_external(key, remembered, current)
+                    changed = True
+        else:
             self._window_seen |= self._fresh & self._remembered.keys()
             self._window_left -= 1
             if self._window_left == 0 or self._remembered.keys() <= self._window_seen:
@@ -598,64 +610,52 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._save()
 
     async def _decide_reset(self) -> bool:
-        """End of a comparison window: restore or forget. Returns whether the store changed.
-
-        Zeros of modes and levels are the evidence. Setpoints that read a different non-zero value in the
-        window (their reset value is a persisted or default value) are restored with a confirmed reset and are
-        external changes otherwise.
-        """
+        """End of the window after an outage: restore all or nothing. Returns whether the store changed."""
         title = self.config_entry.title
-        zeros = {
-            k: v
-            for k, v in self._remembered.items()
-            if k in self._window_seen
-            and self._raw.get(k) == 0
-            and v != 0
-            and not k.endswith(RESET_TO_DEFAULT_SUFFIXES)
-        }
-        reverted = {
-            k: v
-            for k, v in self._remembered.items()
-            if k in self._window_changed and self._raw.get(k) not in (None, 0, v)
-        }
-        self._window_changed = set()
-        if not zeros and not reverted:
-            return False
-        pending = {**zeros, **reverted}
-        reset = bool(zeros) and (len(zeros) >= 2 or (self._window_outage and len(self._remembered) >= 2))
+        seen = {k: v for k, v in self._remembered.items() if k in self._window_seen}
+        differ = {k: v for k, v in seen.items() if self._raw.get(k) != v}
+        if not differ:
+            return False  # nothing was reverted (e.g. a network blip): nothing to do
+        unseen = self._remembered.keys() - seen.keys()
+        # All or nothing: the controller reverts every SHI value at once, so each remembered register must
+        # read its reset value (a remembered mode `off` or offset 0 trivially does).
+        reset = not unseen and all(self._reads_reset_value(k, self._raw.get(k)) for k in seen)
         now = dt_util.utcnow()
         if reset and self._last_restore is not None:
             if (now - self._last_restore).total_seconds() < RESTORE_COOLDOWN:
                 _LOGGER.warning(
                     "%s: device reset again within %s minutes of the last restore; not restoring %s again, "
                     "these values are forgotten",
-                    title, RESTORE_COOLDOWN // 60, ", ".join(sorted(pending)),
+                    title, RESTORE_COOLDOWN // 60, ", ".join(sorted(differ)),
                 )
-                reset = False
-        if not reset:
-            for key in reverted:
-                if key in self._remembered:
-                    self._forget_external(key, reverted[key], self._raw[key])
-            if zeros:
-                for key in zeros:
+                for key in differ:
                     self._remembered.pop(key, None)
-                _LOGGER.info(
-                    "%s: %s read 0 without evidence of a device reset; treated as changed outside this "
-                    "integration and will not be restored",
-                    title, ", ".join(sorted(zeros)),
-                )
-                for key in zeros:
-                    self._forget_group_mode(key)
+                return True
+        if not reset:
+            _LOGGER.info(
+                "%s: after the outage not every remembered value reads its reset value; no device reset, "
+                "nothing is restored",
+                title,
+            )
+            for key, remembered in differ.items():
+                if key in self._remembered:
+                    self._forget_external(key, remembered, self._raw.get(key))
             return True
         self._last_restore = now
+        learned_changed = False
+        for key in differ:
+            if key.endswith(RESET_TO_DEFAULT_SUFFIXES) and self._learned.get(key) != self._raw[key]:
+                self._learned[key] = self._raw[key]
+                learned_changed = True
+                _LOGGER.info("%s: learned reset value of %s: %s", title, key, self._raw[key])
         restored: list[str] = []
         failed: list[str] = []
         lost = False  # connection lost: the remaining keys are not tried either
         # Modes last: a mode is only re-applied if every other restored value of its circuit came back.
-        order = sorted(pending, key=lambda k: k.endswith("_mode"))
+        order = sorted(differ, key=lambda k: k.endswith("_mode"))
         async with self._write_lock:
             for key in order:
-                raw = pending[key]
+                raw = differ[key]
                 if self._remembered.get(key) != raw:
                     continue  # written (or forgotten) through Home Assistant since the snapshot
                 if lost or (
@@ -680,7 +680,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if restored:
             _LOGGER.warning(
                 "%s: device reset detected, restored %s", title,
-                ", ".join(f"{k}={pending[k]}" for k in sorted(restored)),
+                ", ".join(f"{k}={differ[k]}" for k in sorted(restored)),
             )
         if failed:
             _LOGGER.warning(
@@ -688,4 +688,4 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "value); they are forgotten and not retried",
                 title, ", ".join(sorted(failed)),
             )
-        return bool(failed)
+        return bool(failed) or learned_changed
