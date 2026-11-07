@@ -11,6 +11,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import LuxtronikConfigEntry
 from .entity import LuxtronikEntity
 
+# One write at a time per platform; the Modbus client serialises access to the SHI anyway.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

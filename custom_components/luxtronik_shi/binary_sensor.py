@@ -13,6 +13,9 @@ from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
 from .registers import Register
 
+# Read-only platform: the coordinator delivers the values, nothing to limit.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

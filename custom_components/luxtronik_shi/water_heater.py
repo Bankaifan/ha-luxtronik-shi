@@ -38,6 +38,9 @@ _TEMP_REG = BY_KEY["dhw"]
 OPERATION_MODES: tuple[str, ...] = ("no_influence", "setpoint", "offset", "level")
 assert len(OPERATION_MODES) == len(_MODE_REG.options)
 
+# One write at a time per platform; the Modbus client serialises access to the SHI anyway.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

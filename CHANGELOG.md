@@ -18,6 +18,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
   reachable* issue (after 10 minutes), and the next successful poll counts as recovery for the restore and the
   change notices exactly as before. A first poll that fails at setup is still retried by Home Assistant.
   The tolerance is `POLL_FAILURES_TOLERATED` in `const.py` (1; 0 restores the old behaviour).
+- Every platform now declares `PARALLEL_UPDATES` (read-only `binary_sensor` and `sensor`: no limit; `switch`,
+  `number`, `select`, `climate`, `water_heater`: one write at a time). No visible change: the Modbus client already
+  serialised all access to the SHI.
 
 ### Tests
 - `tests/test_poll_tolerance.py`; the other outage tests run with the tolerance switched off (`tests/conftest.py`),
@@ -76,6 +79,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   removal of the old registry entries, firmware issue order, water heater labels, no `off` operation.
 - `tests/test_entity_docs.py`: both pages match the generator, every key of the entity contract is documented, every
   entity has an explanation and no explanation belongs to an unknown key.
+- `tests/test_parallel_updates.py`.
 
 ## [0.11.0] – 2026-11-07
 

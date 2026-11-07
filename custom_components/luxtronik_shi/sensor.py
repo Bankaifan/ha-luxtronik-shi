@@ -22,6 +22,9 @@ from .registers import (
     overall_cop,
 )
 
+# Read-only platform: the coordinator delivers the values, nothing to limit.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
