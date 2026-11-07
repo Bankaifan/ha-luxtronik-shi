@@ -23,6 +23,7 @@ from .test_integration import _entity_id
 from .test_repairs import Clock, Outage
 
 MODE, SETPOINT, OFFSET, LEVEL, DHW_MODE, BLOCK, EXTRA_DHW = 10000, 10001, 10002, 10003, 10005, 10050, 10071
+DHW_SETPOINT = 10006
 
 
 @pytest.fixture
@@ -343,18 +344,60 @@ async def test_last_poll_time_is_written_at_most_once_a_minute(
     assert hass_storage[key]["data"]["last_poll"] != first
 
 
-async def test_group_rule_mode_not_restored_over_foreign_setpoint(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """Review probe p3: the setpoint comes back at a non-zero default the integration never wrote. Restoring
-    only the mode would run mode `setpoint` at 20.0 °C, a combination nobody chose."""
+async def test_setpoint_reverted_by_a_reset_is_restored_with_its_mode(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Review probe p3, new intent: the reboot reverts the setpoint to a non-zero default (firmware: setpoints go
+    to their persisted or default value, modes to 0). With reset evidence in the window it is part of the reset,
+    so setpoint and mode are both restored (values first, mode last)."""
     entry = await _setup(hass, shi)
     await _write(entry, "cfg_heating_mode", 1)
     await _write(entry, "cfg_heating_setpoint", 350)
     await _write(entry, "cfg_dhw_mode", 1)
     await _write(entry, "cfg_dhw_setpoint", 450)
-    before = len(_writes(shi, MODE))
     await _reboot(entry, shi, {MODE: 0, SETPOINT: 200, DHW_MODE: 0})
-    assert (shi.holding[MODE], shi.holding[SETPOINT], shi.holding[DHW_MODE]) == (0, 200, 1)
-    assert len(_writes(shi, MODE)) == before
+    assert (shi.holding[MODE], shi.holding[SETPOINT], shi.holding[DHW_MODE]) == (1, 350, 1)
+    writes = [r[1] for r in _writes(shi)[-3:]]
+    assert writes.index(SETPOINT) < writes.index(MODE)
+
+
+async def test_owner_case_dhw_setpoint_and_offset_mode(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """DHW mode `setpoint` with 54.0 °C, heating mode `offset` with offset 0. The reboot sets both modes to 0 and
+    the DHW setpoint to a default of 50.0 °C: both modes and the DHW setpoint come back, the offset is untouched."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 540)
+    await _write(entry, "cfg_heating_mode", 2)
+    await _write(entry, "cfg_heating_offset", 0)
+    before = len(_writes(shi))
+    await _reboot(entry, shi, {DHW_MODE: 0, DHW_SETPOINT: 500, MODE: 0})
+    assert (shi.holding[DHW_MODE], shi.holding[DHW_SETPOINT], shi.holding[MODE], shi.holding[OFFSET]) == (1, 540, 2, 0)
+    assert sorted(r[1] for r in _writes(shi)[before:]) == [MODE, DHW_MODE, DHW_SETPOINT]
+    assert entry.runtime_data.remembered == {
+        "cfg_dhw_mode": 1, "cfg_dhw_setpoint": 540, "cfg_heating_mode": 2, "cfg_heating_offset": 0
+    }
+
+
+async def test_heating_setpoint_reverted_to_default_is_restored(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_setpoint", 300)
+    before = len(_writes(shi))
+    await _reboot(entry, shi, {MODE: 0, SETPOINT: 350})
+    assert (shi.holding[MODE], shi.holding[SETPOINT]) == (1, 300)
+    assert [r[1] for r in _writes(shi)[before:]] == [SETPOINT, MODE]
+
+
+async def test_setpoint_change_without_reset_evidence_is_external(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """No outage and only one zero: the non-zero setpoint change is someone else's, forgotten with its mode."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 1)
+    await _write(entry, "cfg_heating_setpoint", 300)
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 450)
+    before = len(_writes(shi))
+    shi.holding.update({MODE: 0, SETPOINT: 350})
+    await _polls(entry)
+    assert (shi.holding[MODE], shi.holding[SETPOINT]) == (0, 350)
+    assert len(_writes(shi)) == before
     assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 450}
 
 

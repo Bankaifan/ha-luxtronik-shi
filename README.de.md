@@ -200,9 +200,17 @@ Integration solche Werte zurückschreibt:
     pro Minute und beim Entladen; zum Ausgleich muss die Lücke länger als 11 Minuten sein. Gemerkte Werte, die älter
     als 24 Stunden sind (seit der letzten erfolgreichen Abfrage), werden beim Start der Integration verworfen; aus
     ihnen wird nichts wiederhergestellt.
-* **Fremde Änderungen werden respektiert, soweit sie erkennbar sind.** Liest ein gemerkter Wert einen *anderen Wert
-  ungleich 0*, wurde er außerhalb dieser Integration geändert, etwa von einem anderen Modbus-Client: Er wird vergessen (Log-Level info) und nicht
-  wiederhergestellt. Nullen ohne die Belege oben werden genauso behandelt. Betriebsart, Sollwert, Offset und Stufe
+* **Sollwerte und Offsets kommen mit dem Reset zurück.** Ein Reset setzt Sollwerte nicht auf 0: Die Regelung stellt
+  sie auf ihren gespeicherten oder festen Standardwert zurück, Betriebsarten, Stufen und Sperren lesen dagegen 0
+  ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Bestätigen die Belege oben einen
+  Reset, gehört ein gemerkter Sollwert oder Offset, der im selben Lesezyklus einen anderen Wert ungleich 0 liest,
+  zum Reset und wird mit seinem Kreis wiederhergestellt: erst die Werte, die Betriebsart zuletzt. Beispiel:
+  Warmwasser-Betriebsart `Sollwert` mit 54 °C und Heizungs-Betriebsart `Offset` mit Offset 0 – nach einem Neustart
+  kommen beide Betriebsarten und die 54 °C zurück; eine Betriebsart, die `aus` war, bleibt `aus`.
+* **Fremde Änderungen werden respektiert, soweit sie erkennbar sind.** Ohne Belege für einen Reset gilt: Liest ein
+  gemerkter Wert einen *anderen Wert ungleich 0*, wurde er außerhalb dieser Integration geändert, etwa von einem
+  anderen Modbus-Client: Er wird vergessen (Log-Level info) und nicht wiederhergestellt. Für Betriebsarten und Stufen
+  mit einem anderen Wert ungleich 0 gilt das immer. Nullen ohne die Belege oben werden genauso behandelt. Betriebsart, Sollwert, Offset und Stufe
   eines Kreises bilden eine Gruppe: Sobald einer davon fremd geändert wurde, wird auch die Betriebsart dieses Kreises
   vergessen und erst wieder wiederhergestellt, nachdem sie erneut über Home Assistant geschrieben wurde – so entsteht
   keine Kombination, die niemand eingestellt hat.
@@ -227,9 +235,10 @@ meist mit der nächsten Abfrage, weil die Werte wieder stimmen. *Diagnose herunt
   seinen Reset-Wert gesetzt hat. Er wird nicht wiederhergestellt (und vergessen).
 * Ohne vorherigen Verbindungsausfall gilt ein **einzelner** Wert, der 0 liest, als fremde Änderung – auch wenn die
   Regelung ihn zurückgesetzt hat.
-* Erkannt werden nur Resets auf 0. Setzt die Regelung ein Register auf einen Standardwert ungleich 0 zurück, sieht das
-  wie eine fremde Änderung aus; der Wert wird vergessen, nicht wiederhergestellt. Welche Register auf 0 zurückfallen,
-  ist nur für Heizungs-Betriebsart und Heizungs-Stufe gemessen.
+* Beleg für einen Reset ist immer eine Betriebsart oder Stufe, die 0 liest. Fällt bei einem Reset keine gemerkte
+  Betriebsart oder Stufe auf 0 (etwa weil nur Sollwerte gemerkt sind), wird er nicht erkannt; die zurückgesetzten
+  Sollwerte gelten dann als fremde Änderung und werden vergessen. Ändert jemand anderes einen Sollwert im selben
+  Lesezyklus wie ein echter Reset, wird er über diese Änderung hinweg wiederhergestellt.
 * Die Erkennung folgt dem normalen Abfrageintervall; die Wiederherstellung kommt also ein bis zwei Abfragen nach der
   Rückkehr der Regelung.
 * Eine Wiederherstellung schreibt ohne Zutun auf die Wärmepumpe. Schreibzugriffe aus Home Assistant und eine

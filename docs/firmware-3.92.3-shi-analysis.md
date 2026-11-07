@@ -75,7 +75,20 @@ Recorded from the reverse engineering of 2026-11-07 (function addresses only, no
   2026-11-05 19:15 and 2026-11-06 13:16. At those times the separate port-8889 integration dropped as well, so these
   were controller reboots, not watchdog expiries. Measured after them: heating mode (10000) read raw 0 instead of 1,
   and on 2026-11-05 heating level (10003) read raw 0 instead of 2.
-- **Open:** the reset value of every holding register other than 10000 and 10003.
+- **What the revert restores** (`reloadIfSetBy` walks the items of t1 and t2 and calls the revert function
+  `0x000881e0` for each item last set by the SHI source): either the **persisted parameter value** (type 1,
+  `0x00244298`) or the **fixed default** (type 2, `FUN_00087e9c`), written back with source `0xFFFFFFFF`, so the web
+  UI shows "---" again. Result: **modes, levels and blocks read 0; setpoints read their persisted value or their
+  default, not 0.**
+- **Boot defaults.** At boot, `FUN_0009da20` sets every t2 item (0..0x28) to its default from `FUN_00087e9c` with
+  source 0. Setpoints have real defaults (examples seen: 350, 400, 300, 200); levels (ids 0x22–0x27), modes and blocks
+  default to 0.
+- **A holding that was never set reads its boot default, not `0x7FFF`.** The dispatcher `0x000d9298` returns
+  `0x7FFF` only when the register's availability check (`0x000dfc98` → `0x003d9e0c`) fails, which depends on the
+  configuration (for example absent equipment), not on who set the value. 10003 reads 0 when never set, matching the
+  device.
+- **Open:** the exact default of each individual setpoint register, and whether a given setpoint reverts to a
+  persisted parameter (type 1) or a fixed default (type 2).
 
 The integration uses these facts for the optional *restore after a device reset*: `SHI_WATCHDOG_TIMEOUT` in
 `const.py` is the 600 s above.

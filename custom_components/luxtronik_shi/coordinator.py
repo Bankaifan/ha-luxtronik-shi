@@ -31,6 +31,7 @@ from .const import (
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
+    RESET_TO_DEFAULT_SUFFIXES,
     RESTORE_COOLDOWN,
     RESTORE_KEYS,
     RESTORE_MAX_GAP,
@@ -153,6 +154,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._window_left = 0
         self._window_seen: set[str] = set()
         self._window_outage = False
+        self._window_changed: set[str] = set()  # setpoints/offsets that read another non-zero value
         self._last_restore: datetime | None = None
         # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
         self._last_poll: datetime | None = None
@@ -561,21 +563,26 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._window_left = 0
             return
         changed = False
-        opening = self._window_left == 0
-        for key, remembered in list(self._remembered.items()):
-            current = self._raw.get(key)
-            if key in self._remembered and key in self._fresh and current not in (None, 0, remembered):
-                self._forget_external(key, remembered, current)
-                changed = True
         zeros = any(
             self._raw.get(k) == 0 and v != 0 for k, v in self._remembered.items() if k in self._fresh
         )
-        if opening and (recovered or zeros) and self._remembered:
+        if self._window_left == 0 and (recovered or zeros):
             self._window_left = max((self._reg(k).every for k in self._remembered), default=1)
             self._window_seen = set()
+            self._window_changed = set()
             self._window_outage = recovered
         elif recovered:
             self._window_outage = True
+        for key, remembered in list(self._remembered.items()):
+            current = self._raw.get(key)
+            if key in self._remembered and key in self._fresh and current not in (None, 0, remembered):
+                if self._window_left > 0 and key.endswith(RESET_TO_DEFAULT_SUFFIXES):
+                    # The watchdog and a reboot revert setpoints and offsets to their persisted or default
+                    # value, not 0: decided with the rest of the window (part of a confirmed reset or not).
+                    self._window_changed.add(key)
+                    continue
+                self._forget_external(key, remembered, current)
+                changed = True
         if self._window_left > 0:
             self._window_seen |= self._fresh & self._remembered.keys()
             self._window_left -= 1
@@ -586,16 +593,28 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._save()
 
     async def _decide_reset(self) -> bool:
-        """End of a comparison window: restore or forget the zeros. Returns whether the store changed."""
+        """End of a comparison window: restore or forget. Returns whether the store changed.
+
+        Zeros are the evidence. Setpoints and offsets that read a different non-zero value in the window
+        (their reset value is a persisted or default value) are restored with a confirmed reset and are
+        external changes otherwise.
+        """
         title = self.config_entry.title
-        pending = {
+        zeros = {
             k: v
             for k, v in self._remembered.items()
             if k in self._window_seen and self._raw.get(k) == 0 and v != 0
         }
-        if not pending:
+        reverted = {
+            k: v
+            for k, v in self._remembered.items()
+            if k in self._window_changed and self._raw.get(k) not in (None, 0, v)
+        }
+        self._window_changed = set()
+        if not zeros and not reverted:
             return False
-        reset = len(pending) >= 2 or (self._window_outage and len(self._remembered) >= 2)
+        pending = {**zeros, **reverted}
+        reset = bool(zeros) and (len(zeros) >= 2 or (self._window_outage and len(self._remembered) >= 2))
         now = dt_util.utcnow()
         if reset and self._last_restore is not None:
             if (now - self._last_restore).total_seconds() < RESTORE_COOLDOWN:
@@ -606,15 +625,19 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 reset = False
         if not reset:
-            for key in pending:
-                self._remembered.pop(key, None)
-            _LOGGER.info(
-                "%s: %s read 0 without evidence of a device reset; treated as changed outside this "
-                "integration and will not be restored",
-                title, ", ".join(sorted(pending)),
-            )
-            for key in pending:
-                self._forget_group_mode(key)
+            for key in reverted:
+                if key in self._remembered:
+                    self._forget_external(key, reverted[key], self._raw[key])
+            if zeros:
+                for key in zeros:
+                    self._remembered.pop(key, None)
+                _LOGGER.info(
+                    "%s: %s read 0 without evidence of a device reset; treated as changed outside this "
+                    "integration and will not be restored",
+                    title, ", ".join(sorted(zeros)),
+                )
+                for key in zeros:
+                    self._forget_group_mode(key)
             return True
         self._last_restore = now
         restored: list[str] = []

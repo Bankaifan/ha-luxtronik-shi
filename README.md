@@ -188,10 +188,18 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
     successful poll is stored with the values, at most once a minute and on unload; to make up for that, the gap must
     exceed 11 minutes. Remembered values older than 24 hours (since the last successful poll) are dropped when the
     integration starts, so nothing is restored from them.
-* **Changes by others are respected where they can be recognised.** A remembered value that reads a *different
-  non-zero* value was changed outside this integration, for example by another Modbus client: it is forgotten (logged
-  at info level) and not restored. Zeros without the evidence above are treated the same way. Mode, setpoint, offset and level of one circuit
-  form a group: once any of them was changed by someone else, that circuit's mode is forgotten as well and is only
+* **Setpoints and offsets come back with the reset.** A reset does not set setpoints to 0: the controller reverts
+  them to their persisted or default value, while modes, levels and blocks read 0
+  ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). So when the evidence above confirms a reset, a
+  remembered setpoint or offset that reads a different non-zero value in the same read cycle is part of the reset
+  and is restored with its circuit: values first, the mode last. Example: hot water mode `setpoint` at 54 °C and
+  heating mode `offset` with offset 0 – after a reboot both modes and the 54 °C come back; a mode that was `off` stays
+  `off`.
+* **Changes by others are respected where they can be recognised.** Without reset evidence, a remembered value that
+  reads a *different non-zero* value was changed outside this integration, for example by another Modbus client: it
+  is forgotten (logged at info level) and not restored. A mode or level that reads a different non-zero value is
+  always treated this way. Zeros without the evidence above are treated the same way. Mode, setpoint, offset and
+  level of one circuit form a group: once any of them was changed by someone else, that circuit's mode is forgotten as well and is only
   restored again after it was written through Home Assistant again, so no combination is created that nobody set.
 * **No write loops.** Each key is restored once per detected reset, with read-back. Modes are written last; a mode
   is not restored if another value of its circuit failed to restore. A restore whose write fails or reads
@@ -212,9 +220,10 @@ poll, because the values match again. *Download diagnostics* lists the remembere
   value. It is not restored (and forgotten).
 * Without a connection outage before it, a **single** value reading 0 counts as an external change, even if the
   controller reset it.
-* Only resets to 0 are recognised. If the controller resets a register to a non-zero default, that looks like an
-  external change and the value is forgotten, not restored. Which registers reset to 0 is measured only for heating
-  mode and heating level.
+* The evidence for a reset is always a mode or level reading 0. A reset in which no remembered mode or level
+  falls to 0 (for example only setpoints are remembered) is not recognised; the reverted setpoints then count as
+  external changes and are forgotten. If someone else changes a setpoint in the same read cycle as a real reset, it
+  is restored over that change.
 * The detection uses the normal poll interval, so the restore comes one or two polls after the controller is back.
 * A restore writes to the heat pump without a user action. Writes through Home Assistant and a restore never run at
   the same time; a write that arrives during a restore waits for it and then applies.

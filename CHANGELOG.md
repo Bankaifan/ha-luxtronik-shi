@@ -65,7 +65,11 @@ versioning follows [Semantic Versioning](https://semver.org/):
     plus the 60 s save interval) since the last successful poll, e.g. a long Home Assistant downtime, counts like an
     outage. Remembered values older than 24 hours are dropped at setup. The last-poll time is stored at most once a minute, on unload, and only while
     something is remembered.
-  - A different non-zero value, or a lone zero without that evidence, is an external change and is forgotten. If any
+  - A reset reverts setpoints to their persisted or default value, not 0 (firmware analysis). When the evidence
+    confirms a reset, a remembered setpoint or offset that reads a different non-zero value in the same read cycle is
+    part of the reset and is restored with its circuit (values first, mode last), e.g. hot water mode `setpoint` with
+    54 °C and heating mode `offset` both come back after a reboot.
+  - Without that evidence, a different non-zero value, or a lone zero, is an external change and is forgotten. If any
     member of a circuit (mode, setpoint, offset, level) changed externally, that circuit's mode is forgotten too and
     only restorable again after the next write through Home Assistant. Modes and setpoints in the list are restored
     even if an optimizer writes them; its next write wins.
@@ -99,7 +103,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
   registers still open). The README cites it.
 
 ### Tests
-- `tests/test_restore_after_reset.py`: blocks and extra hot water are never remembered or restored, the allow-list only
+- `tests/test_restore_after_reset.py`: setpoints reverted to a non-zero default by a reset are restored with their mode (owner case: hot water `setpoint` 54 °C plus heating `offset` 0; heating setpoint default 35.0 °C), and stay external changes without reset evidence; blocks and extra hot water are never remembered or restored, the allow-list only
   names existing keys, the group rule, a user write during a restore waits and wins, a key written since the snapshot is
   skipped, a write whose read-back differs is not remembered, the group rule across windows, modes restored last and skipped after a failed value of their circuit, a lone zero forgets its circuit's mode, values older than 24 hours dropped, the gap boundary at 660/661 s and 24 h, no
   last-poll save while nothing is remembered; watchdog gap after a Home Assistant restart (over 600 s counts as an outage,

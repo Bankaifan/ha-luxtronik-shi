@@ -83,6 +83,11 @@ RESTORE_KEYS: frozenset[str] = frozenset(
         "cfg_room_setpoint",
     }
 )
+# Keys whose reset value is not 0: on watchdog expiry and at boot the controller reverts setpoints (and
+# offsets) to their persisted parameter or fixed default, while modes, levels and blocks read 0
+# (docs/firmware-3.92.3-shi-analysis.md, "SHI watchdog"). A different non-zero value of these keys in a window
+# with reset evidence is part of the reset and is restored with it.
+RESET_TO_DEFAULT_SUFFIXES = ("_setpoint", "_offset")
 # Remembered values older than this (time since the last successful poll) are dropped at setup: an optimizer
 # such as the Heat Pump Optimizer rewrites modes and setpoints live, so a day-old value is no longer meant.
 RESTORE_MAX_GAP = 24 * 3600  # seconds
