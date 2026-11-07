@@ -16,7 +16,7 @@ from typing import Literal
 
 RegKind = Literal["input", "holding", "discrete"]
 DType = Literal["uint16", "int16", "uint32"]
-Platform = Literal["sensor", "binary_sensor", "switch", "number", "select"]
+Platform = Literal["sensor", "binary_sensor", "switch", "number", "select", "internal"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -112,6 +112,15 @@ _SETTING = {"config": True, "every": 2}
 _MODES = ("off", "setpoint", "offset", "level")
 CONTROL_MODES: tuple[str, ...] = _MODES
 _LEVELS = ("normal", "increased", "increased2", "decreased")
+# State of a function (heating, hot water, cooling, pool), python-luxtronik ``ModeStatus`` (inputs 3, 4, 6, 7,
+# range 0 ... 3): 0 disabled, 1 no request, 2 requested but not running yet, 3 running. A value outside the
+# documented range is shown as "Unknown (<n>)": the keys ``unknown_4`` ... ``unknown_15`` exist for that, nothing
+# is known about them. Larger raw values read as unknown.
+_STATUS_UNKNOWN_FROM = 4
+_STATUS_UNKNOWN_TO = 15
+FUNCTION_STATUS = ("disabled", "no_request", "requested", "running") + tuple(
+    f"unknown_{n}" for n in range(_STATUS_UNKNOWN_FROM, _STATUS_UNKNOWN_TO + 1)
+)
 _OPERATING_MODES = (
     "heating",
     "hot_water",
@@ -344,10 +353,10 @@ REGISTERS: tuple[Register, ...] = (
         "heat_generator_state", 10000, "Status: Wärmeerzeuger (Bitmaske)", "Status: heat generator (bit mask)"
     ),
     _s("operating_mode", 10002, "Status: Betriebsart", "Status: operating mode", options=_OPERATING_MODES),
-    _s("heating_status", 10003, "Status", "Status"),
-    _s("hot_water_status", 10004, "Status", "Status"),
-    _s("cooling_status", 10006, "Status", "Status", diagnostic=True, every=2),
-    _s("pool_status", 10007, "Status", "Status", diagnostic=True, every=2),
+    _s("heating_status", 10003, "Status", "Status", options=FUNCTION_STATUS),
+    _s("hot_water_status", 10004, "Status", "Status", options=FUNCTION_STATUS),
+    _s("cooling_status", 10006, "Status", "Status", diagnostic=True, every=2, options=FUNCTION_STATUS),
+    _s("pool_status", 10007, "Status", "Status", diagnostic=True, every=2, options=FUNCTION_STATUS),
     # ----------------------------------------------------------------- counters
     _s("energy_el_total", 10310, "Energie: Strom gesamt", "Energy: electric total", **_ENERGY),
     _s("energy_el_heating", 10312, "Energie: Strom", "Energy: electric", **_ENERGY),
@@ -519,9 +528,12 @@ REGISTERS: tuple[Register, ...] = (
         unit="°C",
     ),
     # ------------------------------------------------------------------ firmware
-    _s("fw_platform", 10400, "Firmware: Plattform", "Firmware: platform", diagnostic=True, every=120),
-    _s("fw_major", 10401, "Firmware: Version Haupt", "Firmware: major version", diagnostic=True, every=120),
-    _s("fw_minor", 10402, "Firmware: Version Neben", "Firmware: minor version", diagnostic=True, every=120),
+    # Firmware version a.b.c (python-luxtronik ``version``, index 400, count 3, FullVersion = "a.b.c"; the
+    # reference installation reads 3 / 92 / 3 = 3.92.3, see docs/firmware-3.92.3-shi-analysis.md). Read only to
+    # compose the ``firmware_version`` sensor; these three have no entities of their own ("internal").
+    _s("fw_version_major", 10400, "Firmware: Version 1", "Firmware: version part 1", platform="internal", every=120),
+    _s("fw_version_minor", 10401, "Firmware: Version 2", "Firmware: version part 2", platform="internal", every=120),
+    _s("fw_version_patch", 10402, "Firmware: Version 3", "Firmware: version part 3", platform="internal", every=120),
     # ------------------------------------------------- switches (blocks, holding)
     _h("heating_block", 10050, "Sperren", "Block", platform="switch"),
     _h("dhw_block", 10051, "Sperren", "Block", platform="switch"),
@@ -864,16 +876,42 @@ class DerivedSensor:
 
 
 DERIVED_SENSORS: tuple[DerivedSensor, ...] = (
-    DerivedSensor("cop", "COP", "COP", "compressor_thermal_power", "electric_power", cumulative=False),
+    DerivedSensor("cop", "COP (10 min)", "COP (10 min)", "compressor_thermal_power", "electric_power", cumulative=False),
     DerivedSensor("cop_heating", "COP gesamt", "COP overall", "energy_th_heating", "energy_el_heating", True),
     DerivedSensor("cop_dhw", "COP gesamt", "COP overall", "energy_th_dhw", "energy_el_dhw", True),
 )
 DERIVED_SENSOR_KEYS: tuple[str, ...] = tuple(sensor.key for sensor in DERIVED_SENSORS)
 
+# The one firmware entity: a text sensor composed of the three version registers ``FIRMWARE_PARTS``. Its key is
+# part of the entity contract.
+FIRMWARE_SENSOR_KEY = "firmware_version"
+FIRMWARE_PARTS: tuple[str, str, str] = ("fw_version_major", "fw_version_minor", "fw_version_patch")
+# Entities of earlier versions that no longer exist (owner-approved removal, CHANGELOG 0.11.0): the integration
+# deletes their registry entries at setup. Keys listed here are no longer in the entity contract.
+REMOVED_KEYS: tuple[str, ...] = ("fw_platform", "fw_major", "fw_minor")
+
+
+def firmware_version(values: dict[str, float | int | None]) -> str | None:
+    """Firmware version as text ("3.92.3"), ``None`` until all three parts are known."""
+    parts = [values.get(key) for key in FIRMWARE_PARTS]
+    if any(part is None for part in parts):
+        return None
+    return ".".join(str(int(part)) for part in parts)
+
 # The following limits are a design choice of this integration, NOT a register fact and not documented by the
 # manufacturer. They only decide when a calculated COP is shown as "unknown" instead of a misleading number.
-# The electric power register has a resolution of 100 W, so below this value the quotient is mostly rounding noise.
-COP_MIN_ELECTRIC_POWER_W = 200.0
+#
+# The instantaneous COP is the quotient of two power registers that both have a resolution of 100 W and are not
+# sampled at the same instant. Measured on the reference installation (history of 2026-11-06/07): the first
+# readings after a compressor start gave 8.0, 6.3, 9.3 and 10.3 (thermal power already high, electric power still
+# small), and the steady state flipped between neighbouring ratios of whole numbers (4.32 / 4.37). Therefore the
+# COP is the ratio of the energy of a trailing window: integral of thermal power / integral of electric power.
+COP_WINDOW_S = 600.0
+# A gap between two samples longer than this (failed polls, Home Assistant down) is not interpolated.
+COP_MAX_SAMPLE_GAP_S = 150.0
+# The window needs at least this much electric energy before it says anything. At the typical 1 to 2 kW of the
+# compressor this hides the first 2 to 4 minutes of a run, where the thermal power register still ramps up.
+COP_MIN_WINDOW_ENERGY_WH = 60.0
 # Overall values need some electric energy before the quotient says anything (e.g. a fresh counter).
 COP_MIN_ELECTRIC_ENERGY_KWH = 1.0
 # Heat pumps do not reach more than this; anything above is a measurement or timing artefact.
@@ -884,17 +922,45 @@ def _plausible(cop: float) -> float | None:
     return cop if 0 < cop <= COP_MAX_PLAUSIBLE else None
 
 
-def instantaneous_cop(thermal_w: float | None, electric_w: float | None) -> float | None:
-    """Thermal power / electric power, ``None`` when the value cannot be trusted.
+class WindowedCop:
+    """COP over a trailing time window from power samples (thermal W, electric W).
 
-    Unknown for missing values, electric power below ``COP_MIN_ELECTRIC_POWER_W``, thermal power of zero or
-    below (e.g. defrost, where the thermal power is negative) and implausibly high results.
+    Every pair of consecutive samples contributes the trapezoid of both powers over its duration. The value is
+    unknown while the window holds less than ``COP_MIN_WINDOW_ENERGY_WH`` of electric energy (compressor not
+    running, or just started) and when the result is implausible, which includes a net thermal energy that is
+    not positive (long defrost). Defrost with negative thermal power inside a run counts: it is real consumption.
     """
-    if thermal_w is None or electric_w is None:
-        return None
-    if electric_w < COP_MIN_ELECTRIC_POWER_W or thermal_w <= 0:
-        return None
-    return _plausible(thermal_w / electric_w)
+
+    def __init__(
+        self,
+        window_s: float = COP_WINDOW_S,
+        max_gap_s: float = COP_MAX_SAMPLE_GAP_S,
+        min_energy_wh: float = COP_MIN_WINDOW_ENERGY_WH,
+    ) -> None:
+        self._window_s = window_s
+        self._max_gap_s = max_gap_s
+        self._min_energy_wh = min_energy_wh
+        self._last: tuple[float, float, float] | None = None  # time, thermal W, electric W
+        self._segments: list[tuple[float, float, float]] = []  # end time, thermal Wh, electric Wh
+
+    def add(self, now: float, thermal_w: float | None, electric_w: float | None) -> float | None:
+        """Add a sample (``now`` in seconds, any monotonic scale) and return the COP of the window."""
+        if thermal_w is None or electric_w is None:
+            self._last = None  # a missing value breaks the continuity
+        else:
+            last = self._last
+            if last is not None and 0 < now - last[0] <= self._max_gap_s:
+                hours = (now - last[0]) / 3600
+                self._segments.append(
+                    (now, (last[1] + thermal_w) / 2 * hours, (last[2] + electric_w) / 2 * hours)
+                )
+            self._last = (now, thermal_w, electric_w)
+        self._segments = [seg for seg in self._segments if seg[0] >= now - self._window_s]
+        electric_wh = sum(seg[2] for seg in self._segments)
+        thermal_wh = sum(seg[1] for seg in self._segments)
+        if electric_wh < self._min_energy_wh:
+            return None
+        return _plausible(thermal_wh / electric_wh)
 
 
 def overall_cop(

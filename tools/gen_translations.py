@@ -180,6 +180,11 @@ STATES = {
         "series": "Series buffer",
         "separation": "Separation buffer",
         "multi": "Multi-function buffer",
+        "disabled": "Disabled",
+        "no_request": "No request",
+        "requested": "Requested",
+        "running": "Running",
+        **{f"unknown_{n}": f"Unknown ({n})" for n in range(4, 16)},
     },
     "de": {
         "off": "Aus",
@@ -206,6 +211,11 @@ STATES = {
         "series": "Reihenpuffer",
         "separation": "Trennpuffer",
         "multi": "Multifunktionspuffer",
+        "disabled": "Deaktiviert",
+        "no_request": "Keine Anforderung",
+        "requested": "Angefordert",
+        "running": "Läuft",
+        **{f"unknown_{n}": f"Unbekannt ({n})" for n in range(4, 16)},
     },
 }
 
@@ -268,6 +278,8 @@ def option_label(lang: str, options: tuple[str, ...], option: str) -> str:
 
 # Operation modes of the water heater (water_heater.OPERATION_MODES), raw value order of the mode select.
 WATER_HEATER_OPERATIONS = ("no_influence", "setpoint", "offset", "level")
+
+FIRMWARE_NAME = {"en": "Firmware version", "de": "Firmware-Version"}
 
 ATTRIBUTES = {
     "en": {
@@ -386,6 +398,8 @@ for lang in ("en", "de"):
                 "name": "Raw value: {address}" if lang == "en" else "Rohwert: {address}"
             }
             continue
+        if reg.platform == "internal":
+            continue  # read only to compose another entity, no entity of its own
         entry = {"name": name}
         if reg.options and reg.platform in ("sensor", "select"):
             entry["state"] = {opt: option_label(lang, reg.options, opt) for opt in reg.options}
@@ -407,8 +421,11 @@ for lang in ("en", "de"):
             },
         }
     }
+    # Short labels (the part before the explanation in brackets): the water heater card is narrow, the mode
+    # selects keep the long text.
     operation_labels = {
-        op: mode_labels[opt] for op, opt in zip(WATER_HEATER_OPERATIONS, registers.CONTROL_MODES, strict=True)
+        op: mode_labels[opt].split(" (")[0]
+        for op, opt in zip(WATER_HEATER_OPERATIONS, registers.CONTROL_MODES, strict=True)
     }
     entity["water_heater"] = {
         registers.WATER_HEATER_DHW_KEY: {
@@ -419,6 +436,7 @@ for lang in ("en", "de"):
             },
         }
     }
+    entity["sensor"][registers.FIRMWARE_SENSOR_KEY] = {"name": FIRMWARE_NAME[lang]}
     for derived in registers.DERIVED_SENSORS:
         entity["sensor"][derived.key] = {"name": derived.name_en if lang == "en" else derived.name_de}
     for key, _bit, de, en in binary_sensor.STATUS_BITS:

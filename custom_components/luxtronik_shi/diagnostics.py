@@ -13,7 +13,7 @@ from homeassistant.loader import async_get_integration
 from . import LuxtronikConfigEntry
 from .const import CONF_FEATURES
 from .coordinator import plan_blocks
-from .registers import FEATURE_CAPABILITY, FEATURES, Register
+from .registers import FEATURE_CAPABILITY, FEATURES, FIRMWARE_PARTS, Register, firmware_version
 
 # Host, MAC address and everything that identifies the installation (unique ID contains the host).
 TO_REDACT = {CONF_HOST, CONF_MAC, "unique_id", "serial", "serial_number", "title"}
@@ -88,7 +88,7 @@ async def async_get_config_entry_diagnostics(
             "available": list(FEATURES),
             "capability_flags": flags,
         },
-        "firmware": {k: data.get(k) for k in ("fw_platform", "fw_major", "fw_minor")},
+        "firmware": {k: data.get(k) for k in FIRMWARE_PARTS} | {"version": firmware_version(data)},
         "last_update_success": coordinator.last_update_success,
         # Raw values this integration wrote and would re-apply after a device reset (option on).
         "restore_after_reset": {

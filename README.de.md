@@ -77,13 +77,17 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 |---|---|
 | Temperaturen | Vorlauf, Rücklauf, Wärmequelle Ein-/Austritt, Außen-Mittelwert, Rücklauf-Soll/-Begrenzung/-Minimum, Rücklauf extern, Außen, Raum (nur mit Raumeinheit), Grenztemperaturen Heizen/Warmwasser, Warmwasser (Ist, Soll, Min, Max), Mischkreise 1–3 (Vorlauf, Soll, Min, Max; bei Mischkreis 2 und 3 standardmäßig deaktiviert) |
 | Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser, Kühlen, Pool), Betriebsstunden |
-| Berechneter COP | **COP** (thermische / elektrische Leistung, Gerät der Wärmepumpe) und **COP gesamt** für Heizen und Warmwasser (thermische / elektrische Energiezähler, im Gerät *Heizung* / *Warmwasser*); unbekannt statt einer Zahl bei elektrischer Leistung unter 200 W, Nullwerten, negativen oder unplausiblen Werten oder nach einem Zählerreset |
-| Status | Betriebsart als Klartext (Heizen, Warmwasser, Schwimmbad / Solar, EVU-Sperre, Abtauen, Keine Anforderung, Heizen über externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv** (zusätzliche Statusbits für VD2, ZWE2 und ZWE3 sind standardmäßig deaktiviert), Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool, Verbindung |
+| Berechneter COP | **COP (10 min)** (Energieverhältnis der letzten 10 Minuten aus thermischer und elektrischer Leistung, Gerät der Wärmepumpe; unbekannt, solange weniger als 60 Wh elektrische Energie im Fenster liegen, also bei stehendem oder gerade gestartetem Verdichter) und **COP gesamt** für Heizen und Warmwasser (thermische / elektrische Energiezähler, im Gerät *Heizung* / *Warmwasser*); unbekannt statt einer Zahl bei fehlenden, negativen oder unplausiblen Werten oder nach einem Zählerreset |
+| Status | Betriebsart als Klartext (Heizen, Warmwasser, Schwimmbad / Solar, EVU-Sperre, Abtauen, Keine Anforderung, Heizen über externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv** (zusätzliche Statusbits für VD2, ZWE2 und ZWE3 sind standardmäßig deaktiviert), Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool als Text (deaktiviert, keine Anforderung, angefordert, läuft; andere Werte als *Unbekannt (n)*), Verbindung |
 | **Climate / Water Heater** | Heizkreis (Auto / Heizen, Sollwert 15–75 °C) und Warmwasser (Keine Vorgabe / Sollwert / Anhebung / Stufe, Sollwert 30–75 °C), siehe unten |
 | **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
 | **Schreiben: Auswahl** | Betriebsart (Keine Vorgabe / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt); Modus der Leistungsbegrenzung (keine / weich / hart) |
 | **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser* |
 | Diagnose | Puffertyp, Schaltspielsperre, Mindestlaufzeit, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert) |
+
+**Jede Entität erklärt:** Die [Entitäten-Referenz](docs/entities.de.md) (auch auf [Englisch](docs/entities.md)) listet jede
+Entität nach Thema mit Schlüssel, Einheit, Wertebereich, Bedeutung und Fallstricken, dazu kurze Hintergründe zur
+Funktionsweise von Wärmepumpen.
 
 Mischkreis 2 und 3 haben dieselben schreibbaren Entitäten wie Mischkreis 1 (Betriebsart, Sollwert, Anhebung, Stufe sowie
 Betriebsart, Sollwert und Anhebung für Kühlen). Alle Schreibbereiche folgen python-luxtronik (holdings.py): Heizen
@@ -149,7 +153,7 @@ Wie in den Menüs der Luxtronik-Regelung sind die Entitäten auf Geräte verteil
 
 | Gerät | Inhalt |
 |---|---|
-| **<Name>** (Wärmepumpe) | Temperaturen (Vorlauf, Rücklauf, Außen, Wärmequelle), Status und Betriebsart, Verdichter/Zusatzheizung, Leistung, COP, Gesamtenergie und Verdichterstunden, Leistungsbegrenzung, Anlagenwerte, Firmware, Ausstattung, Rohwerte |
+| **<Name>** (Wärmepumpe) | Temperaturen (Vorlauf, Rücklauf, Außen, Wärmequelle), Status und Betriebsart, Verdichter/Zusatzheizung, Leistung, COP, Gesamtenergie und Verdichterstunden, Leistungsbegrenzung, Anlagenwerte, Firmware-Version (ein Textsensor, z. B. 3.92.3), Ausstattung, Rohwerte |
 | **<Name> Heizung** | Climate-Entität, Betriebsart, Sollwert, Heizkurven-Anhebung, Stufe, Gesamt-Heizung, Sperre, Mischkreise 1–3, Energie, Stunden und COP Heizen |
 | **<Name> Warmwasser** | Water-Heater-Entität, Temperaturen, Betriebsart, Sollwert, Anhebung, Stufe, Sperre, Zirkulationspumpe, Extra-Warmwasser, Energie, Stunden und COP Warmwasser |
 | **<Name> Kühlung** / **<Name> Pool** | nur wenn Kühlung bzw. Pool in der Ausstattung gewählt ist; Kühlung enthält die Kühl-Entitäten der Mischkreise, Pool die Pool-Sperre, Status und Energie |
@@ -404,6 +408,7 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
 * Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
   (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402, stimmt mit der Anzeige der Regelung
   überein) und die Deutung von 10404/10406/10408 als Betriebsstunden.
+* Jede Entität erklärt (aus dem Code erzeugt): [docs/entities.de.md](docs/entities.de.md).
 * Vollständige Tabelle aller Register (Typ, Adresse, Datentyp, Skalierung, Einheit, Bereich): [docs/registers.md](docs/registers.md).
 
 ## Hinweise und Grenzen
