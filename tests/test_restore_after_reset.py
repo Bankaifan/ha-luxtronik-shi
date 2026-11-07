@@ -553,7 +553,7 @@ async def test_mode_not_restored_when_its_setpoint_restore_fails(
 
     monkeypatch.setattr(coordinator.client, "write_register", clamping)
     before = len(_writes(shi, MODE))
-    await _reboot(entry, shi, {MODE: 0, SETPOINT: 0})
+    await _reboot(entry, shi, {MODE: 0, SETPOINT: 200})  # setpoints revert to a non-zero default
     assert shi.holding[SETPOINT] == 300
     assert shi.holding[MODE] == 0
     assert len(_writes(shi, MODE)) == before
@@ -570,3 +570,29 @@ async def test_lone_zero_forgets_the_mode_of_its_circuit(hass: HomeAssistant, sh
     await _polls(entry)
     assert entry.runtime_data.remembered == {}
     assert len(_writes(shi)) == before
+
+
+async def test_offset_changed_in_a_reset_window_is_external(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Only setpoints are proven to revert to a non-zero default. An offset reading another non-zero value in a
+    confirmed reset window is someone else's change: forgotten, not restored (and the group rule drops its mode)."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_mode", 2)
+    await _write(entry, "cfg_heating_offset", 20)
+    await _write(entry, "cfg_dhw_mode", 1)
+    await _write(entry, "cfg_dhw_setpoint", 450)
+    await _reboot(entry, shi, {MODE: 0, OFFSET: 30, DHW_MODE: 0})
+    assert (shi.holding[MODE], shi.holding[OFFSET], shi.holding[DHW_MODE]) == (0, 30, 1)
+    assert entry.runtime_data.remembered == {"cfg_dhw_mode": 1, "cfg_dhw_setpoint": 450}
+
+
+async def test_setpoints_reading_zero_are_external_not_evidence(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """A setpoint never resets to 0 (outside its range): two setpoints at 0 are no reset, both are forgotten."""
+    entry = await _setup(hass, shi)
+    await _write(entry, "cfg_heating_setpoint", 300)
+    await _write(entry, "cfg_dhw_setpoint", 450)
+    before = len(_writes(shi))
+    shi.holding.update({SETPOINT: 0, DHW_SETPOINT: 0})
+    await _polls(entry)
+    assert (shi.holding[SETPOINT], shi.holding[DHW_SETPOINT]) == (0, 0)
+    assert len(_writes(shi)) == before
+    assert entry.runtime_data.remembered == {}

@@ -564,7 +564,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         changed = False
         zeros = any(
-            self._raw.get(k) == 0 and v != 0 for k, v in self._remembered.items() if k in self._fresh
+            self._raw.get(k) == 0 and v != 0
+            for k, v in self._remembered.items()
+            if k in self._fresh and not k.endswith(RESET_TO_DEFAULT_SUFFIXES)
         )
         if self._window_left == 0 and (recovered or zeros):
             self._window_left = max((self._reg(k).every for k in self._remembered), default=1)
@@ -575,10 +577,13 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._window_outage = True
         for key, remembered in list(self._remembered.items()):
             current = self._raw.get(key)
-            if key in self._remembered and key in self._fresh and current not in (None, 0, remembered):
-                if self._window_left > 0 and key.endswith(RESET_TO_DEFAULT_SUFFIXES):
-                    # The watchdog and a reboot revert setpoints and offsets to their persisted or default
-                    # value, not 0: decided with the rest of the window (part of a confirmed reset or not).
+            if key not in self._remembered or key not in self._fresh or current in (None, remembered):
+                continue
+            resets_to_default = key.endswith(RESET_TO_DEFAULT_SUFFIXES)
+            if current != 0 or resets_to_default:  # a setpoint never resets to 0: that is someone else
+                if current != 0 and self._window_left > 0 and resets_to_default:
+                    # The watchdog and a reboot revert setpoints to their persisted or default value, not 0:
+                    # decided with the rest of the window (part of a confirmed reset or not).
                     self._window_changed.add(key)
                     continue
                 self._forget_external(key, remembered, current)
@@ -595,15 +600,18 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _decide_reset(self) -> bool:
         """End of a comparison window: restore or forget. Returns whether the store changed.
 
-        Zeros are the evidence. Setpoints and offsets that read a different non-zero value in the window
-        (their reset value is a persisted or default value) are restored with a confirmed reset and are
+        Zeros of modes and levels are the evidence. Setpoints that read a different non-zero value in the
+        window (their reset value is a persisted or default value) are restored with a confirmed reset and are
         external changes otherwise.
         """
         title = self.config_entry.title
         zeros = {
             k: v
             for k, v in self._remembered.items()
-            if k in self._window_seen and self._raw.get(k) == 0 and v != 0
+            if k in self._window_seen
+            and self._raw.get(k) == 0
+            and v != 0
+            and not k.endswith(RESET_TO_DEFAULT_SUFFIXES)
         }
         reverted = {
             k: v
