@@ -13,7 +13,7 @@ from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.luxtronik_shi import coordinator as coordinator_module
-from custom_components.luxtronik_shi.const import CONF_SLAVE, DOMAIN
+from custom_components.luxtronik_shi.const import CONF_SLAVE, DOMAIN, RESTORE_RETRY_ATTEMPTS
 from custom_components.luxtronik_shi.coordinator import restore_store_key
 from custom_components.luxtronik_shi.diagnostics import async_get_config_entry_diagnostics
 from custom_components.luxtronik_shi.modbus_client import ModbusCommError
@@ -222,7 +222,7 @@ async def test_failed_restore_write_is_not_retried(hass: HomeAssistant, shi: Fak
     assert entry.runtime_data.remembered == {}
 
 
-async def test_wrong_read_back_is_not_retried(
+async def test_wrong_read_back_is_retried_then_forgotten(
     hass: HomeAssistant, shi: FakeSHI, monkeypatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     entry = await _setup(hass, shi)
@@ -236,8 +236,9 @@ async def test_wrong_read_back_is_not_retried(
     monkeypatch.setattr(entry.runtime_data.client, "write_register", ignored)
     with caplog.at_level(logging.WARNING):
         await _reboot(entry, shi, {MODE: 0, LEVEL: 0})
-        await _polls(entry, 4)
-    assert attempts == [LEVEL]  # the level failed, so the mode of the same circuit is not tried (modes last)
+        await _polls(entry, 8)
+    # The level is retried once per poll, at most 5 times; the mode of its circuit waits and is never tried.
+    assert attempts == [LEVEL] * RESTORE_RETRY_ATTEMPTS
     assert entry.runtime_data.remembered == {}
     assert "could not restore cfg_heating_level, cfg_heating_mode" in caplog.text
     assert "restored" not in caplog.text
@@ -602,6 +603,7 @@ async def test_mode_not_restored_when_its_setpoint_restore_fails(
     monkeypatch.setattr(coordinator.client, "write_register", clamping)
     before = len(_writes(shi, MODE))
     await _reboot(entry, shi, {MODE: 0, SETPOINT: 200})  # setpoints revert to a non-zero default
+    await _polls(entry, 6)  # retried until the attempts run out
     assert shi.holding[SETPOINT] == 300
     assert shi.holding[MODE] == 0
     assert len(_writes(shi, MODE)) == before

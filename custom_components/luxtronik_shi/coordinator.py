@@ -13,12 +13,13 @@ from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -27,6 +28,9 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_RESTORE_AFTER_RESET,
     DEFAULT_RESTORE_AFTER_RESET,
+    DEFERRED_KEYS,
+    DEFERRED_RECHECK,
+    DHW_BLOCK_KEY,
     DOMAIN,
     EXTERNAL_CHANGE_EXCLUDED,
     ISSUE_EXTERNAL_CHANGE,
@@ -45,6 +49,8 @@ from .const import (
     RESTORE_COOLDOWN,
     RESTORE_KEYS,
     RESTORE_MAX_GAP,
+    RESTORE_RETRY_ATTEMPTS,
+    RESTORE_RETRY_DEADLINE,
     SHI_NOT_AVAILABLE,
     SHI_WATCHDOG_TIMEOUT,
     STORE_VERSION,
@@ -187,6 +193,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_poll_mono: float | None = None
         self._window_failed = False  # the current window followed failed polls (not only a reconnect or gap)
         self._last_restore: datetime | None = None
+        # Deferred hot water writes: key -> (raw, "user" | "restore") awaiting the delayed read-back.
+        self._awaiting: dict[str, tuple[int, str]] = {}
+        self._recheck_unsub: dict[str, CALLBACK_TYPE] = {}
+        # Restore values that did not read back yet: key -> {"raw", "deadline" (monotonic), "attempts"}.
+        self._pending_restore: dict[str, dict[str, Any]] = {}
         # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
         self._last_poll: datetime | None = None
         self._last_poll_saved: datetime | None = None
@@ -266,6 +277,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         outage = recovered or reconnected or self._watchdog_gap() or self._session_gap()
         await self._check_external_changes(outage=outage)
         await self._check_device_reset(outage=outage, failed=recovered)
+        await self._retry_pending_restores()
         if self._remembered_dirty:
             self._remembered_dirty = False
             await self._save()
@@ -490,6 +502,17 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_key="not_writable",
                 translation_placeholders={"key": reg.key},
             )
+        # A user write cancels a pending restore of that key.
+        self._pending_restore.pop(reg.key, None)
+        awaiting = self._awaiting.get(reg.key)
+        if awaiting is not None and awaiting[0] == raw:
+            # Already written and waiting for the deferred commit: writing again could cancel it.
+            _LOGGER.debug(
+                "%s: %s=%s is still pending on the heat pump; not written again",
+                self.config_entry.title, reg.key, raw,
+            )
+            return
+        self._cancel_recheck(reg.key)
         async with self._write_lock:
             self._record_write(reg.key, raw)
             try:
@@ -502,7 +525,15 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     translation_key="write_failed",
                     translation_placeholders={"key": reg.key, "error": str(err)},
                 ) from err
-            await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
+            if self._raw.get(reg.key) != raw and reg.key in DEFERRED_KEYS:
+                # Hot water group: committed about 10 s later; decide after the delayed read-back.
+                _LOGGER.debug(
+                    "%s: %s=%s pending on the heat pump, checked again in %s s",
+                    self.config_entry.title, reg.key, raw, DEFERRED_RECHECK,
+                )
+                self._schedule_recheck(reg.key, raw, "user")
+            else:
+                await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
             await self._read_effective_target(reg.key)
         # Push the read-back to every entity without async_set_updated_data: that would also move the next
         # poll a full interval out, so a writer faster than the scan interval would stop the measurements from
@@ -907,6 +938,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._window_left == 0:
             for key, remembered in list(self._remembered.items()):
                 current = self._raw.get(key)
+                if key in self._pending_restore or key in self._awaiting:
+                    continue  # a restore or a deferred write of this key is still under way
                 if key in self._fresh and current not in (None, remembered) and key in self._remembered:
                     self._forget_external(key, remembered, current)
                     changed = True
@@ -990,7 +1023,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.info("%s: learned reset value of %s: %s", title, key, self._raw[key])
         restored: list[str] = []
         failed: list[str] = []
+        pending: dict[str, int] = {}  # key -> attempts so far; retried on later polls
         lost = False  # connection lost: the remaining keys are not tried either
+        block_on = self._raw.get(DHW_BLOCK_KEY) == 1
         # Modes last: a mode is only re-applied if every other restored value of its circuit came back.
         order = sorted(differ, key=lambda k: k.endswith("_mode"))
         async with self._write_lock:
@@ -1002,6 +1037,12 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     key.endswith("_mode") and any(restore_group(f) == restore_group(key) for f in failed)
                 ):
                     failed.append(key)
+                    continue
+                group_waits = key.endswith("_mode") and any(
+                    restore_group(p) == restore_group(key) for p in pending
+                )
+                if group_waits or (key in DEFERRED_KEYS and block_on):
+                    pending[key] = 0  # waits for its circuit's values, or for the hot water block to release
                     continue
                 reg = self._reg(key)
                 self._record_write(key, raw)
@@ -1015,9 +1056,22 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except ModbusIllegalAddress:
                     failed.append(key)
                     continue
-                (restored if self._raw.get(key) == raw else failed).append(key)
+                if self._raw.get(key) == raw:
+                    restored.append(key)
+                    continue
+                pending[key] = 1
+                if key in DEFERRED_KEYS:
+                    self._schedule_recheck(key, raw, "restore")
             for key in failed:
                 self._remembered.pop(key, None)
+        deadline = _monotonic() + RESTORE_RETRY_DEADLINE
+        for key, attempts in pending.items():
+            self._pending_restore[key] = {"raw": differ[key], "deadline": deadline, "attempts": attempts}
+        if pending:
+            _LOGGER.info(
+                "%s: device reset detected, %s not restored yet; retried on the next polls", title,
+                ", ".join(sorted(pending)),
+            )
         if restored:
             _LOGGER.warning(
                 "%s: device reset detected, restored %s", title,
@@ -1032,6 +1086,124 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if relearned:
             await self._notify_base_values_changed(relearned, {k: differ[k] for k in restored})
         return bool(failed) or learned_changed
+
+    # ------------------------------------------------------------------ deferred writes and restore retries
+    def _schedule_recheck(self, key: str, raw: int, origin: str) -> None:
+        """Read ``key`` once more after DEFERRED_RECHECK s (hot water group commits about 10 s late)."""
+        self._cancel_recheck(key)
+        self._awaiting[key] = (raw, origin)
+
+        @callback
+        def _due(_now: Any) -> None:
+            self._recheck_unsub.pop(key, None)
+            self.hass.async_create_task(self._recheck(key), eager_start=True)
+
+        self._recheck_unsub[key] = async_call_later(self.hass, DEFERRED_RECHECK, _due)
+
+    def _cancel_recheck(self, key: str) -> None:
+        self._awaiting.pop(key, None)
+        if (unsub := self._recheck_unsub.pop(key, None)) is not None:
+            unsub()
+
+    def async_cancel_rechecks(self) -> None:
+        """Cancel the scheduled delayed read-backs (on unload)."""
+        for key in list(self._recheck_unsub):
+            self._cancel_recheck(key)
+
+    async def _recheck(self, key: str) -> None:
+        """The delayed read-back: one read of the register, outside the write lock."""
+        entry = self._awaiting.pop(key, None)
+        if entry is None:
+            return
+        raw, origin = entry
+        try:
+            await self._read_single(self._reg(key))
+        except ModbusCommError as err:
+            _LOGGER.debug("%s: delayed read-back of %s failed: %s", self.config_entry.title, key, err)
+        ok = self._raw.get(key) == raw
+        if origin == "user":
+            _LOGGER.debug(
+                "%s: %s=%s %s", self.config_entry.title, key, raw, "committed" if ok else "not taken"
+            )
+            await self._remember(key, raw if ok else None)
+        elif ok and self._pending_restore.get(key, {}).get("raw") == raw:
+            self._pending_restore.pop(key)
+            _LOGGER.warning(
+                "%s: device reset detected, restored %s=%s (deferred)", self.config_entry.title, key, raw
+            )
+        self.data = dict(self._values)
+        self.async_update_listeners()
+
+    async def _retry_pending_restores(self) -> None:
+        """Retry restore values that did not read back: once per poll, at most RESTORE_RETRY_ATTEMPTS times
+        and until RESTORE_RETRY_DEADLINE. Hot water group keys wait while the hot water block reads on; a mode
+        waits for the other values of its circuit. Nothing is written while a delayed read-back is pending."""
+        if not self._pending_restore:
+            return
+        title = self.config_entry.title
+        now = _monotonic()
+        block_on = self._raw.get(DHW_BLOCK_KEY) == 1
+        restored: list[str] = []
+        forget: list[str] = []
+        for key in sorted(self._pending_restore, key=lambda k: k.endswith("_mode")):
+            entry = self._pending_restore[key]
+            raw = entry["raw"]
+            if self._remembered.get(key) != raw:
+                forget.append(key)  # forgotten meanwhile (external change): nothing to restore
+                continue
+            if key in self._awaiting:
+                continue  # delayed read-back still pending: writing now could cancel the commit
+            if self._raw.get(key) == raw:
+                restored.append(key)
+                continue
+            if now > entry["deadline"] or entry["attempts"] >= RESTORE_RETRY_ATTEMPTS:
+                forget.append(key)
+                continue
+            if key in DEFERRED_KEYS and block_on:
+                continue
+            if key.endswith("_mode") and any(
+                restore_group(o) == restore_group(key) and o != key and o not in restored
+                for o in self._pending_restore
+            ):
+                continue
+            entry["attempts"] += 1
+            reg = self._reg(key)
+            async with self._write_lock:
+                self._record_write(key, raw)
+                try:
+                    await self.client.write_register(reg.address, raw)
+                    await self._read_single(reg)
+                except (ModbusCommError, ModbusIllegalAddress) as err:
+                    _LOGGER.debug("%s: restore retry of %s failed: %s", title, key, err)
+                    continue
+            if self._raw.get(key) == raw:
+                restored.append(key)
+            elif key in DEFERRED_KEYS:
+                self._schedule_recheck(key, raw, "restore")
+        for key in restored:
+            self._pending_restore.pop(key, None)
+        if restored:
+            _LOGGER.warning(
+                "%s: device reset detected, restored %s", title,
+                ", ".join(f"{k}={self._remembered[k]}" for k in sorted(restored)),
+            )
+        failed = [k for k in forget if self._remembered.get(k) == self._pending_restore[k]["raw"]]
+        for key in forget:
+            self._pending_restore.pop(key, None)
+        for key in failed:
+            self._remembered.pop(key, None)
+            mode = f"{restore_group(key)}_mode"
+            if mode != key and mode in self._pending_restore:  # a mode is only restored after its values
+                self._pending_restore.pop(mode)
+                self._remembered.pop(mode, None)
+                failed.append(mode)
+        if failed:
+            _LOGGER.warning(
+                "%s: device reset detected, could not restore %s (write failed or read back a different "
+                "value); they are forgotten and not retried",
+                title, ", ".join(sorted(set(failed))),
+            )
+            await self._save()
 
     async def _notify_base_values_changed(
         self, changes: list[tuple[str, int, int]], restored: dict[str, int]

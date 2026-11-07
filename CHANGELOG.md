@@ -11,6 +11,29 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.10.1] – 2026-11-07
+
+### Fixed
+- **Hot water settings are no longer reported as failed when the controller takes them with a delay.** Firmware
+  3.92.3 commits SHI writes to the hot water group (10005–10008) about 10 s later, and writing the current value
+  cancels such a pending write (see *Deferred writes of the hot water group* in the firmware analysis; measured for
+  10005, while 10006 read back at once). A differing read-back of these registers is now checked once more after
+  15 s, with one extra read of that register, and nothing is written to it meanwhile. Applies to writes through Home
+  Assistant and to restores.
+- **The restore after a device reset retries instead of forgetting.** After the reboot on the reference installation
+  on 2026-11-07 the hot water mode and setpoint were not restored and forgotten. A restore value that does not read
+  back is now kept for 10 minutes and retried on later polls (once per poll, at most 5 attempts). Hot water group
+  values wait while the hot water block reads on (owner measurement: the hot water mode can only be set while the
+  block is not active; mechanism unknown). A circuit's mode is still written last, after its values succeeded. Only
+  after the deadline or the attempts run out is a value forgotten, with the existing warning; a write through Home
+  Assistant cancels the retry.
+
+### Tests
+- `tests/test_deferred_writes.py`: the fake SHI models the pending map with its delay, the cancel rule and the block
+  refusal. Covered: a late commit is no failure and is confirmed after 15 s, a repeated write while pending is not
+  sent, a restore with a deferred commit, a reboot with the hot water block on (restored after the release), the
+  deadline, and a user write cancelling the pending restore.
+
 ## [0.10.0] – 2026-11-07
 
 ### Action required
@@ -396,7 +419,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.8.1...v0.8.2

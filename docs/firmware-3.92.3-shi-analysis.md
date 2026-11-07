@@ -93,6 +93,27 @@ Recorded from the reverse engineering of 2026-11-07 (function addresses only, no
 The integration uses these facts for the optional *restore after a device reset*: `SHI_WATCHDOG_TIMEOUT` in
 `const.py` is the 600 s above.
 
+## Deferred writes of the hot water group
+
+From the analysis of 2026-11-07 (function addresses only, no code):
+
+- SHI writes to the hot water group, the t2 items behind **10005/10006/10007/10008** (mode, setpoint, offset,
+  level), do not take effect at once. They go into a **pending map** (`0x00087700` → `0x00087608` → `0x0008747c`;
+  ticker `DAT_00a0c6a8`, tick `0x0008798c`) and are committed after about **10 ticks** of the 1 Hz SHI tick list.
+  The delay is *inferred* from the shared tick list `0x00a2128c`: about **10 s**. Heating mode and offset do not go
+  through this path.
+- **A write of the value currently stored cancels a pending write for that item.**
+- **Live data (reference installation, 2026-11-07, after a controller reboot at about 16:37):** a write of hot water
+  mode = setpoint at about 16:38:57 read back `off` (0) at once and showed `setpoint` with the next poll at 16:39:14,
+  which agrees for **10005**. A write of hot water setpoint 54 at 16:38:37 read back 54 at once: for **10006 the
+  firmware claim and the measurement disagree**; nothing is built on it.
+- **Owner measurement, mechanism unknown:** the hot water mode can only be set while the hot water block (10051) is
+  not active. On that day the restore after the reboot reported that it could not restore the hot water mode and
+  setpoint, and the hot water mode later read `off` again after the block was switched on and off.
+
+The integration checks a differing read-back of these four registers again after 15 s (`DEFERRED_RECHECK`), writes
+nothing to the register meanwhile, and lets restores of this group wait while the hot water block reads on.
+
 ## Open questions / proposed follow-ups
 
 1. **Level option order (`_LEVELS`)** – *resolved in 0.9.0 (#44).* The firmware proves the level feature has one

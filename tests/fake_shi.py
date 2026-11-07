@@ -164,6 +164,15 @@ class FakeSHI:
         self.holding = dict(HOLDING)
         self.discrete = dict(DISCRETE)
         self.requests: list[tuple[int, int, int]] = []  # (function, address, count/value)
+        # Deferred writes (firmware 3.92.3, hot water group): writes to these addresses go into a pending map and
+        # are committed ``deferred_delay`` seconds later on the simulator clock ``now`` (advance it with
+        # ``advance``). Writing the value currently stored cancels a pending write. Off by default.
+        self.deferred: set[int] = set()
+        self.deferred_delay = 10.0
+        self.now = 0.0
+        self.pending: dict[int, tuple[int, float]] = {}
+        # Owner measurement: the hot water mode (10005) cannot be set while the hot water block (10051) is on.
+        self.block_refuses_dhw_mode = False
         self._server: asyncio.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
 
@@ -184,6 +193,17 @@ class FakeSHI:
         """Set the firmware version the simulator reports (registers 10401/10402)."""
         self.input[10401] = major
         self.input[10402] = minor
+
+    def advance(self, seconds: float) -> None:
+        """Advance the simulator clock and commit the deferred writes that are due."""
+        self.now += seconds
+        self._commit_due()
+
+    def _commit_due(self) -> None:
+        for address, (value, due) in list(self.pending.items()):
+            if self.now >= due:
+                self.holding[address] = value
+                del self.pending[address]
 
     def holding_value(self, address: int) -> int:
         """Current raw value of a holding register in the simulator."""
@@ -210,6 +230,14 @@ class FakeSHI:
             self.requests.append((func, address, value))
             if address not in self.holding:
                 return bytes([func | 0x80, 2])
+            if self.block_refuses_dhw_mode and address == 10005 and self.holding.get(10051) == 1:
+                return pdu[:5]  # accepted on the wire, but the controller keeps its value
+            if address in self.deferred:
+                if value == self.holding[address]:
+                    self.pending.pop(address, None)  # the current value cancels a pending write
+                else:
+                    self.pending[address] = (value, self.now + self.deferred_delay)
+                return pdu[:5]
             self.holding[address] = value
             return pdu[:5]
         return bytes([func | 0x80, 1])

@@ -311,6 +311,16 @@ Ausfall zählen.
 
 **Grenzen:**
 
+* **Warmwasser-Einstellungen werden verzögert übernommen.** Die Regelung übernimmt Schreibzugriffe auf
+  Warmwasser-Betriebsart, -Sollwert, -Offset und -Stufe erst etwa 10 s später (Firmware-Analyse; für die Betriebsart
+  gemessen), und das Schreiben des aktuellen Werts bricht einen solchen ausstehenden Schreibzugriff ab. Die
+  Integration prüft einen abweichenden Rücklesewert daher nach 15 s noch einmal, statt ihn als Fehler zu werten, und
+  schreibt in der Zwischenzeit nichts in dieses Register. Die Entität zeigt den neuen Wert ab der nächsten Abfrage.
+  Eine Wiederherstellung dieser Werte wartet, solange die Warmwassersperre an ist (Messung des Besitzers: Die
+  Warmwasser-Betriebsart lässt sich nur setzen, solange die Sperre nicht aktiv ist; der Grund ist unbekannt), und wird
+  bei späteren Abfragen wiederholt, höchstens 5-mal innerhalb von 10 Minuten, bevor sie mit einer Warnung aufgegeben
+  wird. Ein Schreibzugriff über Home Assistant bricht sie ab.
+
 * Ein falscher oder veralteter gelernter Wert (etwa gelernt, während ein anderer Client den Sollwert während eines
   Resets geändert hat) kann Wiederherstellungen blockieren, bis zu einem Neustart mit fehlgeschlagenen Abfragen, bei
   dem jede gemerkte Betriebsart und Stufe 0 liest. Option aus- und wieder einschalten löscht alle gelernten Werte.
