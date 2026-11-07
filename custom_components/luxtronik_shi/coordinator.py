@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
@@ -27,6 +28,8 @@ from .const import (
     CONF_RESTORE_AFTER_RESET,
     DEFAULT_RESTORE_AFTER_RESET,
     DOMAIN,
+    EXTERNAL_CHANGE_EXCLUDED,
+    ISSUE_EXTERNAL_CHANGE,
     ISSUE_FIRMWARE_OLD,
     ISSUE_UNREACHABLE,
     ISSUE_VALUES_CHANGED,
@@ -35,6 +38,7 @@ from .const import (
     MIN_FIRMWARE,
     MODEL,
     OUTAGE_WATCH_KEYS,
+    OWN_WRITE_WINDOW,
     RECONNECT_GUARD_COUNT,
     RECONNECT_GUARD_POLLS,
     RESET_TO_DEFAULT_SUFFIXES,
@@ -47,13 +51,27 @@ from .const import (
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
-from .registers import ALL_REGISTERS, AREAS, BY_KEY, Register, area_of, decode
+from .registers import (
+    ALL_REGISTERS,
+    AREAS,
+    BY_KEY,
+    CONTROL_MODES,
+    SETPOINT_GROUPS,
+    Register,
+    area_of,
+    decode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 MAX_GAP = 3  # registers that may be skipped inside one block read
 MAX_BLOCK = 40  # maximum registers per request
 WRITABLE_PLATFORMS = ("number", "select", "switch")
+# Event the logbook integration turns into an entry (homeassistant.components.logbook EVENT_LOGBOOK_ENTRY).
+# Fired directly so the integration does not depend on the logbook integration being loaded.
+EVENT_LOGBOOK_ENTRY = "logbook_entry"
+# Translation key (category "exceptions") of the logbook text of a change outside Home Assistant.
+LOGBOOK_EXTERNAL_CHANGE = "external_change_logbook"
 
 
 @dataclass
@@ -174,6 +192,15 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_poll_saved: datetime | None = None
         self._gap_checked = False
         self._write_lock = asyncio.Lock()
+        # The one record of what this integration wrote: key -> (raw value, time) of the last write attempt,
+        # by a user write (async_write) or a restore (_decide_reset), set before the write so a write whose
+        # answer was lost still counts. Changes outside Home Assistant are judged against it.
+        self._written: dict[str, tuple[int, datetime]] = {}
+        # Values changed outside Home Assistant (notice only): candidates of the current poll, the changes
+        # listed in the open repair issue, and polls left after an outage in which nothing is reported.
+        self._poll_changes: list[tuple[Register, int, int]] = []
+        self._external: dict[str, tuple[int, int, datetime]] = {}
+        self._external_quiet = 0
 
     # ------------------------------------------------------------------ devices
     def device_info_for(self, key: str) -> DeviceInfo:
@@ -218,21 +245,27 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------ reading
     async def _async_update_data(self) -> dict[str, Any]:
         self._fresh = set()
+        self._poll_changes = []
         try:
             for block in self._blocks:
                 if self._tick % block.every == 0:
                     await self._read_block(block)
         except ModbusCommError as err:
             self._update_unreachable_issue(failed=True)
-            raise UpdateFailed(f"Keine Verbindung zur Wärmepumpe: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="poll_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         self._tick += 1
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
         reconnected = self._reconnect_signal()
-        await self._check_device_reset(
-            outage=recovered or reconnected or self._watchdog_gap() or self._session_gap(),
-            failed=recovered,
-        )
+        # One outage signal for the restore and for changes outside Home Assistant (failed polls, a
+        # reconnect, or a gap beyond the SHI watchdog): values the device reverts are nobody's change.
+        outage = recovered or reconnected or self._watchdog_gap() or self._session_gap()
+        await self._check_external_changes(outage=outage)
+        await self._check_device_reset(outage=outage, failed=recovered)
         if self._remembered_dirty:
             self._remembered_dirty = False
             await self._save()
@@ -258,26 +291,33 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 for reg in block.registers:
                     offset = reg.address - block.start
-                    self._store(reg, words[offset : offset + reg.width])
+                    self._store(reg, words[offset : offset + reg.width], poll=True)
                 return
         for reg in block.registers:
-            await self._read_single(reg)
+            await self._read_single(reg, poll=True)
 
-    async def _read_single(self, reg: Register) -> None:
+    async def _read_single(self, reg: Register, *, poll: bool = False) -> None:
         try:
             words = await self.client.read(reg.kind, reg.address, reg.width)
         except ModbusIllegalAddress:
             self._mark_missing(reg)
             return
-        self._store(reg, words)
+        self._store(reg, words, poll=poll)
 
-    def _store(self, reg: Register, words: list[Any]) -> None:
+    def _store(self, reg: Register, words: list[Any], *, poll: bool = False) -> None:
+        """Keep a value read from the heat pump. ``poll``: read by the regular poll, not as a write's read-
+        back.
+        """
         if reg.kind == "discrete":
             self._values[reg.key] = bool(words[0])
         else:
             self._values[reg.key] = decode(reg, words)  # type: ignore[arg-type]
             if reg.kind == "holding":
-                self._raw[reg.key] = int(words[0])
+                raw = int(words[0])
+                old = self._raw.get(reg.key)
+                if poll and old is not None and old != raw and reg.platform in WRITABLE_PLATFORMS:
+                    self._poll_changes.append((reg, old, raw))
+                self._raw[reg.key] = raw
                 self._fresh.add(reg.key)
         self._missing.discard(reg.key)
 
@@ -433,6 +473,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_FIRMWARE_OLD))
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_UNREACHABLE))
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_VALUES_CHANGED))
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id(ISSUE_EXTERNAL_CHANGE))
 
     # ------------------------------------------------------------------ writing
     async def async_write(self, reg: Register, raw: int) -> None:
@@ -444,16 +485,176 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Writes and restores are serialised by one lock, so a restore never interleaves with a user write.
         """
         if reg.kind != "holding":
-            raise HomeAssistantError(f"Register {reg.key} ist nicht beschreibbar")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="not_writable",
+                translation_placeholders={"key": reg.key},
+            )
         async with self._write_lock:
+            self._record_write(reg.key, raw)
             try:
                 await self.client.write_register(reg.address, raw)
                 await self._read_single(reg)
             except (ModbusCommError, ModbusIllegalAddress) as err:
                 await self._remember(reg.key, None)
-                raise HomeAssistantError(f"Schreiben von {reg.key} fehlgeschlagen: {err}") from err
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="write_failed",
+                    translation_placeholders={"key": reg.key, "error": str(err)},
+                ) from err
             await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
-        self.async_set_updated_data(dict(self._values))
+            await self._read_effective_target(reg.key)
+        # Push the read-back to every entity without async_set_updated_data: that would also move the next
+        # poll a full interval out, so a writer faster than the scan interval would stop the measurements from
+        # updating.
+        self.data = dict(self._values)
+        self.async_update_listeners()
+
+    async def _read_effective_target(self, key: str) -> None:
+        """After a setpoint write, read the controller's effective target once (no extra polling).
+
+        A failure here does not fail the write: the value is read again with the next regular poll.
+        """
+        group = SETPOINT_GROUPS.get(key)
+        if group is None:
+            return
+        target = next((r for r in self.registers if r.key == group[1]), None)
+        if target is None:
+            return
+        try:
+            await self._read_single(target)
+        except ModbusCommError as err:
+            _LOGGER.debug("Effective target %s not read after the write: %s", target.key, err)
+
+    # ------------------------------------------------------------------ setpoint semantics
+    def setpoint_active(self, key: str) -> bool | None:
+        """Whether a setpoint of SETPOINT_GROUPS applies: its circuit's control mode is ``setpoint``."""
+        mode = self._values.get(SETPOINT_GROUPS[key][0])
+        if not isinstance(mode, int) or not 0 <= mode < len(CONTROL_MODES):
+            return None
+        return CONTROL_MODES[mode] == "setpoint"
+
+    # ------------------------------------------------------------------ changes outside Home Assistant
+    async def _check_external_changes(self, *, outage: bool) -> None:
+        """Notice only: report writable holdings that changed between two polls without a write by this
+        integration. A write's read-back updates the stored value, so the next poll does not see it as a
+        change, and a value in ``_written`` (the record of this integration's writes) is its own as well.
+
+        Not reported: the first read of a key (after setup or when it comes back), and every change from an
+        outage (failed polls, a reconnect, or a gap beyond the SHI watchdog: the signal the restore uses)
+        until every holding register was read once again, and while the restore's comparison window is open.
+        Values the device reverts are never someone's change: without an outage it cannot revert them.
+        """
+        changes, self._poll_changes = self._poll_changes, []
+        if outage:
+            self._external_quiet = self._holding_cycle()
+        if self._external_quiet > 0 or self._window_left > 0:
+            self._external_quiet = max(self._external_quiet - 1, 0)
+            return
+        now = dt_util.utcnow()
+        changes = [
+            (reg, old, new)
+            for reg, old, new in changes
+            if reg.key not in EXTERNAL_CHANGE_EXCLUDED and not self._own_write(reg.key, new, now)
+        ]
+        if not changes:
+            return
+        issue_id = self._issue_id(ISSUE_EXTERNAL_CHANGE)
+        issue = ir.async_get(self.hass).async_get_issue(DOMAIN, issue_id)
+        if issue is None or issue.dismissed_version is not None:
+            if issue is not None:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            self._external = {}
+        registry = er.async_get(self.hass)
+        texts = await self._translations()
+        template = self._text(
+            texts, f"exceptions.{LOGBOOK_EXTERNAL_CHANGE}.message", "{name}: {old} -> {new}"
+        )
+        for reg, old, new in changes:
+            first = self._external.get(reg.key, (old, new, now))[0]
+            self._external[reg.key] = (first, new, now)
+            _LOGGER.info(
+                "%s: %s changed outside Home Assistant: %s -> %s", self.config_entry.title, reg.key, old, new
+            )
+            entity_id = registry.async_get_entity_id(
+                reg.platform, DOMAIN, f"{self.config_entry.entry_id}_{reg.key}"
+            )
+            data = {
+                "name": self.config_entry.title,
+                "message": template.replace("{name}", self._label_name(texts, reg.key))
+                .replace("{old}", self._label_value(texts, reg.key, old))
+                .replace("{new}", self._label_value(texts, reg.key, new)),
+                "domain": DOMAIN,
+            }
+            if entity_id:
+                data["entity_id"] = entity_id
+            self.hass.bus.async_fire(EVENT_LOGBOOK_ENTRY, data)
+        lines = "\n".join(
+            f"- {self._label_name(texts, key)}: {self._label_value(texts, key, old)} -> "
+            f"{self._label_value(texts, key, new)} ({dt_util.as_local(when).strftime('%Y-%m-%d %H:%M:%S')})"
+            for key, (old, new, when) in sorted(self._external.items())
+        )
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_EXTERNAL_CHANGE,
+            translation_placeholders={"name": self.config_entry.title, "changes": lines},
+        )
+
+    def _holding_cycle(self) -> int:
+        """Polls until every holding register was read once."""
+        return max((r.every for r in self.registers if r.kind == "holding"), default=1)
+
+    def _record_write(self, key: str, raw: int) -> None:
+        """Record a write attempt of this integration (user write or restore), before it is sent."""
+        self._written[key] = (raw, dt_util.utcnow())
+
+    def _own_write(self, key: str, raw: int, now: datetime) -> bool:
+        written = self._written.get(key)
+        return (
+            written is not None
+            and written[0] == raw
+            and (now - written[1]).total_seconds() <= OWN_WRITE_WINDOW
+        )
+
+    # ------------------------------------------------------------------ texts shown to the user
+    async def _translations(self) -> dict[str, str]:
+        """Generated translations of this integration in the language of Home Assistant."""
+        texts: dict[str, str] = {}
+        language = self.hass.config.language
+        for category in ("exceptions", "entity", "device"):
+            texts.update(await async_get_translations(self.hass, language, category, {DOMAIN}))
+        return texts
+
+    @staticmethod
+    def _text(texts: dict[str, str], key: str, default: str) -> str:
+        return texts.get(f"component.{DOMAIN}.{key}", default)
+
+    def _label_name(self, texts: dict[str, str], key: str) -> str:
+        """Device and entity name as shown in Home Assistant, e.g. "WP Heating Setpoint"."""
+        reg = self._reg(key)
+        title = self.config_entry.title
+        area = area_of(key)
+        device = self._text(texts, f"device.{area}.name", "{name}") if area else "{name}"
+        entity = self._text(texts, f"entity.{reg.platform}.{key}.name", key)
+        return f"{device.replace('{name}', title)} {entity}"
+
+    def _label_value(self, texts: dict[str, str], key: str, raw: int) -> str:
+        """A raw holding word as shown in Home Assistant: option label, on/off, or value with unit."""
+        reg = self._reg(key)
+        if reg.options:
+            option = reg.options[raw] if 0 <= raw < len(reg.options) else str(raw)
+            return self._text(texts, f"entity.{reg.platform}.{key}.state.{option}", option)
+        if reg.platform == "switch" and raw in (0, 1):
+            state = "on" if raw == 1 else "off"
+            return self._text(texts, f"exceptions.state_{state}.message", state)
+        number = f"{decode(reg, [raw]):.{reg.precision or 0}f}"
+        if self.hass.config.language.startswith("de"):
+            number = number.replace(".", ",")
+        return f"{number} {reg.unit}" if reg.unit else number
 
     # ------------------------------------------------------------------ restore after a device reset
     def _restorable(self) -> set[str]:
@@ -551,10 +752,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _save_last_poll(self) -> None:
         """Remember the time of this successful poll; written at most every LAST_POLL_SAVE_INTERVAL, and only
         while something is remembered (otherwise the gap does not matter)."""
+        self._last_poll_mono = _monotonic()  # also without the option: the session gap is an outage signal
         if not self.restore_enabled:
             return
         self._last_poll = dt_util.utcnow()
-        self._last_poll_mono = _monotonic()
         if not self._remembered:
             return
         saved = self._last_poll_saved
@@ -668,8 +869,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _session_gap(self) -> bool:
         """Within a session: more than the watchdog time since the previous successful poll."""
-        if not self.restore_enabled or self._last_poll_mono is None:
+        if self._last_poll_mono is None:
             return False
+        # Also without the restore option: changes outside Home Assistant use the same outage signal.
         # Monotonic: a wall-clock step (NTP) must not look like a gap. Wall-clock time is only used across a
         # restart (_watchdog_gap), where no monotonic reference survives.
         gap = _monotonic() - self._last_poll_mono
@@ -802,6 +1004,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     failed.append(key)
                     continue
                 reg = self._reg(key)
+                self._record_write(key, raw)
                 try:
                     await self.client.write_register(reg.address, raw)
                     await self._read_single(reg)
@@ -837,31 +1040,17 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         The id is per entry, so a later relearn replaces the notice.
         """
-        language = self.hass.config.language
-        texts: dict[str, str] = {}
-        for category in ("exceptions", "entity", "device"):
-            texts.update(await async_get_translations(self.hass, language, category, {DOMAIN}))
-        prefix = f"component.{DOMAIN}."
+        texts = await self._translations()
         title = self.config_entry.title
 
         def text(key: str, default: str) -> str:
-            return texts.get(prefix + key, default)
+            return self._text(texts, key, default)
 
         def name(key: str) -> str:
-            reg = self._reg(key)
-            area = area_of(key)
-            device = text(f"device.{area}.name", "{name}") if area else "{name}"
-            return f"{device.replace('{name}', title)} {text(f'entity.{reg.platform}.{key}.name', key)}"
+            return self._label_name(texts, key)
 
         def value(key: str, raw: int) -> str:
-            reg = self._reg(key)
-            if reg.options:
-                option = reg.options[raw] if 0 <= raw < len(reg.options) else str(raw)
-                return text(f"entity.{reg.platform}.{key}.state.{option}", option)
-            number = f"{decode(reg, [raw]):.{reg.precision or 0}f}"
-            if language.startswith("de"):
-                number = number.replace(".", ",")
-            return f"{number} {reg.unit}" if reg.unit else number
+            return self._label_value(texts, key, raw)
 
         changed = "\n".join(f"- {name(k)}: {value(k, old)} -> {value(k, new)}" for k, old, new in changes)
         restored_text = "\n".join(f"- {name(k)}: {value(k, raw)}" for k, raw in sorted(restored.items()))

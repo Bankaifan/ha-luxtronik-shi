@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -9,7 +11,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import Register, encode_int16
+from .registers import SETPOINT_GROUPS, Register, encode_int16
+from .setpoint import setpoint_attributes
 
 
 async def async_setup_entry(
@@ -37,12 +40,27 @@ class LuxtronikNumber(LuxtronikEntity, NumberEntity):
         self._attr_native_step = reg.step
         if reg.unit == "kW":
             self._attr_device_class = NumberDeviceClass.POWER
+        elif reg.unit == "°C":
+            # Absolute temperatures only, so Home Assistant converts them like the climate entity does. Never
+            # on the K offsets: Home Assistant would convert a difference as an absolute temperature.
+            self._attr_device_class = NumberDeviceClass.TEMPERATURE
 
     @property
     def native_value(self) -> float | None:
         """Return the value read back from the heat pump."""
         return self._value
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Heating and hot water setpoint: whether the setpoint applies and the controller's effective target.
+        """
+        if self._reg.key not in SETPOINT_GROUPS:
+            return None
+        return setpoint_attributes(self.coordinator, self._reg.key)
+
     async def async_set_native_value(self, value: float) -> None:
-        """Write the new value (encoded like the register, negative values as two's complement)."""
+        """Write the new value (encoded like the register, negative values as two's complement).
+
+        A setpoint is written in every control mode: optimizers write it and set the mode themselves.
+        """
         await self.coordinator.async_write(self._reg, encode_int16(value, self._reg.scale))

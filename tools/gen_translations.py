@@ -190,9 +190,9 @@ STATES = {
         "reduced": "Absenkung",
         "normal": "Normal",
         "boost": "Boost",
-        "increased": "Anhebung",
-        "increased2": "Anhebung (Stufe 2)",
-        "decreased": "Absenkung",
+        "increased": "Erhöht",
+        "increased2": "Erhöht (Stufe 2)",
+        "decreased": "Abgesenkt",
         "none": "Keine Begrenzung",
         "soft": "Weiche Begrenzung",
         "hard": "Harte Begrenzung",
@@ -231,6 +231,113 @@ NOTICES = {
     },
 }
 
+# Labels per option tuple where one option key means different things in different registers. Each label says what
+# the option does (sources: python-luxtronik datatypes ControlMode, LevelMode, OperationMode).
+OPTION_OVERRIDES = {
+    # ControlMode of every mode select: raw 0 is "no influence" (the controller uses its own values), never "off".
+    registers.CONTROL_MODES: {
+        "en": {
+            "off": "No influence",
+            "setpoint": "Setpoint (replaces the controller's target)",
+            "offset": "Offset (controller's target plus offset)",
+            "level": "Level (controller's target corrected by the level)",
+        },
+        "de": {
+            "off": "Keine Vorgabe",
+            "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
+            "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
+            "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)",
+        },
+    },
+    # LevelMode 0 is "Normal": no correction.
+    registers._LEVELS: {
+        "en": {"normal": "Normal (no correction)"},
+        "de": {"normal": "Normal (keine Korrektur)"},
+    },
+    # OperationMode: 5 is "no request", 2 "swimming pool/solar", 6 "heating external source".
+    registers._OPERATING_MODES: {
+        "en": {"off": "No request", "pool": "Pool / solar", "external_source": "Heating (external source)"},
+        "de": {"off": "Keine Anforderung", "pool": "Schwimmbad / Solar", "external_source": "Heizen (externe Quelle)"},
+    },
+}
+
+
+def option_label(lang: str, options: tuple[str, ...], option: str) -> str:
+    return OPTION_OVERRIDES.get(options, {}).get(lang, {}).get(option, STATES[lang][option])
+
+
+# Operation modes of the water heater (water_heater.OPERATION_MODES), raw value order of the mode select.
+WATER_HEATER_OPERATIONS = ("no_influence", "setpoint", "offset", "level")
+
+ATTRIBUTES = {
+    "en": {
+        "setpoint_active": "Setpoint in effect",
+        "effective_target": "Effective target",
+        "controller_mode": "Control mode",
+        "heating_block": "Heating blocked",
+    },
+    "de": {
+        "setpoint_active": "Sollwert wirksam",
+        "effective_target": "Wirksamer Sollwert",
+        "controller_mode": "Betriebsart der Schnittstelle",
+        "heating_block": "Heizen gesperrt",
+    },
+}
+
+CLIMATE_STATES = {
+    "en": {"auto": "Heat pump controls itself", "heat": "Set by Home Assistant"},
+    "de": {"auto": "Wärmepumpe regelt selbst", "heat": "Vorgabe durch Home Assistant"},
+}
+
+_SETPOINT_HINT = {
+    "en": 'The setpoint only applies in mode "{setpoint}". {{select}} is in mode "{mode}", so nothing was written. Set {{select}} to "{setpoint}" first.',
+    "de": 'Der Sollwert wirkt nur in der Betriebsart „{setpoint}“. {{select}} steht auf „{mode}“, deshalb wurde nichts geschrieben. Stelle {{select}} zuerst auf „{setpoint}“.',
+}
+_UNKNOWN_MODE = {"en": "unknown", "de": "unbekannt"}
+
+
+def exceptions(lang: str) -> dict[str, dict[str, str]]:
+    # Short labels (the part before the explanation in brackets): the select shows the long label starting with it.
+    labels = {k: v.split(" (")[0] for k, v in OPTION_OVERRIDES[registers.CONTROL_MODES][lang].items()}
+    out = {
+        f"setpoint_not_active_{mode}": {
+            "message": _SETPOINT_HINT[lang].format(
+                setpoint=labels["setpoint"], mode=labels[mode] if mode in labels else _UNKNOWN_MODE[lang]
+            )
+        }
+        for mode in ("off", "offset", "level", "unknown")
+    }
+    out.update(EXCEPTIONS[lang])
+    return out
+
+
+EXCEPTIONS = {
+    "en": {
+        "setpoint_out_of_range": {"message": "Setpoint {value} is outside {min} … {max} °C."},
+        "unsupported_hvac_mode": {"message": "HVAC mode {mode} is not supported. Use auto or heat."},
+        "unsupported_operation_mode": {"message": "Operation mode {mode} is not supported."},
+        "control_mode_unknown": {"message": "The heating control mode is not known yet. Try again after the next update."},
+        "external_change_logbook": {"message": "{name} changed outside Home Assistant: {old} -> {new}"},
+        "write_failed": {"message": "Writing {key} failed: {error}"},
+        "not_writable": {"message": "Register {key} cannot be written."},
+        "poll_failed": {"message": "No connection to the heat pump: {error}"},
+        "state_on": {"message": "on"},
+        "state_off": {"message": "off"},
+    },
+    "de": {
+        "setpoint_out_of_range": {"message": "Sollwert {value} liegt außerhalb von {min} … {max} °C."},
+        "unsupported_hvac_mode": {"message": "HVAC-Modus {mode} wird nicht unterstützt. Verwende auto oder heat."},
+        "unsupported_operation_mode": {"message": "Betriebsart {mode} wird nicht unterstützt."},
+        "control_mode_unknown": {"message": "Die Betriebsart der Heizung ist noch nicht bekannt. Versuche es nach der nächsten Aktualisierung erneut."},
+        "external_change_logbook": {"message": "{name} außerhalb von Home Assistant geändert: {old} -> {new}"},
+        "write_failed": {"message": "Schreiben von {key} fehlgeschlagen: {error}"},
+        "not_writable": {"message": "Register {key} kann nicht geschrieben werden."},
+        "poll_failed": {"message": "Keine Verbindung zur Wärmepumpe: {error}"},
+        "state_on": {"message": "an"},
+        "state_off": {"message": "aus"},
+    },
+}
+
 ISSUES = {
     "en": {
         "firmware_old": {
@@ -240,6 +347,10 @@ ISSUES = {
         "shi_unreachable": {
             "title": "{name}: Smart Home Interface not reachable",
             "description": "The heat pump at {host} has not answered for more than {minutes} minutes. Entities are unavailable and nothing can be written. Check power, network and that Modbus/TCP is still enabled in the controller. This issue disappears by itself as soon as the heat pump answers again.",
+        },
+        "values_changed_externally": {
+            "title": "{name}: Value changed outside Home Assistant",
+            "description": "These settings of the heat pump changed without a write through Home Assistant, for example by another Modbus client, the native Luxtronik protocol (port 8889), OpenEMS or the controller panel (setting: old -> new, time of the last change):\n\n{changes}\n\nThe integration does not write anything back. If another system writes the same settings, they overwrite each other; the last write wins. Further changes are added while this issue is open. Dismiss it once you have checked the values.",
         },
         "values_changed_after_outage": {
             "title": "{name}: Values changed after connection outage",
@@ -254,6 +365,10 @@ ISSUES = {
         "shi_unreachable": {
             "title": "{name}: Smart-Home-Schnittstelle nicht erreichbar",
             "description": "Die Wärmepumpe unter {host} antwortet seit mehr als {minutes} Minuten nicht. Die Entitäten sind nicht verfügbar und es kann nichts geschrieben werden. Prüfe Strom, Netzwerk und ob Modbus/TCP in der Regelung noch aktiviert ist. Dieser Hinweis verschwindet von selbst, sobald die Wärmepumpe wieder antwortet.",
+        },
+        "values_changed_externally": {
+            "title": "{name}: Wert außerhalb von Home Assistant geändert",
+            "description": "Diese Einstellungen der Wärmepumpe haben sich geändert, ohne dass Home Assistant geschrieben hat, zum Beispiel durch einen anderen Modbus-Client, das native Luxtronik-Protokoll (Port 8889), OpenEMS oder das Bedienteil (Einstellung: alt -> neu, Zeit der letzten Änderung):\n\n{changes}\n\nDie Integration schreibt nichts zurück. Schreibt ein anderes System dieselben Einstellungen, überschreiben sie sich gegenseitig; der letzte Schreibzugriff gewinnt. Weitere Änderungen werden ergänzt, solange dieser Hinweis offen ist. Schließe ihn, wenn du die Werte geprüft hast.",
         },
         "values_changed_after_outage": {
             "title": "{name}: Werte nach Verbindungsausfall geändert",
@@ -273,8 +388,37 @@ for lang in ("en", "de"):
             continue
         entry = {"name": name}
         if reg.options and reg.platform in ("sensor", "select"):
-            entry["state"] = {opt: STATES[lang][opt] for opt in reg.options}
+            entry["state"] = {opt: option_label(lang, reg.options, opt) for opt in reg.options}
+        if reg.key in registers.SETPOINT_GROUPS:
+            entry["state_attributes"] = {
+                attr: {"name": ATTRIBUTES[lang][attr]} for attr in ("setpoint_active", "effective_target")
+            }
         entity[reg.platform][reg.key] = entry
+    attrs = ATTRIBUTES[lang]
+    mode_labels = {
+        opt: option_label(lang, registers.CONTROL_MODES, opt) for opt in registers.CONTROL_MODES
+    }
+    entity["climate"] = {
+        registers.CLIMATE_HEATING_KEY: {
+            "state": dict(CLIMATE_STATES[lang]),
+            "state_attributes": {
+                "controller_mode": {"name": attrs["controller_mode"], "state": mode_labels},
+                **{a: {"name": attrs[a]} for a in ("setpoint_active", "effective_target", "heating_block")},
+            },
+        }
+    }
+    operation_labels = {
+        op: mode_labels[opt] for op, opt in zip(WATER_HEATER_OPERATIONS, registers.CONTROL_MODES, strict=True)
+    }
+    entity["water_heater"] = {
+        registers.WATER_HEATER_DHW_KEY: {
+            "state": dict(operation_labels),
+            "state_attributes": {
+                "operation_mode": {"state": dict(operation_labels)},
+                **{a: {"name": attrs[a]} for a in ("setpoint_active", "effective_target")},
+            },
+        }
+    }
     for derived in registers.DERIVED_SENSORS:
         entity["sensor"][derived.key] = {"name": derived.name_en if lang == "en" else derived.name_de}
     for key, _bit, de, en in binary_sensor.STATUS_BITS:
@@ -288,7 +432,7 @@ for lang in ("en", "de"):
     data["options"]["step"]["init"]["description"] = EQUIPMENT_TEXT[lang]["options"]
     data["entity"] = entity
     data["issues"] = ISSUES[lang]
-    data["exceptions"] = NOTICES[lang]
+    data["exceptions"] = {**NOTICES[lang], **exceptions(lang)}
     data["device"] = {area: {"name": name} for area, name in DEVICE_NAMES[lang].items()}
     out = ROOT / "custom_components" / "luxtronik_shi" / "translations" / f"{lang}.json"
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

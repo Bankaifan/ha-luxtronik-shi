@@ -187,11 +187,11 @@
         "state": {
           "heating": "Heating",
           "hot_water": "Hot water",
-          "pool": "Pool",
+          "pool": "Pool / solar",
           "evu_lock": "Utility lockout",
           "defrost": "Defrost",
-          "off": "Off",
-          "external_source": "External source",
+          "off": "No request",
+          "external_source": "Heating (external source)",
           "cooling": "Cooling"
         }
       },
@@ -370,13 +370,29 @@
     },
     "number": {
       "cfg_heating_setpoint": {
-        "name": "Setpoint"
+        "name": "Setpoint",
+        "state_attributes": {
+          "setpoint_active": {
+            "name": "Setpoint in effect"
+          },
+          "effective_target": {
+            "name": "Effective target"
+          }
+        }
       },
       "cfg_heating_offset": {
         "name": "Curve offset"
       },
       "cfg_dhw_setpoint": {
-        "name": "Setpoint"
+        "name": "Setpoint",
+        "state_attributes": {
+          "setpoint_active": {
+            "name": "Setpoint in effect"
+          },
+          "effective_target": {
+            "name": "Effective target"
+          }
+        }
       },
       "cfg_dhw_offset": {
         "name": "Offset"
@@ -431,16 +447,16 @@
       "cfg_heating_mode": {
         "name": "Mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_heating_level": {
         "name": "Level",
         "state": {
-          "normal": "Normal",
+          "normal": "Normal (no correction)",
           "increased": "Increased",
           "increased2": "Increased (step 2)",
           "decreased": "Decreased"
@@ -449,16 +465,16 @@
       "cfg_dhw_mode": {
         "name": "Mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_dhw_level": {
         "name": "Level",
         "state": {
-          "normal": "Normal",
+          "normal": "Normal (no correction)",
           "increased": "Increased",
           "increased2": "Increased (step 2)",
           "decreased": "Decreased"
@@ -467,16 +483,16 @@
       "cfg_mk1_mode": {
         "name": "Mixing circuit 1: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_mk1_level": {
         "name": "Mixing circuit 1: level",
         "state": {
-          "normal": "Normal",
+          "normal": "Normal (no correction)",
           "increased": "Increased",
           "increased2": "Increased (step 2)",
           "decreased": "Decreased"
@@ -485,10 +501,10 @@
       "cfg_mk1_cool_mode": {
         "name": "Mixing circuit 1: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_power_limit_mode": {
@@ -502,16 +518,16 @@
       "cfg_overall_mode": {
         "name": "Overall: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_overall_level": {
         "name": "Overall: level",
         "state": {
-          "normal": "Normal",
+          "normal": "Normal (no correction)",
           "increased": "Increased",
           "increased2": "Increased (step 2)",
           "decreased": "Decreased"
@@ -520,16 +536,16 @@
       "cfg_mk2_mode": {
         "name": "Mixing circuit 2: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_mk2_level": {
         "name": "Mixing circuit 2: level",
         "state": {
-          "normal": "Normal",
+          "normal": "Normal (no correction)",
           "increased": "Increased",
           "increased2": "Increased (step 2)",
           "decreased": "Decreased"
@@ -538,25 +554,25 @@
       "cfg_mk2_cool_mode": {
         "name": "Mixing circuit 2: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_mk3_mode": {
         "name": "Mixing circuit 3: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
         }
       },
       "cfg_mk3_level": {
         "name": "Mixing circuit 3: level",
         "state": {
-          "normal": "Normal",
+          "normal": "Normal (no correction)",
           "increased": "Increased",
           "increased2": "Increased (step 2)",
           "decreased": "Decreased"
@@ -565,10 +581,64 @@
       "cfg_mk3_cool_mode": {
         "name": "Mixing circuit 3: mode",
         "state": {
-          "off": "Off",
-          "setpoint": "Setpoint",
-          "offset": "Offset",
-          "level": "Level"
+          "off": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
+        }
+      }
+    },
+    "climate": {
+      "climate_heating": {
+        "state": {
+          "auto": "Heat pump controls itself",
+          "heat": "Set by Home Assistant"
+        },
+        "state_attributes": {
+          "controller_mode": {
+            "name": "Control mode",
+            "state": {
+              "off": "No influence",
+              "setpoint": "Setpoint (replaces the controller's target)",
+              "offset": "Offset (controller's target plus offset)",
+              "level": "Level (controller's target corrected by the level)"
+            }
+          },
+          "setpoint_active": {
+            "name": "Setpoint in effect"
+          },
+          "effective_target": {
+            "name": "Effective target"
+          },
+          "heating_block": {
+            "name": "Heating blocked"
+          }
+        }
+      }
+    },
+    "water_heater": {
+      "water_heater_dhw": {
+        "state": {
+          "no_influence": "No influence",
+          "setpoint": "Setpoint (replaces the controller's target)",
+          "offset": "Offset (controller's target plus offset)",
+          "level": "Level (controller's target corrected by the level)"
+        },
+        "state_attributes": {
+          "operation_mode": {
+            "state": {
+              "no_influence": "No influence",
+              "setpoint": "Setpoint (replaces the controller's target)",
+              "offset": "Offset (controller's target plus offset)",
+              "level": "Level (controller's target corrected by the level)"
+            }
+          },
+          "setpoint_active": {
+            "name": "Setpoint in effect"
+          },
+          "effective_target": {
+            "name": "Effective target"
+          }
         }
       }
     }
@@ -582,6 +652,10 @@
       "title": "{name}: Smart Home Interface not reachable",
       "description": "The heat pump at {host} has not answered for more than {minutes} minutes. Entities are unavailable and nothing can be written. Check power, network and that Modbus/TCP is still enabled in the controller. This issue disappears by itself as soon as the heat pump answers again."
     },
+    "values_changed_externally": {
+      "title": "{name}: Value changed outside Home Assistant",
+      "description": "These settings of the heat pump changed without a write through Home Assistant, for example by another Modbus client, the native Luxtronik protocol (port 8889), OpenEMS or the controller panel (setting: old -> new, time of the last change):\n\n{changes}\n\nThe integration does not write anything back. If another system writes the same settings, they overwrite each other; the last write wins. Further changes are added while this issue is open. Dismiss it once you have checked the values."
+    },
     "values_changed_after_outage": {
       "title": "{name}: Values changed after connection outage",
       "description": "The Smart Home Interface was unreachable. Since it answers again, these values differ from those before the outage (old -> new):\n\n{changes}\n\nThe integration does not write anything back. Check the values and set them again yourself if needed. This issue disappears when the values match those from before the outage again, or when you dismiss it."
@@ -593,6 +667,48 @@
     },
     "base_values_changed": {
       "message": "After a restart of the heat pump, the base values these setpoints fall back to have changed (learned before -> now):\n\n{changes}\n\nThe values set in Home Assistant remain valid and were restored:\n\n{restored}\n\nNo action is needed. This is information only."
+    },
+    "setpoint_not_active_off": {
+      "message": "The setpoint only applies in mode \"Setpoint\". {select} is in mode \"No influence\", so nothing was written. Set {select} to \"Setpoint\" first."
+    },
+    "setpoint_not_active_offset": {
+      "message": "The setpoint only applies in mode \"Setpoint\". {select} is in mode \"Offset\", so nothing was written. Set {select} to \"Setpoint\" first."
+    },
+    "setpoint_not_active_level": {
+      "message": "The setpoint only applies in mode \"Setpoint\". {select} is in mode \"Level\", so nothing was written. Set {select} to \"Setpoint\" first."
+    },
+    "setpoint_not_active_unknown": {
+      "message": "The setpoint only applies in mode \"Setpoint\". {select} is in mode \"unknown\", so nothing was written. Set {select} to \"Setpoint\" first."
+    },
+    "setpoint_out_of_range": {
+      "message": "Setpoint {value} is outside {min} … {max} °C."
+    },
+    "unsupported_hvac_mode": {
+      "message": "HVAC mode {mode} is not supported. Use auto or heat."
+    },
+    "unsupported_operation_mode": {
+      "message": "Operation mode {mode} is not supported."
+    },
+    "control_mode_unknown": {
+      "message": "The heating control mode is not known yet. Try again after the next update."
+    },
+    "external_change_logbook": {
+      "message": "{name} changed outside Home Assistant: {old} -> {new}"
+    },
+    "write_failed": {
+      "message": "Writing {key} failed: {error}"
+    },
+    "not_writable": {
+      "message": "Register {key} cannot be written."
+    },
+    "poll_failed": {
+      "message": "No connection to the heat pump: {error}"
+    },
+    "state_on": {
+      "message": "on"
+    },
+    "state_off": {
+      "message": "off"
     }
   },
   "device": {
