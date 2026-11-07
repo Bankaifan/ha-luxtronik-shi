@@ -43,6 +43,7 @@ from .const import (
     MODEL,
     OUTAGE_WATCH_KEYS,
     OWN_WRITE_WINDOW,
+    POLL_FAILURES_TOLERATED,
     RECONNECT_GUARD_COUNT,
     RECONNECT_GUARD_POLLS,
     RESET_TO_DEFAULT_SUFFIXES,
@@ -162,6 +163,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._main_device_id: str | None = None
         self._sw_version: str | None = None
         self._first_failure: datetime | None = None  # start of the current run of failed polls
+        self._failed_polls = 0  # failed polls in a row; the first POLL_FAILURES_TOLERATED keep the old values
         # Outage notice: watched control values of the last successful poll. Deliberately in memory only, so
         # it is lost on a Home Assistant restart (a change during an outage over a restart is not noticed).
         self._snapshot: dict[str, Any] = {}
@@ -265,12 +267,21 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     await self._read_block(block)
         except ModbusCommError as err:
             self._update_unreachable_issue(failed=True)
+            self._failed_polls += 1
+            if self.data is not None and self._failed_polls <= POLL_FAILURES_TOLERATED:
+                # Keep the last values instead of making every entity unavailable for a whole interval. The
+                # run of failures is still recorded (_first_failure), so the next success counts as recovery.
+                _LOGGER.info(
+                    "%s: poll failed (%s); keeping the previous values for now", self.config_entry.title, err
+                )
+                return dict(self._values)
             raise UpdateFailed(
                 translation_domain=DOMAIN,
                 translation_key="poll_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
         self._tick += 1
+        self._failed_polls = 0
         recovered = self._first_failure is not None
         self._update_unreachable_issue(failed=False)
         reconnected = self._reconnect_signal()
