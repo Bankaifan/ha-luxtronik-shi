@@ -109,7 +109,8 @@ or treats alike, a mode key called `off` that does not switch anything off) were
   (owner decision: an active overall mode silently overrides what an optimizer writes per circuit).
 - **Levels** (proven): raw 0 `normal`; raw 1 and 2 are the one option `increased` (the controller parameter
   *Erhöhung* of the circuit); raw 3 `decreased` (*Absenkung*). The amounts are the controller parameters 1187–1198
-  (menu *Offsets*). Labels say so.
+  (menu *Offsets*). Labels say so. A change between raw 1 and 2 by another client is not reported as a change
+  outside Home Assistant (same option).
 - **Mode selects**: raw 0 is `no_influence` (see *Action required*); the labels say that the controller uses its own
   values. The water heater's operation modes are the same option keys as the mode select.
 - **Circulation and extra hot water are triggers** (proven, `TRIGGER_KEYS`): the firmware sets them back to 0 itself

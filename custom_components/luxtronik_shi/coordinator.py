@@ -151,6 +151,13 @@ def restore_group(key: str) -> str:
     return key
 
 
+def _same_option(reg: Register, old: int, new: int) -> bool:
+    """Whether two raw values are the same option (levels: raw 1 and 2 are both ``increased``), so a
+    change between them is no change the user could see or act on."""
+    options = reg.options or ()
+    return 0 <= old < len(options) and 0 <= new < len(options) and options[old] == options[new]
+
+
 class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Polls all registers and distributes the values to the entities."""
 
@@ -794,7 +801,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         changes = [
             (reg, old, new)
             for reg, old, new in changes
-            if reg.key not in EXTERNAL_CHANGE_EXCLUDED and not self._own_write(reg.key, new, now)
+            if reg.key not in EXTERNAL_CHANGE_EXCLUDED
+            and not self._own_write(reg.key, new, now)
+            and not _same_option(reg, old, new)
         ]
         if not changes:
             return

@@ -21,6 +21,7 @@ from custom_components.luxtronik_shi.const import (
     DEFERRED_KEYS,
     ENABLE_SHI_PARAMETER,
     EXTERNAL_CHANGE_EXCLUDED,
+    ISSUE_EXTERNAL_CHANGE,
     RESTORE_KEYS,
     TRIGGER_KEYS,
 )
@@ -429,6 +430,24 @@ async def test_level_select_offers_increased_once_and_shows_raw_2_as_increased(
         "select", "select_option", {"entity_id": entity_id, "option": "decreased"}, blocking=True
     )
     assert shi.holding[10003] == 3
+
+
+async def test_level_raw_1_to_2_is_no_external_change(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Raw 1 and 2 are the same option: a switch between them is not reported; a real change still is."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from .test_entity_semantics import _poll_settings
+
+    entry = await _setup(hass, shi)
+    shi.holding[10003] = 1
+    await _poll_settings(hass, entry)  # someone else selected increased: reported
+    issues = ir.async_get(hass)
+    issue_id = f"{ISSUE_EXTERNAL_CHANGE}_{entry.entry_id}"
+    assert issues.async_get_issue("luxtronik_shi", issue_id) is not None
+    issues.async_delete("luxtronik_shi", issue_id)
+    shi.holding[10003] = 2  # python-luxtronik's Increased2: the same parameter
+    await _poll_settings(hass, entry)
+    assert issues.async_get_issue("luxtronik_shi", issue_id) is None
 
 
 @pytest.mark.parametrize("lang", ["en", "de"])
