@@ -904,6 +904,20 @@ SETPOINT_GROUPS: dict[str, tuple[str, str]] = {
 WATER_HEATER_DHW_KEY = "water_heater_dhw"
 WATER_HEATER_KEYS: tuple[str, ...] = (WATER_HEATER_DHW_KEY,)
 
+# Block views: a select and a switch that are views on the two registers ``heating_block`` (10050) and
+# ``dhw_block`` (10051); they poll nothing of their own (see ``block_views.py``). The option keys are chosen so
+# that the Heat Pump Optimizer recognises them as pump modes: after folding to letters and digits they equal the
+# option labels the optimizer's reference integration publishes (tests/test_block_views.py checks this against
+# the optimizer's vocabulary).
+BLOCK_MODE_KEY = "block_mode"
+BLOCK_POWER_KEY = "block_power"
+BLOCK_MODE_HEATING_DHW = "heating_dhw"  # no block
+BLOCK_MODE_HEATING = "heating"  # hot water blocked
+BLOCK_MODE_DHW = "dhw_hot_water"  # heating blocked (also shown while both are blocked)
+BLOCK_MODES: tuple[str, ...] = (BLOCK_MODE_HEATING_DHW, BLOCK_MODE_HEATING, BLOCK_MODE_DHW)
+BLOCK_SELECT_KEYS: tuple[str, ...] = (BLOCK_MODE_KEY,)
+BLOCK_SWITCH_KEYS: tuple[str, ...] = (BLOCK_POWER_KEY,)
+
 # ------------------------------------------------------------------- derived sensors
 # Sensors that are calculated from registers that are polled anyway (no extra Modbus reads). Their keys are
 # part of the entity contract. ``cop`` lives in the main device; the overall values live in the device of the

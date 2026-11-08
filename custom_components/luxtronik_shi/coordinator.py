@@ -195,6 +195,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.climate_enabled_default = True
         # Same for the water heater entity.
         self.water_heater_enabled_default = True
+        # Same for the block select and switch (views on the two block registers, see block_views.py).
+        self.block_views_enabled_default = True
+        # One block sequence (two writes in a fixed order) at a time, across the block select and switch.
+        self.block_sequence_lock = asyncio.Lock()
         # Restore after a device reset (option): raw values this integration wrote and read back, per key.
         self.restore_enabled = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
         self._restore_store: Store[dict[str, Any]] = Store(
