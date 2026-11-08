@@ -111,8 +111,35 @@ From the analysis of 2026-11-07 (function addresses only, no code):
   not active. On that day the restore after the reboot reported that it could not restore the hot water mode and
   setpoint, and the hot water mode later read `off` again after the block was switched on and off.
 
+- **The blocks are not deferred (inferred, not measured live).** The pending-map entry `0x00087700` builds a list of
+  exactly four items, the t2 ids of 10005, 10006, 10007 and 10008, and routes a write into the pending map only for
+  those. 10050 and 10051 are t2 ids 0x1e and 0x1f and are not in that list, so their read-back is expected at
+  once. This comes from the decompilation; the table field of the item handle was not verified separately, and no
+  live measurement of a lag on the blocks exists. The block select and switch therefore read back at once and raise
+  an error if the value differs.
+
 The integration checks a differing read-back of these four registers again after 15 s (`DEFERRED_RECHECK`), writes
 nothing to the register meanwhile, and lets restores of this group wait while the hot water block reads on.
+
+## Error 816 "Multiple SHI write sources"
+
+From the analysis of 2026-11-07 (bin/Controller V3.92.3; grades as in the source notes: *proven* = read from code or
+data, *inferred* = reasoned).
+
+- The error table has an entry with number 816 (internal index 0x6F, entry at `0x009dbff0`, priority 1) with the
+  texts "Mehrere SHI Schreibquellen" (German) and "Multiple SHI write sources" (English). The number and the texts
+  are each *proven*; that these texts belong to 816 is *inferred* (strong).
+- Trigger (*proven*): on every SHI write, `write_log::update` (`0x00187314`) updates a per-datapoint log of
+  writers; with more than 2 entries (at least 3 distinct writers) it raises error index 0x6F. A writer is a distinct
+  pair (source, client-id). Each Modbus client IP counts separately (the client-id is a CRC32 over the peer address,
+  the port is not part of it); myUplink counts as one writer. Entries older than 3600 s are pruned.
+- Effect (*proven*): while the error is active, `update` returns 0 and the Modbus write task stores nothing. The
+  write is **not reported as an error**: the value simply does not change. The integration's read-back check is how
+  such a dropped write becomes visible.
+- Input 10201 shows the number of the active top-priority error (mechanism *proven*); that 816 is the number shown
+  is *inferred*.
+- Clearing: no caller of the clear function (`0x001e8c64`) was found; the error is probably held until it is reset
+  (*inferred / unknown*).
 
 ## Open questions / proposed follow-ups
 

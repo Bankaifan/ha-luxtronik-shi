@@ -87,4 +87,7 @@ class LuxtronikBlockPowerSwitch(CoordinatorEntity[LuxtronikCoordinator], SwitchE
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Release the hot water block if both blocks are set; do nothing in any other state."""
-        await async_write_sequence(self.coordinator, writes_for_on(require_state(self.coordinator)))
+        # Decided under the sequence lock on a fresh read of both blocks, not on the state before the lock.
+        await async_write_sequence(
+            self.coordinator, lambda: writes_for_on(require_state(self.coordinator)), read_first=True
+        )

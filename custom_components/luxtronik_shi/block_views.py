@@ -30,13 +30,19 @@ fewer blocks, never more:
   error 816 "multiple SHI write sources" is active, which refuses writes without an error code) stops the
   sequence with an error and the remaining writes are not made.
 
+Block registers 10050/10051 are read back at once: the firmware's pending map (the deferred commit of about
+10 s, see ``const.DEFERRED_KEYS``) covers only 10005-10008. That is inferred from the decompilation of the
+pending-map entry (``docs/firmware-3.92.3-shi-analysis.md``), not measured live. If a live measurement ever
+shows a lag on the blocks, the read-back check would raise ``block_write_not_taken`` (the safe direction) and
+the blocks would need a delayed re-check like ``DEFERRED_KEYS``.
+
 Each register is written even when it already reads the wanted value: the cached value is up to one scan
 interval old, and a repeated write of the current value is harmless.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from homeassistant.exceptions import HomeAssistantError
 
@@ -110,15 +116,31 @@ def writes_for_on(state: tuple[int, int]) -> list[Write]:
     return [(DHW_BLOCK, 0)] if state == (1, 1) else []
 
 
-async def async_write_sequence(coordinator: LuxtronikCoordinator, writes: Sequence[Write]) -> None:
+async def async_write_sequence(
+    coordinator: LuxtronikCoordinator,
+    plan: Sequence[Write] | Callable[[], Sequence[Write]],
+    *,
+    read_first: bool = False,
+) -> None:
     """Write the registers one after the other through ``async_write`` and check each read-back.
 
     One sequence at a time across the select and the switch, so two commands cannot interleave their writes.
+    ``plan`` may be a callable: it is evaluated under the lock, after the optional ``read_first`` (a read of
+    both block registers from the heat pump), so a decision that depends on the current blocks (turning the
+    switch on) is made on what the previous sequence left, not on a state read before the lock.
+
+    Plain ``heating_block``/``dhw_block`` switches are not under this lock. A write to a block between the two
+    writes of a sequence can make the read-back of the next write differ; the sequence then raises
+    ``block_write_not_taken`` instead of writing on. That is intended: two writers of the same block at the
+    same time is a conflict to report, not one to resolve.
     """
-    for reg, raw in writes:
-        if raw not in BLOCK_VALUES:
-            raise ValueError(f"{reg.key}: {raw} is outside {BLOCK_VALUES}")
     async with coordinator.block_sequence_lock:
+        if read_first:
+            await coordinator.async_read_now((HEATING_BLOCK, DHW_BLOCK))
+        writes = plan() if callable(plan) else plan
+        for reg, raw in writes:
+            if raw not in BLOCK_VALUES:
+                raise ValueError(f"{reg.key}: {raw} is outside {BLOCK_VALUES}")
         for reg, raw in writes:
             await coordinator.async_write(reg, raw)
             actual = (coordinator.data or {}).get(reg.key)

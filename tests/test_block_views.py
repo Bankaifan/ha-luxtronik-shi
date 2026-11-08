@@ -409,6 +409,49 @@ async def test_commands_do_not_interleave(hass: HomeAssistant, shi: FakeSHI) -> 
     assert _blocks(shi) == ((1, 1) if writes == mode_then_off else (1, 0))  # the last command wins
 
 
+async def test_turn_on_decides_under_the_lock(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Both blocked; "heating only" and "on" are sent together. Serial outcomes are (0, 1) either way.
+
+    A decision taken before the lock would release the hot water block after the select had set it.
+    """
+    _start(shi, (1, 1))
+    entry = await _setup(hass, shi)
+    client = entry.runtime_data.client
+    real = client.write_register
+
+    async def slow_write(address: int, value: int) -> None:
+        await asyncio.sleep(0.01)
+        await real(address, value)
+
+    client.write_register = slow_write
+    shi.requests.clear()
+    select = _entity_id(hass, entry, "select", BLOCK_MODE_KEY)
+    switch = _entity_id(hass, entry, "switch", BLOCK_POWER_KEY)
+    await asyncio.gather(
+        hass.services.async_call(
+            "select", "select_option", {"entity_id": select, "option": BLOCK_MODE_HEATING}, blocking=True
+        ),
+        hass.services.async_call("switch", "turn_on", {"entity_id": switch}, blocking=True),
+    )
+    assert _blocks(shi) == (0, 1)
+
+
+async def test_turn_on_uses_the_live_blocks_not_the_last_poll(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Someone else released both blocks since the last poll: turning on must not write."""
+    _start(shi, (1, 1))
+    entry = await _setup(hass, shi)
+    shi.holding[HEATING], shi.holding[DHW] = 0, 1  # not polled yet; the cache still says (1, 1)
+    shi.requests.clear()
+    await _switch(hass, entry, "turn_on")
+    assert _block_writes(shi) == []
+    assert _blocks(shi) == (0, 1)
+    # and the other way round: both blocked now, cache says nothing is blocked
+    await _poll_settings(hass, entry)
+    shi.holding[HEATING], shi.holding[DHW] = 1, 1
+    await _switch(hass, entry, "turn_on")
+    assert _block_writes(shi) == [(DHW, 0)]
+
+
 # ------------------------------------------------------------------ registry, devices, enablement
 async def test_unique_ids_device_and_default_enablement(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = await _setup(hass, shi)
