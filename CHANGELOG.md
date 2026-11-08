@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.15.0] – 2026-11-08
+
 ### Added
 - **Block views for the Heat Pump Optimizer:** a select `block_mode` (*Operating mode (blocks)*: `heating_dhw`,
   `heating`, `dhw_hot_water`) and a switch `block_power` (*On/off (blocks)*), both views on `heating_block` and
@@ -580,7 +582,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.11.0...v0.12.0
