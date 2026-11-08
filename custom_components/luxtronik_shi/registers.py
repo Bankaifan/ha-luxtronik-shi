@@ -16,6 +16,9 @@ from typing import Literal
 
 RegKind = Literal["input", "holding", "discrete"]
 DType = Literal["uint16", "int16", "uint32"]
+# The SHI word for "not available" (const.SHI_NOT_AVAILABLE; this module has no package imports, tools load it
+# standalone, tests pin that both agree).
+_NOT_AVAILABLE_WORD = 0x7FFF
 Platform = Literal["sensor", "binary_sensor", "switch", "number", "select", "internal"]
 
 
@@ -72,6 +75,19 @@ def decode(reg: Register, words: list[int]) -> float | int:
     if reg.scale == 1.0:
         return raw
     return round(raw * reg.scale, 3)
+
+
+def usable(key: str, value: float | None) -> float | None:
+    """The decoded value of a 16 bit register, ``None`` if missing or the "not available" marker 0x7FFF.
+
+    Values arrive scaled, so the marker of a scaled register is ``0x7FFF * scale`` (3276.7 for 0.1 K).
+    """
+    if value is None:
+        return None
+    reg = BY_KEY[key]
+    if reg.dtype != "uint32" and value == (_NOT_AVAILABLE_WORD if reg.scale == 1.0 else round(_NOT_AVAILABLE_WORD * reg.scale, 3)):
+        return None
+    return value
 
 
 def encode_int16(value: float, scale: float) -> int:

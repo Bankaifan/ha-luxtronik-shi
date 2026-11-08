@@ -22,6 +22,7 @@ from .registers import (
     WindowedCop,
     firmware_version,
     overall_cop,
+    usable,
 )
 
 # Read-only platform: the coordinator delivers the values, nothing to limit.
@@ -125,7 +126,10 @@ class LuxtronikDifferenceSensor(CoordinatorEntity[LuxtronikCoordinator], SensorE
 
     def _operands(self) -> tuple[float | None, float | None]:
         data = self.coordinator.data or {}
-        return data.get(self._sensor.minuend), data.get(self._sensor.subtrahend)
+        return (
+            usable(self._sensor.minuend, data.get(self._sensor.minuend)),
+            usable(self._sensor.subtrahend, data.get(self._sensor.subtrahend)),
+        )
 
     @property
     def available(self) -> bool:

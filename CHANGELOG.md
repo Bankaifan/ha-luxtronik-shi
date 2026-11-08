@@ -23,6 +23,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
   - `heating_running` (Heating device) and `dhw_running` (Hot water device): on while the status is `running`.
   - `power_limit_configured`: on when `cfg_power_limit_mode` is `soft` or `hard`. It reports the configured mode,
     not whether the limit currently reduces the power (the controller's reaction is open).
+  A source reading `0x7FFF` ("not available"), a missing value or, for status flags, a value outside the
+  known options makes the calculated entity unavailable, never a guess.
   The sources of these entities are polled even if their own entities are disabled (like the COP sources);
   all of them are enabled by default, so a default installation reads no additional register. Added to the
   generated dashboards and `docs/entities.md`.

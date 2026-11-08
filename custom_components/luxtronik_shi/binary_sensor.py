@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import DERIVED_FLAGS, DerivedFlag, Register
+from .registers import BY_KEY, DERIVED_FLAGS, DerivedFlag, Register, usable
 
 # Read-only platform: the coordinator delivers the values, nothing to limit.
 PARALLEL_UPDATES = 0
@@ -107,12 +107,19 @@ class LuxtronikDerivedFlag(CoordinatorEntity[LuxtronikCoordinator], BinarySensor
             self._attr_device_class = BinarySensorDeviceClass(flag.device_class)
 
     @property
-    def _source(self) -> int | float | None:
-        return (self.coordinator.data or {}).get(self._flag.source)
+    def _source(self) -> int | None:
+        """The source value, ``None`` if missing, 0x7FFF ("not available") or outside the option tuple."""
+        value = usable(self._flag.source, (self.coordinator.data or {}).get(self._flag.source))
+        if value is None:
+            return None
+        options = BY_KEY[self._flag.source].options
+        if options is not None and not 0 <= value < len(options):
+            return None
+        return int(value)
 
     @property
     def available(self) -> bool:
-        """Unavailable while the source register has no value."""
+        """Unavailable while the source register has no usable value."""
         return super().available and self._source is not None
 
     @property
@@ -123,7 +130,7 @@ class LuxtronikDerivedFlag(CoordinatorEntity[LuxtronikCoordinator], BinarySensor
             return None
         if self._flag.on_values is None:
             return value != 0
-        return int(value) in self._flag.on_values
+        return value in self._flag.on_values
 
 
 class LuxtronikOnline(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEntity):

@@ -61,6 +61,53 @@ async def test_the_poll_reads_no_register_beyond_the_registers(hass: HomeAssista
     assert polled <= set(BY_KEY)
 
 
+# ------------------------------------------------------------------ 0x7FFF ("not available") and out-of-range values
+
+def test_not_available_word_agrees_with_the_constant() -> None:
+    from custom_components.luxtronik_shi import const, registers
+
+    assert registers._NOT_AVAILABLE_WORD == const.SHI_NOT_AVAILABLE
+
+
+# (platform, derived key, source key, value as the coordinator delivers it for the raw word 0x7FFF)
+_NOT_AVAILABLE = [
+    ("sensor", "flow_return_difference", "flow", round(0x7FFF * 0.1, 3)),
+    ("sensor", "flow_return_difference", "return", round(0x7FFF * 0.1, 3)),
+    ("binary_sensor", "fault", "error_number", 0x7FFF),
+    ("binary_sensor", "defrost", "operating_mode", 0x7FFF),
+    ("binary_sensor", "heating_running", "heating_status", 0x7FFF),
+    ("binary_sensor", "dhw_running", "hot_water_status", 0x7FFF),
+    ("binary_sensor", "power_limit_configured", "cfg_power_limit_mode", 0x7FFF),
+]
+
+
+@pytest.mark.parametrize(("platform", "key", "source", "marker"), _NOT_AVAILABLE)
+async def test_not_available_marker_is_unavailable_never_a_guess(
+    hass: HomeAssistant, shi: FakeSHI, platform: str, key: str, source: str, marker: float
+) -> None:
+    entry = await _setup(hass, shi)
+    await _push(hass, entry, **{source: marker})
+    assert _state(hass, entry, platform, key) == "unavailable"
+
+
+@pytest.mark.parametrize(
+    ("key", "source"),
+    [
+        ("defrost", "operating_mode"),
+        ("heating_running", "heating_status"),
+        ("dhw_running", "hot_water_status"),
+        ("power_limit_configured", "cfg_power_limit_mode"),
+    ],
+)
+async def test_enum_flag_outside_the_option_tuple_is_unavailable(
+    hass: HomeAssistant, shi: FakeSHI, key: str, source: str
+) -> None:
+    entry = await _setup(hass, shi)
+    for value in (len(BY_KEY[source].options), 200, -1):
+        await _push(hass, entry, **{source: value})
+        assert _state(hass, entry, "binary_sensor", key) == "unavailable", value
+
+
 # ------------------------------------------------------------------ flow-return difference
 
 
