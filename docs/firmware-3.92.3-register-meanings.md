@@ -7,6 +7,11 @@ measurements on the reference installation (alpha innotec LWDV 91-1/3): the disa
 (port 8889), 2026-11-06 19:40 to 2026-11-07 17:20, about 25 transitions per register. Nothing was written.
 Grades: **proven** = read directly from the firmware, **inferred** = reasoned (reasoning given), **unknown**.
 
+> **Update 2026-11-08:** the [full analysis of V3.92.3](firmware-3.92.3-shi-full-analysis.md) (German:
+> [firmware-3.92.3-shi-full-analysis.de.md](firmware-3.92.3-shi-full-analysis.de.md); register table as
+> [CSV](firmware-3.92.3-registers.csv)) names every SHI register. It uses the grades proven / likely / open. Where it
+> refines a statement of this note, an *Update* line says so; no statement was removed.
+
 ## How the firmware names a SHI input (proven)
 
 Each SHI input is bound to an item `t<table>/0x<id>` of the controller's datapoint table (see
@@ -30,6 +35,14 @@ The variable names are exported symbols of the binary and match the `ID_WEB_*` n
 | 10360 | t0/0x2a | `EVUin` | digital input EVU (utility lock) (0/1) | none | proven name; measured: constant 1 while the native `evu_unlocked` is on, so 1 = released (inferred from that single state) |
 | 10361 | t0/0x2b | `EVU2in` | digital input EVU 2 (0/1) | none | proven name; measured: constant 0, native `evu2` off |
 
+*Update 2026-11-08 (10113):* the full analysis reads the firmware text of item t0/0x67 as "TVL calc max" (calculated
+maximum flow) and says the earlier reading "flow target heating (calculated)" is to be replaced by that text. It names
+the same function `0x0019ac68` as the formula above and its live values (25.7 degC with return target 20.0) fit as
+well. No measurement decides between "setpoint" and "upper limit", so both readings are kept here.
+
+*Update 2026-11-08 (VBO):* the firmware text of 10350 reads "Ventil.-BOSUP / VBO"; the long form of FP is still not
+stated.
+
 The long forms of the abbreviations VBO and FP are not given by the firmware; only HUP, BUP, ZIP (heating,
 DHW and circulation pump by the Luxtronik naming convention) are expanded in the display names, inferred.
 The correction against the first version of this note: 10350 is `VBOout`, not the additional circulation pump
@@ -46,6 +59,10 @@ The correction against the first version of this note: 10350 is `VBOout`, not th
 | 10412 (u32) | t1/0x35b | `Zaehler_BetrZeitSW` | operating hours counter "SW" (the name suggests the pool) | 7200 s | name proven; meaning of "SW" and of the divisor 7200 inferred |
 | 10416 (u32) | t1/0x372 | `BSTD_Solar` | operating hours solar | 3600 s | proven |
 | 10502 | t0/0x3a | `ExtraDHW::timer` | timer of the extra hot water function | 60 (seconds to minutes) | proven |
+
+*Update 2026-11-08 (10412):* "SW" is the pool (firmware text "Schwimmbad", visibility `ID_Visi_Bst_BStdSW`). The full
+analysis reads the divisor 7200 as a deviation of the SHI code (the firmware display uses 3600), so the wire value is
+likely hours/2; not measurable without a pool. The "possibly 2-hour units" guess is superseded by this.
 
 These are not promoted in `registers.py`: `raw_10411`, `raw_10413` and `raw_10417` exist as separate 16 bit
 entities (the low words of the 32 bit counters), the keys must not change, and no measurement of them exists.
