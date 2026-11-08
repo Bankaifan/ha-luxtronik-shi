@@ -281,7 +281,8 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
     overview = [
         section("h_status", "mdi:heat-pump", [
             tile("online"), tile("operating_mode"), tile("heating_status"), tile("hot_water_status"),
-            tile("cooling_status"), tile("pool_status"), tile("error_number"),
+            tile("cooling_status"), tile("pool_status"), tile("error_number"), tile("fault"),
+            tile("heating_running"), tile("dhw_running"), tile("defrost"),
             alert("operating_mode", "evu_lock", t["alert_evu"]),
             alert("heating_block", "on", t["alert_heating"]),
             alert("dhw_block", "on", t["alert_dhw"]),
@@ -290,7 +291,7 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
             tile("pump_heating"), tile("pump_hot_water"), tile("pump_circulation"),
         ]),
         section("h_temps", "mdi:thermometer", [
-            tile("outside"), tile("flow"), tile("return"), tile("dhw"),
+            tile("outside"), tile("flow"), tile("return"), tile("flow_return_difference"), tile("dhw"),
             history(["flow", "return", "outside", "dhw"]),
         ]),
         section("h_power", "mdi:flash", [
@@ -318,7 +319,7 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
             stats_graph(["energy_th_heating", "energy_th_dhw", "energy_th_cooling", "energy_th_pool"]),
         ]),
         section("h_cop", "mdi:speedometer", [
-            tile("cop"), tile("cop_heating"), tile("cop_dhw"), markdown(t["t_cop"]),
+            tile("cop"), tile("cop_heating"), tile("cop_dhw"), tile("cop_total"), markdown(t["t_cop"]),
         ]),
         section("h_power", "mdi:flash", [
             history(["electric_power", "compressor_thermal_power"], 48), markdown(t["t_energy"]),

@@ -18,11 +18,11 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 
 | Plattform | Anzahl | Was es ist |
 |---|---|---|
-| `sensor` | 79 | Messwerte, Zähler, berechnete Werte, Aufzählungen |
-| `binary_sensor` | 31 | Statusbits, Ausstattungs-Flags, Verbindung |
-| `switch` | 7 | Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register), Ein/Aus-Sicht auf die Sperren |
+| `sensor` | 81 | Messwerte, Zähler, berechnete Werte, Aufzählungen |
+| `binary_sensor` | 36 | Statusbits, Ausstattungs-Flags, Verbindung |
+| `switch` | 6 | Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register) |
 | `number` | 19 | schreibbare Sollwerte, Anhebungen, Leistungsbegrenzung |
-| `select` | 17 | schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung, Betriebsart-Sicht auf die Sperren |
+| `select` | 16 | schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung |
 | `climate` | 1 | Thermostat-Sicht auf den Heizkreis |
 | `water_heater` | 1 | Water-Heater-Sicht auf das Warmwasser |
 
@@ -50,7 +50,7 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 
 ## 1. Temperaturen des Heizkreises
 
-**Hintergrund.** Eine Wärmepumpe erwärmt das Wasser, das durch die Heizungsanlage läuft (der *Vorlauf*), und bekommt es abgekühlt zurück (der *Rücklauf*). Der Unterschied beider Temperaturen ist die *Spreizung*. Die Integration hat dafür keine eigene Entität; Vorlauf minus Rücklauf in einem Template-Sensor liefert sie. Die Luxtronik-Regelung regelt auf die **Rücklauftemperatur**: Der Heizungs-Sollwert der SHI wirkt auf sie (siehe [Heizen](#8-heizkreis-steuerung)). Ihr normaler Sollwert kommt aus der *Heizkurve*. Sie ordnet jeder Außentemperatur eine Wassertemperatur zu: Die *Steilheit* sagt, wie stark die Wassertemperatur der Außentemperatur folgt, das *Niveau* (oder die Anhebung) verschiebt die ganze Kurve nach oben oder unten. Oberhalb der *Heizgrenze* (einer Außentemperatur) schaltet ein Heizkurvenregler die Heizung ab. Je niedriger die Wassertemperatur, die eine Wärmepumpe liefern muss, desto effizienter arbeitet sie: Der deutsche Wikipedia-Artikel zur Wärmepumpe nennt als Beispiel eine Leistungszahl, die von 4,8 (B0/W35) auf 3,6 (B0/W50) fällt.
+**Hintergrund.** Eine Wärmepumpe erwärmt das Wasser, das durch die Heizungsanlage läuft (der *Vorlauf*), und bekommt es abgekühlt zurück (der *Rücklauf*). Der Unterschied beider Temperaturen ist die *Spreizung*. Die Regelung hat dafür kein Register; die Integration berechnet sie als `flow_return_difference` (Vorlauf minus Rücklauf). Die Luxtronik-Regelung regelt auf die **Rücklauftemperatur**: Der Heizungs-Sollwert der SHI wirkt auf sie (siehe [Heizen](#8-heizkreis-steuerung)). Ihr normaler Sollwert kommt aus der *Heizkurve*. Sie ordnet jeder Außentemperatur eine Wassertemperatur zu: Die *Steilheit* sagt, wie stark die Wassertemperatur der Außentemperatur folgt, das *Niveau* (oder die Anhebung) verschiebt die ganze Kurve nach oben oder unten. Oberhalb der *Heizgrenze* (einer Außentemperatur) schaltet ein Heizkurvenregler die Heizung ab. Je niedriger die Wassertemperatur, die eine Wärmepumpe liefern muss, desto effizienter arbeitet sie: Der deutsche Wikipedia-Artikel zur Wärmepumpe nennt als Beispiel eine Leistungszahl, die von 4,8 (B0/W35) auf 3,6 (B0/W50) fällt.
 
 **Fallstrick: Rücklauf und Rücklauf-Soll.** Die veröffentlichte Registerliste nennt 10100 *Rücklauf-Soll* und 10101 *Rücklauf-Ist*. An der Referenzanlage gemessen ist es umgekehrt, und die Entitäten folgen der Messung (`return` = 10100 folgt dem Wasser, `return_target` = 10101 ist der Sollwert). python-luxtronik sieht es genauso. Quellen: PL, M, WEB ([Heizkurve](#quellen), [Wärmepumpe](#quellen)).
 
@@ -69,6 +69,7 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 | Temperatur: Wärmequelle Eintritt | `heat_source_input`<br>sensor · input 10110 · Gerät Wärmepumpe | °C | - | Temperatur der Wärmequelle am Eintritt der Wärmepumpe. Was das bei einem Luft-Wasser-Gerät bedeutet, ist nicht dokumentiert (ungeklärt). War bis 0.8.2 `raw_10110`. *(PL)*<br>*gelesen alle 2 Abfragen* |
 | Temperatur: Vorlauf Maximum | `max_flow_temp`<br>sensor · input 10112 · Gerät Wärmepumpe | °C | - | Maximale Vorlauftemperatur laut Regelung. python-luxtronik nennt keine Einheit; die Integration liest sie als °C mit einer Nachkommastelle. Standardmäßig deaktiviert. War bis 0.8.2 `raw_10112`. *(PL, INT)*<br>*standardmäßig deaktiviert; Kategorie Diagnose; gelesen alle 4 Abfragen* |
 | Temperatur: Wärmequelle Austritt | `heat_source_out`<br>sensor · input 10111 · Gerät Wärmepumpe | °C | - | Temperatur der Wärmequelle am Austritt der Wärmepumpe. Derselbe Vorbehalt wie beim Eintritt. Fehlt bei Einträgen, die vor 0.3.0 angelegt wurden, bis die Ausstattung einmal gespeichert wird. *(PL)*<br>*gelesen alle 2 Abfragen* |
+| Temperatur: Differenz Vorlauf/Rücklauf | `flow_return_difference`<br>sensor · berechnet, kein Register · Gerät Wärmepumpe | K | Vorlauf minus Rücklauf (K), kann negativ sein | Vorlauftemperatur minus Rücklauftemperatur, in K. Die Regelung hat kein Spreizungs-Register, daher wird der Wert aus `flow` und `return` berechnet, die ohnehin gelesen werden (keine zusätzliche Abfrage). Nicht verfügbar, solange einer der beiden Werte nicht verfügbar ist. Er kann beim Abtauen oder im Stillstand **negativ oder nahe null** sein und wird nicht begrenzt. Beide Quellen haben 0,1 K Auflösung und werden nicht im selben Augenblick abgetastet, kurze Sprünge sind daher Rauschen. Einheit K ohne Temperaturklasse, damit Home Assistant sie nie wie eine absolute Temperatur umrechnet. *(INT)* |
 
 ## 2. Warmwassertemperaturen
 
@@ -133,6 +134,7 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 | Energie: Wärme | `energy_th_pool`<br>sensor · input 10328 · Gerät Pool | kWh | - | Für die Pool-Heizung erzeugte Wärmeenergie. Braucht *Pool* in der Ausstattung. Zähler in Schritten von 0,1 kWh über zwei Register (32 Bit). *(PL)*<br>*braucht Pool in der Ausstattung; gelesen alle 2 Abfragen* |
 | COP gesamt | `cop_heating`<br>sensor · berechnet, kein Register · Gerät Heizung | - | 0 … 12 | Gesamt-COP des Heizens: `energy_th_heating` geteilt durch `energy_el_heating`. Lebensdauer der Zähler, **keine** JAZ. Wird als *unbekannt* gezeigt bei zu wenig elektrischer Energie, null oder negativem Ergebnis, unplausiblem Ergebnis oder wenn ein Zähler seit der letzten Messung rückwärts lief (Reset). *(INT)* |
 | COP gesamt | `cop_dhw`<br>sensor · berechnet, kein Register · Gerät Warmwasser | - | 0 … 12 | Gesamt-COP des Warmwassers: `energy_th_dhw` geteilt durch `energy_el_dhw`. Dieselben Regeln wie beim Heizen. *(INT)* |
+| COP gesamt | `cop_total`<br>sensor · berechnet, kein Register · Gerät Wärmepumpe | - | 0 … 12 | Gesamt-COP aller Betriebsarten: `energy_th_total` geteilt durch `energy_el_total`. Lebensdauer der Zähler, **keine** JAZ, und etwas anderes als der 10-Minuten-`cop`: Dieser ist das Energieverhältnis eines mitlaufenden Fensters der Leistungssensoren und reagiert binnen Minuten, dieser hier bewegt sich langsam und zeigt nur den langfristigen Durchschnitt. Dieselben Regeln wie beim Heizen (*unbekannt* bei zu wenig elektrischer Energie, unplausiblem Ergebnis oder wenn ein Zähler rückwärts lief). `energy_th_total` braucht Firmware 3.92.0 oder neuer. *(INT)* |
 
 ## 6. Status und Betriebszustand
 
@@ -163,6 +165,10 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 | Status: VD2 läuft | `heatpump_vd2_status`<br>binary_sensor · heat_generator_state, bit 1 · Gerät Wärmepumpe | - | an / aus | Verdichter 2 (VD2) läuft, mit dem Namen aus python-luxtronik. Bit 1, dasselbe wie `compressor_2`. *(PL)*<br>*standardmäßig deaktiviert* |
 | Status: ZWE2 aktiv | `heatpump_zwe2_status`<br>binary_sensor · heat_generator_state, bit 3 · Gerät Wärmepumpe | - | an / aus | ZWE2 ist aktiv, mit dem Namen aus python-luxtronik. Bit 3, dasselbe wie `aux_heater_2`. *(PL)*<br>*standardmäßig deaktiviert* |
 | Status: ZWE3 aktiv | `heatpump_zwe3_status`<br>binary_sensor · heat_generator_state, bit 4 · Gerät Wärmepumpe | - | an / aus | ZWE3 ist aktiv. Bit 4. Braucht Firmware 3.90.1 oder neuer. *(PL)*<br>*standardmäßig deaktiviert* |
+| Status: Störung | `fault`<br>binary_sensor · berechnet, kein Register · Gerät Wärmepumpe | - | an / aus | An, wenn der Fehlercode `error_number` nicht 0 ist (Geräteklasse Problem). Aus diesem Register berechnet, keine zusätzliche Abfrage; nicht verfügbar, solange es keinen Wert hat. Ob ein Code eine echte Störung, eine Warnung oder eine Sperre ist, wird nicht unterschieden: Jeder Code außer 0 schaltet ihn ein (die Codeliste steht bei `error_number`). *(INT)* |
+| Status: Abtauung läuft | `defrost`<br>binary_sensor · berechnet, kein Register · Gerät Wärmepumpe | - | an / aus | An, solange `operating_mode` den Wert `defrost` hat. Berechnet, keine zusätzliche Abfrage. Er folgt der Betriebsart der Regelung, nicht einem Ausgang: Ob er genau gleichzeitig mit dem Abtauventil-Ausgang der nativen Luxtronik-Schnittstelle schaltet, wurde nicht gemessen (ungeklärt). *(INT)* |
+| Läuft | `heating_running`<br>binary_sensor · berechnet, kein Register · Gerät Heizung | - | an / aus | An, solange `heating_status` den Wert `running` (3) hat. Berechnet, keine zusätzliche Abfrage; nicht verfügbar, solange der Status keinen Wert hat. `requested` (Anforderung, die noch nicht bedient wird) ist aus. *(INT)* |
+| Läuft | `dhw_running`<br>binary_sensor · berechnet, kein Register · Gerät Warmwasser | - | an / aus | An, solange `hot_water_status` den Wert `running` (3) hat. Berechnet, keine zusätzliche Abfrage; nicht verfügbar, solange der Status keinen Wert hat. `requested` ist aus. *(INT)* |
 | Status: Verbindung | `online`<br>binary_sensor · - · Gerät Wärmepumpe | - | an / aus | An, solange die letzte Abfrage der Wärmepumpe erfolgreich war. Anders als die anderen Entitäten wird sie nie nicht verfügbar: Der Zustand selbst sagt, ob die SHI antwortet. Nach 10 Minuten fehlgeschlagener Abfragen entsteht ein Reparaturhinweis. *(INT)*<br>*Kategorie Diagnose* |
 
 ## 7. Sperren (Schalter)
@@ -175,8 +181,6 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 | Sperren | `dhw_block`<br>switch · holding 10051 · Gerät Warmwasser | - | 0 = aus, 1 = an | Sperrt die Warmwasserbereitung. Solange sie an ist, lässt sich die Warmwasser-Betriebsart nicht setzen (Messung des Eigentümers), und die Wiederherstellung der Warmwasser-Gruppe wartet. Einer der Schlüssel, auf die der Heat Pump Optimizer angewiesen ist. *(PL, M)* |
 | Sperren | `cooling_block`<br>switch · holding 10052 · Gerät Kühlung | - | 0 = aus, 1 = an | Sperrt passives und aktives Kühlen. Braucht *Kühlung* in der Ausstattung. Häufiges Schalten kann Wärmepumpe und Hydraulik belasten. *(PL)*<br>*braucht Kühlung in der Ausstattung* |
 | Sperren | `pool_block`<br>switch · holding 10053 · Gerät Pool | - | 0 = aus, 1 = an | Sperrt die Pool-Heizung. Braucht *Pool* in der Ausstattung. Häufiges Schalten kann Wärmepumpe und Hydraulik belasten. *(PL)*<br>*braucht Pool in der Ausstattung* |
-| Betriebsart (Sperren) | `block_mode`<br>select · Sicht auf mehrere Register · Gerät Wärmepumpe | - | `heating_dhw`: Heizen und Warmwasser<br>`heating`: Nur Heizen<br>`dhw_hot_water`: Nur Warmwasser | Betriebsart als Sicht auf die beiden Sperren `heating_block` und `dhw_block`, für den Heat Pump Optimizer (dessen Option *Wärmepumpen-Modus* auf diese Entität zeigen lassen; sie ersetzt ein selbst geschriebenes Template-Select). Optionen: `heating_dhw` = keine Sperre, `heating` = Warmwasser gesperrt, `dhw_hot_water` = Heizen gesperrt. **`dhw_hot_water` wird auch angezeigt, wenn beide Sperren gesetzt sind**: Drei Optionen können diesen Zustand nicht ausdrücken, das echte Aus zeigt `block_power`. Eine Auswahl schreibt beide Sperren, erst Freigaben, dann Sperren; ein Fehler zwischen den beiden Schreibzugriffen lässt also weniger Sperren stehen, nie mehr. Übernimmt die Wärmepumpe einen Wert nicht (Rücklesen weicht ab), bricht die Folge mit einer Fehlermeldung ab. Die Optionsschlüssel ergeben gefaltet dieselben Buchstaben wie die Beschriftungen `Heating + DHW`, `Heating` und `DHW (Hot Water)`, die der Optimizer kennt. Kein zusätzliches Abfragen. Wird nach einem Reset nicht wiederhergestellt, wie die Sperren. Nur bei neuen Installationen standardmäßig aktiv; bei einer bestehenden Installation in den Entitäts-Einstellungen aktivieren. *(INT)* |
-| Ein/Aus (Sperren) | `block_power`<br>switch · Sicht auf mehrere Register · Gerät Wärmepumpe | - | 0 = aus, 1 = an | Ein/Aus als Sicht auf die beiden Sperren: **aus genau dann, wenn `heating_block` und `dhw_block` beide gesetzt sind**. Ausschalten setzt beide (erst Warmwasser, damit bei einem Fehler des zweiten Schreibzugriffs weiter geheizt wird). Einschalten gibt nur die Warmwasser-Sperre frei, und nur solange beide gesetzt sind; die Heizungs-Sperre bleibt, wie das Select `block_mode` sie hinterlassen hat, das Select zeigt nach dem Einschalten also meist *Nur Warmwasser*, bis der Optimizer eine Betriebsart setzt. In jedem anderen Zustand tut Einschalten nichts. Ersetzt einen selbst geschriebenen Template-Schalter. Kein zusätzliches Abfragen; wird nach einem Reset nicht wiederhergestellt. Nur bei neuen Installationen standardmäßig aktiv. *(INT)* |
 
 ## 8. Heizkreis-Steuerung
 
@@ -266,6 +270,7 @@ Quellen: PL, FW, M, INT.
 |---|---|---|---|---|
 | Leistungsbegrenzung: Modus | `cfg_power_limit_mode`<br>select · holding 10040 · Gerät Wärmepumpe | - | 0 = `none`: Keine Begrenzung<br>1 = `soft`: Weiche Begrenzung<br>2 = `hard`: Harte Begrenzung | Modus der Leistungsbegrenzung: keine Begrenzung (Normalbetrieb), weiche Begrenzung (empfohlen bei PV-Überschuss), harte Begrenzung (nur für §14a EnWG, kann den Komfort mindern). Braucht einen passenden Wert. *(PL)*<br>*Kategorie Konfiguration; gelesen alle 2 Abfragen* |
 | Leistungsbegrenzung: Wert | `cfg_power_limit`<br>number · holding 10041 · Gerät Wärmepumpe | kW | 0 … 30 kW<br>Schritt 0,1 | Höchste zulässige elektrische Leistung der Wärmepumpe in kW, wirksam gemäß Modus. Wird nach einem Reset nicht wiederhergestellt. *(PL)*<br>*Kategorie Konfiguration; gelesen alle 2 Abfragen* |
+| Leistungsbegrenzung: Modus eingestellt | `power_limit_configured`<br>binary_sensor · berechnet, kein Register · Gerät Wärmepumpe | - | an / aus | An, wenn `cfg_power_limit_mode` auf `soft` oder `hard` steht, aus bei `none`. Das meldet den **eingestellten Modus**, nicht, ob die Begrenzung die Leistung gerade tatsächlich senkt: Wie die Regelung auf die Begrenzung reagiert, ist nicht dokumentiert (ungeklärt). Berechnet, keine zusätzliche Abfrage; nicht verfügbar, solange der Modus keinen Wert hat. *(INT)* |
 
 ## 13. Gesamt-Heizen
 
@@ -354,8 +359,6 @@ Diese Schlüssel wurden umbenannt. Der alte Schlüssel bleibt im Entitäten-Vert
 |---|---|---|
 | `aux_heater_1` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `aux_heater_2` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
-| `block_mode` | select | [7. Sperren (Schalter)](#7-sperren-schalter) |
-| `block_power` | switch | [7. Sperren (Schalter)](#7-sperren-schalter) |
 | `buffer_type` | sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
 | `cap_cooling` | binary_sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
 | `cap_heating` | binary_sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
@@ -415,11 +418,14 @@ Diese Schlüssel wurden umbenannt. Der alte Schlüssel bleibt im Entitäten-Vert
 | `cop` | sensor | [4. Leistung und berechnete Leistungszahl](#4-leistung-und-berechnete-leistungszahl) |
 | `cop_dhw` | sensor | [5. Energiezähler, Betriebsstunden und Gesamt-Leistungszahl](#5-energiezähler-betriebsstunden-und-gesamt-leistungszahl) |
 | `cop_heating` | sensor | [5. Energiezähler, Betriebsstunden und Gesamt-Leistungszahl](#5-energiezähler-betriebsstunden-und-gesamt-leistungszahl) |
+| `cop_total` | sensor | [5. Energiezähler, Betriebsstunden und Gesamt-Leistungszahl](#5-energiezähler-betriebsstunden-und-gesamt-leistungszahl) |
+| `defrost` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `dhw` | sensor | [2. Warmwassertemperaturen](#2-warmwassertemperaturen) |
 | `dhw_block` | switch | [7. Sperren (Schalter)](#7-sperren-schalter) |
 | `dhw_limit` | sensor | [2. Warmwassertemperaturen](#2-warmwassertemperaturen) |
 | `dhw_max` | sensor | [2. Warmwassertemperaturen](#2-warmwassertemperaturen) |
 | `dhw_min` | sensor | [2. Warmwassertemperaturen](#2-warmwassertemperaturen) |
+| `dhw_running` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `dhw_target` | sensor | [2. Warmwassertemperaturen](#2-warmwassertemperaturen) |
 | `electric_power` | sensor | [4. Leistung und berechnete Leistungszahl](#4-leistung-und-berechnete-leistungszahl) |
 | `electric_power_min` | sensor | [4. Leistung und berechnete Leistungszahl](#4-leistung-und-berechnete-leistungszahl) |
@@ -435,13 +441,16 @@ Diese Schlüssel wurden umbenannt. Der alte Schlüssel bleibt im Entitäten-Vert
 | `energy_th_total` | sensor | [5. Energiezähler, Betriebsstunden und Gesamt-Leistungszahl](#5-energiezähler-betriebsstunden-und-gesamt-leistungszahl) |
 | `error_number` | sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `extra_dhw` | switch | [9. Warmwasser-Steuerung](#9-warmwasser-steuerung) |
+| `fault` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `firmware_version` | sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
 | `flow` | sensor | [1. Temperaturen des Heizkreises](#1-temperaturen-des-heizkreises) |
+| `flow_return_difference` | sensor | [1. Temperaturen des Heizkreises](#1-temperaturen-des-heizkreises) |
 | `heat_generator_state` | sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `heat_source_input` | sensor | [1. Temperaturen des Heizkreises](#1-temperaturen-des-heizkreises) |
 | `heat_source_out` | sensor | [1. Temperaturen des Heizkreises](#1-temperaturen-des-heizkreises) |
 | `heating_block` | switch | [7. Sperren (Schalter)](#7-sperren-schalter) |
 | `heating_limit` | sensor | [1. Temperaturen des Heizkreises](#1-temperaturen-des-heizkreises) |
+| `heating_running` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `heating_status` | sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `heatpump_vd2_status` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `heatpump_zwe2_status` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
@@ -477,6 +486,7 @@ Diese Schlüssel wurden umbenannt. Der alte Schlüssel bleibt im Entitäten-Vert
 | `pool_block` | switch | [7. Sperren (Schalter)](#7-sperren-schalter) |
 | `pool_configured` | binary_sensor | [11. Kühlen und Pool](#11-kühlen-und-pool) |
 | `pool_status` | sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
+| `power_limit_configured` | binary_sensor | [12. Leistungsbegrenzung](#12-leistungsbegrenzung) |
 | `pump_circulation` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `pump_heating` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `pump_hot_water` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |

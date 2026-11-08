@@ -47,7 +47,12 @@ def build() -> dict:
         sensor[key] = {"default": "mdi:information-outline", "state": dict(_STATUS_ICONS)}
     for derived in registers.DERIVED_SENSORS:
         sensor[derived.key] = {"default": "mdi:gauge"}
-    binary_sensor: dict[str, dict] = {}
+    for difference in registers.DIFFERENCE_SENSORS:
+        sensor[difference.key] = {"default": "mdi:thermometer-lines"}
+    binary_sensor: dict[str, dict] = {
+        "defrost": {"default": "mdi:snowflake-melt"},
+        "power_limit_configured": {"default": "mdi:speedometer-slow"},
+    }
     for key in ("pump_heating", "pump_hot_water", "pump_circulation"):
         binary_sensor[key] = {"default": "mdi:pump-off", "state": {"on": "mdi:pump", "off": "mdi:pump-off"}}
     for key in ("output_vbo", "output_fp1", "output_fp2", "output_fp3"):

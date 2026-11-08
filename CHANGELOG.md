@@ -11,6 +11,22 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Added
+- **Calculated entities from registers that are read anyway (no extra polling, no new register facts).** New
+  keys, existing keys are unchanged:
+  - `flow_return_difference`: flow minus return in K (the controller has no spread register); unavailable when
+    either temperature is, negative values are not clamped.
+  - `cop_total`: overall COP of all modes (`energy_th_total` / `energy_el_total`), same rules as `cop_heating`
+    and `cop_dhw`; a long-term average, different from the 10-minute `cop`.
+  - `fault` (problem): on when `error_number` is not 0. Warnings and lockouts are not told apart from faults.
+  - `defrost`: on while `operating_mode` is `defrost`.
+  - `heating_running` (Heating device) and `dhw_running` (Hot water device): on while the status is `running`.
+  - `power_limit_configured`: on when `cfg_power_limit_mode` is `soft` or `hard`. It reports the configured mode,
+    not whether the limit currently reduces the power (the controller's reaction is open).
+  The sources of these entities are polled even if their own entities are disabled (like the COP sources);
+  all of them are enabled by default, so a default installation reads no additional register. Added to the
+  generated dashboards and `docs/entities.md`.
+
 ## [0.15.0] – 2026-11-08
 
 ### Added

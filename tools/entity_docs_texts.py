@@ -79,8 +79,8 @@ SECTIONS: tuple[Section, ...] = (
         "Temperaturen des Heizkreises",
         "**Background.** A heat pump warms the water that runs through the heating system (the *flow*, German "
         "*Vorlauf*) and gets it back cooler (the *return*, *Rücklauf*). The difference between the two is the "
-        "*spread* (*Spreizung*). The integration has no spread entity; flow minus return in a template sensor "
-        "gives it. The Luxtronik controller regulates on the **return** temperature: the heating setpoint of the "
+        "*spread* (*Spreizung*). The controller has no spread register; the integration calculates it as "
+        "`flow_return_difference` (flow minus return). The Luxtronik controller regulates on the **return** temperature: the heating setpoint of the "
         "SHI acts on it (see [Heating](#8-heating-circuit-control)). Its normal target comes from the *heating "
         "curve* (*Heizkurve*), which assigns a water temperature to every outside temperature: the *slope* says "
         "how strongly the water temperature follows the outside temperature, the *level* (or offset) shifts the "
@@ -94,8 +94,8 @@ SECTIONS: tuple[Section, ...] = (
         "target). python-luxtronik agrees. Sources: PL, M, WEB ([Heizkurve](#sources), [Wärmepumpe](#sources)).",
         "**Hintergrund.** Eine Wärmepumpe erwärmt das Wasser, das durch die Heizungsanlage läuft (der *Vorlauf*), "
         "und bekommt es abgekühlt zurück (der *Rücklauf*). Der Unterschied beider Temperaturen ist die "
-        "*Spreizung*. Die Integration hat dafür keine eigene Entität; Vorlauf minus Rücklauf in einem "
-        "Template-Sensor liefert sie. Die Luxtronik-Regelung regelt auf die **Rücklauftemperatur**: Der "
+        "*Spreizung*. Die Regelung hat dafür kein Register; die Integration berechnet sie als "
+        "`flow_return_difference` (Vorlauf minus Rücklauf). Die Luxtronik-Regelung regelt auf die **Rücklauftemperatur**: Der "
         "Heizungs-Sollwert der SHI wirkt auf sie (siehe [Heizen](#8-heizkreis-steuerung)). Ihr normaler Sollwert "
         "kommt aus der *Heizkurve*. Sie ordnet jeder Außentemperatur eine Wassertemperatur zu: Die *Steilheit* "
         "sagt, wie stark die Wassertemperatur der Außentemperatur folgt, das *Niveau* (oder die Anhebung) "

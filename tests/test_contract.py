@@ -19,6 +19,7 @@ from custom_components.luxtronik_shi.registers import (
     BLOCK_SELECT_KEYS,
     BLOCK_SWITCH_KEYS,
     CLIMATE_KEYS,
+    DERIVED_FLAG_KEYS,
     DERIVED_SENSOR_KEYS,
     FIRMWARE_SENSOR_KEY,
     REMOVED_KEYS,
@@ -51,7 +52,7 @@ def _current() -> dict[str, set[str]]:
     current["select"] |= set(BLOCK_SELECT_KEYS)
     current["switch"] |= set(BLOCK_SWITCH_KEYS)
     current["sensor"] |= set(DERIVED_SENSOR_KEYS) | {FIRMWARE_SENSOR_KEY}
-    current.setdefault("binary_sensor", set()).update([*_status_bits(), "online"])
+    current.setdefault("binary_sensor", set()).update([*_status_bits(), *DERIVED_FLAG_KEYS, "online"])
     return current
 
 

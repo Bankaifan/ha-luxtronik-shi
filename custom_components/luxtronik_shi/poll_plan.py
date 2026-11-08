@@ -10,7 +10,9 @@ from homeassistant.helpers import entity_registry as er
 from .const import DEFERRED_KEYS, DHW_BLOCK_KEY, DOMAIN, OUTAGE_WATCH_KEYS, RESTORE_KEYS
 from .registers import (
     CAPABILITIES,
+    DERIVED_FLAGS,
     DERIVED_SENSORS,
+    DIFFERENCE_SENSORS,
     FIRMWARE_PARTS,
     SETPOINT_GROUPS,
     Register,
@@ -41,8 +43,9 @@ def internal_keys() -> frozenset[str]:
 
     Whatever the coordinator itself reads is in here: the firmware parts (version, repair issue), the control
     values compared after an outage, every key that can be restored, is deferred or blocked (reset detection,
-    write read-back, hot water rules), the setpoint groups (mode and effective target), the inputs of the COP
-    sensors, the equipment flags (diagnostics) and the sources of the climate, water heater and status bit
+    write read-back, hot water rules), the setpoint groups (mode and effective target), the inputs of the
+    calculated sensors and binary sensors (COP, flow-return difference, fault, defrost, running, power limit),
+    the equipment flags (diagnostics) and the sources of the climate, water heater and status bit
     entities. When in doubt a key belongs here: reading it costs a little traffic, missing it breaks logic.
     """
     keys: set[str] = set(FIRMWARE_PARTS)
@@ -54,6 +57,9 @@ def internal_keys() -> frozenset[str]:
         keys |= {setpoint, mode, target}
     for sensor in DERIVED_SENSORS:
         keys |= {sensor.thermal, sensor.electric}
+    for difference in DIFFERENCE_SENSORS:
+        keys |= {difference.minuend, difference.subtrahend}
+    keys |= {flag.source for flag in DERIVED_FLAGS}
     keys |= {reg.key for reg in CAPABILITIES}
     keys |= PLATFORM_SOURCE_KEYS
     return frozenset(keys)

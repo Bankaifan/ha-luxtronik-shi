@@ -34,7 +34,9 @@ current["water_heater"] = set(registers.WATER_HEATER_KEYS)
 current["select"] |= set(registers.BLOCK_SELECT_KEYS)
 current["switch"] |= set(registers.BLOCK_SWITCH_KEYS)
 current["sensor"] |= set(registers.DERIVED_SENSOR_KEYS) | {registers.FIRMWARE_SENSOR_KEY}
-current.setdefault("binary_sensor", set()).update([bit[0] for bit in bits] + ["online"])
+current.setdefault("binary_sensor", set()).update(
+    [bit[0] for bit in bits] + list(registers.DERIVED_FLAG_KEYS) + ["online"]
+)
 
 added = []
 for platform, keys in current.items():

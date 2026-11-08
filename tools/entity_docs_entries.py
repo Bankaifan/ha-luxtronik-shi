@@ -262,6 +262,68 @@ _add("online", "status",
      "nicht verfügbar: Der Zustand selbst sagt, ob die SHI antwortet. Nach 10 Minuten fehlgeschlagener Abfragen "
      "entsteht ein Reparaturhinweis.", "INT")
 
+_add("flow_return_difference", "temps",
+     "Flow temperature minus return temperature, in K. The controller has no spread register, so this is "
+     "calculated from `flow` and `return`, which are read anyway (no extra polling). Unavailable while either "
+     "value is unavailable. It can be **negative or near zero** while the heat pump defrosts or when the "
+     "circuit stands still; it is not clamped. Both sources have a resolution of 0.1 K and are not sampled at "
+     "the same instant, so short jumps are noise. Unit K without a temperature class, so Home Assistant never "
+     "converts it like an absolute temperature.",
+     "Vorlauftemperatur minus Rücklauftemperatur, in K. Die Regelung hat kein Spreizungs-Register, daher wird der "
+     "Wert aus `flow` und `return` berechnet, die ohnehin gelesen werden (keine zusätzliche Abfrage). Nicht "
+     "verfügbar, solange einer der beiden Werte nicht verfügbar ist. Er kann beim Abtauen oder im Stillstand "
+     "**negativ oder nahe null** sein und wird nicht begrenzt. Beide Quellen haben 0,1 K Auflösung und werden "
+     "nicht im selben Augenblick abgetastet, kurze Sprünge sind daher Rauschen. Einheit K ohne Temperaturklasse, "
+     "damit Home Assistant sie nie wie eine absolute Temperatur umrechnet.", "INT",
+     "flow minus return (K), can be negative", "Vorlauf minus Rücklauf (K), kann negativ sein")
+_add("cop_total", "energy",
+     "Overall COP of all modes: `energy_th_total` divided by `energy_el_total`. Lifetime of the counters, **not** "
+     "a JAZ, and different from the 10-minute `cop`: that one is the energy ratio of a trailing window of the "
+     "power sensors and reacts within minutes, this one moves slowly and only shows the long-term average. Same "
+     "rules as the heating value (*unknown* with too little electrical energy, an implausible result, or after "
+     "a counter went backwards). `energy_th_total` needs firmware 3.92.0 or later.",
+     "Gesamt-COP aller Betriebsarten: `energy_th_total` geteilt durch `energy_el_total`. Lebensdauer der Zähler, "
+     "**keine** JAZ, und etwas anderes als der 10-Minuten-`cop`: Dieser ist das Energieverhältnis eines "
+     "mitlaufenden Fensters der Leistungssensoren und reagiert binnen Minuten, dieser hier bewegt sich langsam "
+     "und zeigt nur den langfristigen Durchschnitt. Dieselben Regeln wie beim Heizen (*unbekannt* bei zu wenig "
+     "elektrischer Energie, unplausiblem Ergebnis oder wenn ein Zähler rückwärts lief). `energy_th_total` "
+     "braucht Firmware 3.92.0 oder neuer.", "INT")
+_add("fault", "status",
+     "On when the error code `error_number` is not 0 (problem class). Calculated from that register, no extra "
+     "polling; unavailable while it has no value. Which codes are real faults and which are warnings or "
+     "lockouts is not distinguished: every code other than 0 switches it on (see `error_number` for the "
+     "code list).",
+     "An, wenn der Fehlercode `error_number` nicht 0 ist (Geräteklasse Problem). Aus diesem Register berechnet, "
+     "keine zusätzliche Abfrage; nicht verfügbar, solange es keinen Wert hat. Ob ein Code eine echte Störung, "
+     "eine Warnung oder eine Sperre ist, wird nicht unterschieden: Jeder Code außer 0 schaltet ihn ein (die "
+     "Codeliste steht bei `error_number`).", "INT")
+_add("defrost", "status",
+     "On while `operating_mode` is `defrost`. Calculated, no extra polling. It follows the controller's "
+     "operating mode, not an output: whether it switches at exactly the same time as the defrost valve output "
+     "of the native Luxtronik interface has not been measured (open).",
+     "An, solange `operating_mode` den Wert `defrost` hat. Berechnet, keine zusätzliche Abfrage. Er folgt der "
+     "Betriebsart der Regelung, nicht einem Ausgang: Ob er genau gleichzeitig mit dem Abtauventil-Ausgang der "
+     "nativen Luxtronik-Schnittstelle schaltet, wurde nicht gemessen (ungeklärt).", "INT")
+_add("heating_running", "status",
+     "On while `heating_status` is `running` (value 3). Calculated, no extra polling; unavailable while the "
+     "status has no value. `requested` (a demand that is not served yet) is off.",
+     "An, solange `heating_status` den Wert `running` (3) hat. Berechnet, keine zusätzliche Abfrage; nicht "
+     "verfügbar, solange der Status keinen Wert hat. `requested` (Anforderung, die noch nicht bedient wird) "
+     "ist aus.", "INT")
+_add("dhw_running", "status",
+     "On while `hot_water_status` is `running` (value 3). Calculated, no extra polling; unavailable while the "
+     "status has no value. `requested` is off.",
+     "An, solange `hot_water_status` den Wert `running` (3) hat. Berechnet, keine zusätzliche Abfrage; nicht "
+     "verfügbar, solange der Status keinen Wert hat. `requested` ist aus.", "INT")
+_add("power_limit_configured", "power_limit",
+     "On when `cfg_power_limit_mode` is `soft` or `hard`, off for `none`. This reports the **configured mode**, "
+     "not whether the limit currently reduces the power: how the controller reacts to the limit is not "
+     "documented (open). Calculated, no extra polling; unavailable while the mode has no value.",
+     "An, wenn `cfg_power_limit_mode` auf `soft` oder `hard` steht, aus bei `none`. Das meldet den "
+     "**eingestellten Modus**, nicht, ob die Begrenzung die Leistung gerade tatsächlich senkt: Wie die "
+     "Regelung auf die Begrenzung reagiert, ist nicht dokumentiert (ungeklärt). Berechnet, keine zusätzliche "
+     "Abfrage; nicht verfügbar, solange der Modus keinen Wert hat.", "INT")
+
 # ------------------------------------------------------------------ blocks
 _add("heating_block", "blocks",
      "Blocks heating. **Only heating:** hot water keeps running. Off (0) = normal operation. Read back after "

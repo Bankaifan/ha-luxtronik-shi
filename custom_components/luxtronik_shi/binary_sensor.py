@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import Register
+from .registers import DERIVED_FLAGS, DerivedFlag, Register
 
 # Read-only platform: the coordinator delivers the values, nothing to limit.
 PARALLEL_UPDATES = 0
@@ -29,6 +29,7 @@ async def async_setup_entry(
         LuxtronikFlag(coordinator, reg) for reg in coordinator.registers if reg.platform == "binary_sensor"
     )
     entities.extend(LuxtronikStatusBit(coordinator, bit) for bit in STATUS_BITS)
+    entities.extend(LuxtronikDerivedFlag(coordinator, flag) for flag in DERIVED_FLAGS)
     async_add_entities(entities)
 
 
@@ -89,6 +90,40 @@ class LuxtronikStatusBit(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEn
         """Return whether the bit is set."""
         mask = (self.coordinator.data or {}).get("heat_generator_state")
         return None if mask is None else bool(mask & (1 << self._bit))
+
+
+class LuxtronikDerivedFlag(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEntity):
+    """A flag calculated from a status register that is read anyway (no extra Modbus traffic)."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: LuxtronikCoordinator, flag: DerivedFlag) -> None:
+        super().__init__(coordinator)
+        self._flag = flag
+        self._attr_translation_key = flag.key
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{flag.key}"
+        self._attr_device_info = coordinator.device_info_for(flag.key)
+        if flag.device_class:
+            self._attr_device_class = BinarySensorDeviceClass(flag.device_class)
+
+    @property
+    def _source(self) -> int | float | None:
+        return (self.coordinator.data or {}).get(self._flag.source)
+
+    @property
+    def available(self) -> bool:
+        """Unavailable while the source register has no value."""
+        return super().available and self._source is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Whether the source holds one of the values that switch the flag on."""
+        value = self._source
+        if value is None:
+            return None
+        if self._flag.on_values is None:
+            return value != 0
+        return int(value) in self._flag.on_values
 
 
 class LuxtronikOnline(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEntity):

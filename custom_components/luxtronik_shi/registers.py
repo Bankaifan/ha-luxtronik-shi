@@ -940,8 +940,81 @@ DERIVED_SENSORS: tuple[DerivedSensor, ...] = (
     DerivedSensor("cop", "COP (10 min)", "COP (10 min)", "compressor_thermal_power", "electric_power", cumulative=False),
     DerivedSensor("cop_heating", "COP gesamt", "COP overall", "energy_th_heating", "energy_el_heating", True),
     DerivedSensor("cop_dhw", "COP gesamt", "COP overall", "energy_th_dhw", "energy_el_dhw", True),
+    # Counters of all modes together (the thermal total needs firmware 3.92.0, see its entity text).
+    DerivedSensor("cop_total", "COP gesamt", "COP overall", "energy_th_total", "energy_el_total", True),
 )
-DERIVED_SENSOR_KEYS: tuple[str, ...] = tuple(sensor.key for sensor in DERIVED_SENSORS)
+
+
+@dataclass(frozen=True)
+class DifferenceSensor:
+    """A sensor that is the difference of two existing registers (``minuend`` minus ``subtrahend``)."""
+
+    key: str
+    name_de: str
+    name_en: str
+    minuend: str
+    subtrahend: str
+    unit: str
+
+
+# The controller has no spread register (docs/entities.md); this is flow minus return, calculated from the two
+# temperatures that are polled anyway. Negative values are real (defrost reverses the flow of heat) and are not
+# clamped. The unit is a plain "K" without a temperature device class on purpose: with the class, Home Assistant
+# would convert it like an absolute temperature (a difference of 5 K would show as -268 degC).
+DIFFERENCE_SENSORS: tuple[DifferenceSensor, ...] = (
+    DifferenceSensor(
+        "flow_return_difference", "Temperatur: Differenz Vorlauf/Rücklauf", "Temperature: flow-return difference",
+        "flow", "return", "K",
+    ),
+)
+DERIVED_SENSOR_KEYS: tuple[str, ...] = tuple(sensor.key for sensor in DERIVED_SENSORS) + tuple(
+    sensor.key for sensor in DIFFERENCE_SENSORS
+)
+
+
+@dataclass(frozen=True)
+class DerivedFlag:
+    """A binary sensor that is on when a status register holds one of ``on_values``.
+
+    ``on_values`` are raw register values (positions in the option tuple of the source for enumerations);
+    ``None`` means any value except 0. An unknown source value gives an unavailable entity, never a guess.
+    """
+
+    key: str
+    name_de: str
+    name_en: str
+    source: str
+    on_values: frozenset[int] | None
+    device_class: str | None = None
+
+
+def _option(source: str, option: str) -> int:
+    """Raw value of an option of an enumeration register."""
+    return BY_KEY[source].options.index(option)
+
+
+DERIVED_FLAGS: tuple[DerivedFlag, ...] = (
+    DerivedFlag("fault", "Status: Störung", "Status: fault", "error_number", None, "problem"),
+    DerivedFlag(
+        "defrost", "Status: Abtauung läuft", "Status: defrost active", "operating_mode",
+        frozenset({_option("operating_mode", "defrost")}),
+    ),
+    DerivedFlag(
+        "heating_running", "Läuft", "Running", "heating_status",
+        frozenset({_option("heating_status", "running")}), "running",
+    ),
+    DerivedFlag(
+        "dhw_running", "Läuft", "Running", "hot_water_status",
+        frozenset({_option("hot_water_status", "running")}), "running",
+    ),
+    # The configured mode, NOT whether the limit currently reduces the power (the controller's reaction is open).
+    DerivedFlag(
+        "power_limit_configured", "Leistungsbegrenzung: Modus eingestellt", "Power limit: mode set",
+        "cfg_power_limit_mode",
+        frozenset({_option("cfg_power_limit_mode", "soft"), _option("cfg_power_limit_mode", "hard")}),
+    ),
+)
+DERIVED_FLAG_KEYS: tuple[str, ...] = tuple(flag.key for flag in DERIVED_FLAGS)
 
 # The one firmware entity: a text sensor composed of the three version registers ``FIRMWARE_PARTS``. Its key is
 # part of the entity contract.
@@ -1075,6 +1148,7 @@ _HEATING_KEYS = frozenset(
         "energy_th_heating",
         "hours_heating",
         "cop_heating",
+        "heating_running",
         "pump_heating",
     }
 )

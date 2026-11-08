@@ -25,6 +25,14 @@ views:
       entity: sensor.warmepumpe_hot_water_status
     - type: tile
       entity: sensor.warmepumpe_status_error_number
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_fault
+    - type: tile
+      entity: binary_sensor.warmepumpe_heating_running
+    - type: tile
+      entity: binary_sensor.warmepumpe_hot_water_running
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_defrost_active
     - type: conditional
       conditions:
       - condition: state
@@ -73,6 +81,8 @@ views:
       entity: sensor.warmepumpe_temperature_flow
     - type: tile
       entity: sensor.warmepumpe_temperature_return
+    - type: tile
+      entity: sensor.warmepumpe_temperature_flow_return_difference
     - type: tile
       entity: sensor.warmepumpe_hot_water_temperature
     - type: history-graph
@@ -219,6 +229,8 @@ views:
       entity: sensor.warmepumpe_heating_cop_overall
     - type: tile
       entity: sensor.warmepumpe_hot_water_cop_overall
+    - type: tile
+      entity: sensor.warmepumpe_cop_overall
     - type: markdown
       content: '**COP (10 min)** is the energy ratio of the last 10 minutes (thermal / electric); it is unknown
         while the compressor is stopped or just started. **COP overall** is the quotient of the energy counters
@@ -547,6 +559,13 @@ views:
         | Wärmepumpe COP (10 min) | `cop` | `sensor.warmepumpe_cop_10_min` |
         | Wärmepumpe Heating COP overall | `cop_heating` | `sensor.warmepumpe_heating_cop_overall` |
         | Wärmepumpe Hot water COP overall | `cop_dhw` | `sensor.warmepumpe_hot_water_cop_overall` |
+        | Wärmepumpe COP overall | `cop_total` | `sensor.warmepumpe_cop_overall` |
+        | Wärmepumpe Temperature: flow-return difference | `flow_return_difference` | `sensor.warmepumpe_temperature_flow_return_difference` |
+        | Wärmepumpe Status: fault | `fault` | `binary_sensor.warmepumpe_status_fault` |
+        | Wärmepumpe Status: defrost active | `defrost` | `binary_sensor.warmepumpe_status_defrost_active` |
+        | Wärmepumpe Heating Running | `heating_running` | `binary_sensor.warmepumpe_heating_running` |
+        | Wärmepumpe Hot water Running | `dhw_running` | `binary_sensor.warmepumpe_hot_water_running` |
+        | Wärmepumpe Power limit: mode set | `power_limit_configured` | `binary_sensor.warmepumpe_power_limit_mode_set` |
         | Wärmepumpe Firmware version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
         | Wärmepumpe Status: compressor 1 running | `compressor_1` | `binary_sensor.warmepumpe_status_compressor_1_running` |
         | Wärmepumpe Status: compressor 2 running | `compressor_2` | `binary_sensor.warmepumpe_status_compressor_2_running` |

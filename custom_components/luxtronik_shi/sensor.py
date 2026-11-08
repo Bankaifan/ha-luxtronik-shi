@@ -14,8 +14,10 @@ from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
 from .registers import (
     DERIVED_SENSORS,
+    DIFFERENCE_SENSORS,
     FIRMWARE_SENSOR_KEY,
     DerivedSensor,
+    DifferenceSensor,
     Register,
     WindowedCop,
     firmware_version,
@@ -37,6 +39,7 @@ async def async_setup_entry(
         LuxtronikSensor(coordinator, reg) for reg in coordinator.registers if reg.platform == "sensor"
     )
     async_add_entities(LuxtronikCopSensor(coordinator, sensor) for sensor in DERIVED_SENSORS)
+    async_add_entities(LuxtronikDifferenceSensor(coordinator, sensor) for sensor in DIFFERENCE_SENSORS)
     async_add_entities([LuxtronikFirmwareSensor(coordinator)])
 
 
@@ -102,6 +105,40 @@ class LuxtronikCopSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
     def _handle_coordinator_update(self) -> None:
         self._recalculate()
         super()._handle_coordinator_update()
+
+
+class LuxtronikDifferenceSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
+    """Difference of two registers that are read anyway (flow minus return); unknown if either is missing."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator: LuxtronikCoordinator, sensor: DifferenceSensor) -> None:
+        super().__init__(coordinator)
+        self._sensor = sensor
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{sensor.key}"
+        self._attr_translation_key = sensor.key
+        self._attr_device_info = coordinator.device_info_for(sensor.key)
+        # No temperature device class: Home Assistant would convert a difference like an absolute temperature.
+        self._attr_native_unit_of_measurement = sensor.unit
+
+    def _operands(self) -> tuple[float | None, float | None]:
+        data = self.coordinator.data or {}
+        return data.get(self._sensor.minuend), data.get(self._sensor.subtrahend)
+
+    @property
+    def available(self) -> bool:
+        """Unavailable while either source has no value."""
+        return super().available and None not in self._operands()
+
+    @property
+    def native_value(self) -> float | None:
+        """Minuend minus subtrahend, rounded to the 0.1 K of the sources."""
+        minuend, subtrahend = self._operands()
+        if minuend is None or subtrahend is None:
+            return None
+        return round(minuend - subtrahend, 1)
 
 
 class LuxtronikFirmwareSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):

@@ -502,6 +502,10 @@ for lang in ("en", "de"):
     entity["sensor"][registers.FIRMWARE_SENSOR_KEY] = {"name": FIRMWARE_NAME[lang]}
     for derived in registers.DERIVED_SENSORS:
         entity["sensor"][derived.key] = {"name": derived.name_en if lang == "en" else derived.name_de}
+    for difference in registers.DIFFERENCE_SENSORS:
+        entity["sensor"][difference.key] = {"name": difference.name_en if lang == "en" else difference.name_de}
+    for flag in registers.DERIVED_FLAGS:
+        entity["binary_sensor"][flag.key] = {"name": flag.name_en if lang == "en" else flag.name_de}
     for key, _bit, de, en in binary_sensor.STATUS_BITS:
         entity["binary_sensor"][key] = {"name": en if lang == "en" else de}
     entity["binary_sensor"]["online"] = {"name": "Status: connection" if lang == "en" else "Status: Verbindung"}
