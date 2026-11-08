@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.16.0] – 2026-11-08
+
 ### Added
 - **Calculated entities from registers that are read anyway (no extra polling, no new register facts).** New
   keys, existing keys are unchanged:
@@ -600,7 +602,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.12.0...v0.13.0

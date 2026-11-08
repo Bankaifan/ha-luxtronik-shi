@@ -20,9 +20,9 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 |---|---|---|
 | `sensor` | 81 | Messwerte, Zähler, berechnete Werte, Aufzählungen |
 | `binary_sensor` | 36 | Statusbits, Ausstattungs-Flags, Verbindung |
-| `switch` | 6 | Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register) |
+| `switch` | 7 | Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register), Ein/Aus-Sicht auf die Sperren |
 | `number` | 19 | schreibbare Sollwerte, Anhebungen, Leistungsbegrenzung |
-| `select` | 16 | schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung |
+| `select` | 17 | schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung, Betriebsart-Sicht auf die Sperren |
 | `climate` | 1 | Thermostat-Sicht auf den Heizkreis |
 | `water_heater` | 1 | Water-Heater-Sicht auf das Warmwasser |
 
@@ -181,6 +181,8 @@ Jede Entität der Luxtronik-SHI-Integration, nach Themen sortiert, mit dem, was 
 | Sperren | `dhw_block`<br>switch · holding 10051 · Gerät Warmwasser | - | 0 = aus, 1 = an | Sperrt die Warmwasserbereitung. Solange sie an ist, lässt sich die Warmwasser-Betriebsart nicht setzen (Messung des Eigentümers), und die Wiederherstellung der Warmwasser-Gruppe wartet. Einer der Schlüssel, auf die der Heat Pump Optimizer angewiesen ist. *(PL, M)* |
 | Sperren | `cooling_block`<br>switch · holding 10052 · Gerät Kühlung | - | 0 = aus, 1 = an | Sperrt passives und aktives Kühlen. Braucht *Kühlung* in der Ausstattung. Häufiges Schalten kann Wärmepumpe und Hydraulik belasten. *(PL)*<br>*braucht Kühlung in der Ausstattung* |
 | Sperren | `pool_block`<br>switch · holding 10053 · Gerät Pool | - | 0 = aus, 1 = an | Sperrt die Pool-Heizung. Braucht *Pool* in der Ausstattung. Häufiges Schalten kann Wärmepumpe und Hydraulik belasten. *(PL)*<br>*braucht Pool in der Ausstattung* |
+| Betriebsart (Sperren) | `block_mode`<br>select · Sicht auf mehrere Register · Gerät Wärmepumpe | - | `heating_dhw`: Heizen und Warmwasser<br>`heating`: Nur Heizen<br>`dhw_hot_water`: Nur Warmwasser | Betriebsart als Sicht auf die beiden Sperren `heating_block` und `dhw_block`, für den Heat Pump Optimizer (dessen Option *Wärmepumpen-Modus* auf diese Entität zeigen lassen; sie ersetzt ein selbst geschriebenes Template-Select). Optionen: `heating_dhw` = keine Sperre, `heating` = Warmwasser gesperrt, `dhw_hot_water` = Heizen gesperrt. **`dhw_hot_water` wird auch angezeigt, wenn beide Sperren gesetzt sind**: Drei Optionen können diesen Zustand nicht ausdrücken, das echte Aus zeigt `block_power`. Eine Auswahl schreibt beide Sperren, erst Freigaben, dann Sperren; ein Fehler zwischen den beiden Schreibzugriffen lässt also weniger Sperren stehen, nie mehr. Übernimmt die Wärmepumpe einen Wert nicht (Rücklesen weicht ab), bricht die Folge mit einer Fehlermeldung ab. Die Optionsschlüssel ergeben gefaltet dieselben Buchstaben wie die Beschriftungen `Heating + DHW`, `Heating` und `DHW (Hot Water)`, die der Optimizer kennt. Kein zusätzliches Abfragen. Wird nach einem Reset nicht wiederhergestellt, wie die Sperren. Nur bei neuen Installationen standardmäßig aktiv; bei einer bestehenden Installation in den Entitäts-Einstellungen aktivieren. *(INT)* |
+| Ein/Aus (Sperren) | `block_power`<br>switch · Sicht auf mehrere Register · Gerät Wärmepumpe | - | 0 = aus, 1 = an | Ein/Aus als Sicht auf die beiden Sperren: **aus genau dann, wenn `heating_block` und `dhw_block` beide gesetzt sind**. Ausschalten setzt beide (erst Warmwasser, damit bei einem Fehler des zweiten Schreibzugriffs weiter geheizt wird). Einschalten gibt nur die Warmwasser-Sperre frei, und nur solange beide gesetzt sind; die Heizungs-Sperre bleibt, wie das Select `block_mode` sie hinterlassen hat, das Select zeigt nach dem Einschalten also meist *Nur Warmwasser*, bis der Optimizer eine Betriebsart setzt. In jedem anderen Zustand tut Einschalten nichts. Ersetzt einen selbst geschriebenen Template-Schalter. Kein zusätzliches Abfragen; wird nach einem Reset nicht wiederhergestellt. Nur bei neuen Installationen standardmäßig aktiv. *(INT)* |
 
 ## 8. Heizkreis-Steuerung
 
@@ -359,6 +361,8 @@ Diese Schlüssel wurden umbenannt. Der alte Schlüssel bleibt im Entitäten-Vert
 |---|---|---|
 | `aux_heater_1` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
 | `aux_heater_2` | binary_sensor | [6. Status und Betriebszustand](#6-status-und-betriebszustand) |
+| `block_mode` | select | [7. Sperren (Schalter)](#7-sperren-schalter) |
+| `block_power` | switch | [7. Sperren (Schalter)](#7-sperren-schalter) |
 | `buffer_type` | sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
 | `cap_cooling` | binary_sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
 | `cap_heating` | binary_sensor | [14. Anlage, Firmware und Ausstattung](#14-anlage-firmware-und-ausstattung) |
