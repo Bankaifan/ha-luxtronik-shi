@@ -668,6 +668,8 @@ views:
         | Wärmepumpe Status: Verbindung | `online` | `binary_sensor.warmepumpe_status_verbindung` |
         | Wärmepumpe Heizung | `climate_heating` | `climate.warmepumpe_heizung` |
         | Wärmepumpe Warmwasser | `water_heater_dhw` | `water_heater.warmepumpe_warmwasser` |
+        | Wärmepumpe Betriebsart (Sperren) | `block_mode` | `select.warmepumpe_betriebsart_sperren` |
+        | Wärmepumpe Ein/Aus (Sperren) | `block_power` | `switch.warmepumpe_ein_aus_sperren` |
   - type: grid
     cards:
     - type: heading

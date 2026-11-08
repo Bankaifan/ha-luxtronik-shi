@@ -108,6 +108,10 @@ def universe() -> dict[str, Info]:
         found[key] = Info(key, "climate", "heating", (), True, True)
     for key in registers.WATER_HEATER_KEYS:
         found[key] = Info(key, "water_heater", "hot_water", (), True, True)
+    for key in registers.BLOCK_SELECT_KEYS:
+        found[key] = Info(key, "select", None, (), True, True)
+    for key in registers.BLOCK_SWITCH_KEYS:
+        found[key] = Info(key, "switch", None, (), True, True)
     return found
 
 

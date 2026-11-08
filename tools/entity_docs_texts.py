@@ -476,9 +476,9 @@ PAGE = {
         "platform_text": {
             "sensor": "measurements, counters, calculated values, enumerations",
             "binary_sensor": "status bits, equipment flags, connection",
-            "switch": "blocks, circulation pump, extra hot water (0/1 holding registers)",
+            "switch": "blocks, circulation pump, extra hot water (0/1 holding registers), on/off view of the blocks",
             "number": "writable setpoints, offsets, power limit",
-            "select": "writable modes, levels, power limit mode",
+            "select": "writable modes, levels, power limit mode, operating mode view of the blocks",
             "climate": "thermostat view of the heating circuit",
             "water_heater": "water heater view of hot water",
         },
@@ -555,9 +555,9 @@ PAGE = {
         "platform_text": {
             "sensor": "Messwerte, Zähler, berechnete Werte, Aufzählungen",
             "binary_sensor": "Statusbits, Ausstattungs-Flags, Verbindung",
-            "switch": "Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register)",
+            "switch": "Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register), Ein/Aus-Sicht auf die Sperren",
             "number": "schreibbare Sollwerte, Anhebungen, Leistungsbegrenzung",
-            "select": "schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung",
+            "select": "schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung, Betriebsart-Sicht auf die Sperren",
             "climate": "Thermostat-Sicht auf den Heizkreis",
             "water_heater": "Water-Heater-Sicht auf das Warmwasser",
         },

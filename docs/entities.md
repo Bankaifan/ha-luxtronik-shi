@@ -20,9 +20,9 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 |---|---|---|
 | `sensor` | 79 | measurements, counters, calculated values, enumerations |
 | `binary_sensor` | 31 | status bits, equipment flags, connection |
-| `switch` | 6 | blocks, circulation pump, extra hot water (0/1 holding registers) |
+| `switch` | 7 | blocks, circulation pump, extra hot water (0/1 holding registers), on/off view of the blocks |
 | `number` | 19 | writable setpoints, offsets, power limit |
-| `select` | 16 | writable modes, levels, power limit mode |
+| `select` | 17 | writable modes, levels, power limit mode, operating mode view of the blocks |
 | `climate` | 1 | thermostat view of the heating circuit |
 | `water_heater` | 1 | water heater view of hot water |
 
@@ -175,6 +175,8 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 | Block | `dhw_block`<br>switch · holding 10051 · device Hot water | - | 0 = off, 1 = on | Blocks hot water production. While it is on, the hot water mode cannot be set (owner measurement) and the restore of the hot water group waits. One of the keys the Heat Pump Optimizer depends on. *(PL, M)* |
 | Block | `cooling_block`<br>switch · holding 10052 · device Cooling | - | 0 = off, 1 = on | Blocks passive and active cooling. Needs *cooling* in the equipment. Frequent switching may wear heat pump and hydraulics. *(PL)*<br>*needs cooling in the equipment* |
 | Block | `pool_block`<br>switch · holding 10053 · device Pool | - | 0 = off, 1 = on | Blocks pool heating. Needs *pool* in the equipment. Frequent switching may wear heat pump and hydraulics. *(PL)*<br>*needs pool in the equipment* |
+| Operating mode (blocks) | `block_mode`<br>select · view on several registers · device Heat pump | - | `heating_dhw`: Heating and hot water<br>`heating`: Heating only<br>`dhw_hot_water`: Hot water only | Operating mode as a view on the two blocks `heating_block` and `dhw_block`, for the Heat Pump Optimizer (point its *heat pump mode* option at this entity; it replaces a hand-written template select). Options: `heating_dhw` = no block, `heating` = hot water blocked, `dhw_hot_water` = heating blocked. **`dhw_hot_water` is also shown while both blocks are set**: three options cannot express that state, so use `block_power` for the real off. Choosing an option writes both blocks, releases first and then blocks, so a failure between the two writes leaves fewer blocks, never more. A write the heat pump does not take (read back differs) stops the sequence with an error. The option keys fold to the same letters as the labels `Heating + DHW`, `Heating` and `DHW (Hot Water)` that the optimizer knows. No extra polling. Not restored after a reset, like the blocks. Enabled by default on new installations only; on an existing installation enable it in the entity settings. *(INT)* |
+| On/off (blocks) | `block_power`<br>switch · view on several registers · device Heat pump | - | 0 = off, 1 = on | On/off as a view on the two blocks: **off exactly when both `heating_block` and `dhw_block` are set**. Turning off sets both (hot water first, so heating still runs if the second write fails). Turning on releases only the hot water block, and only while both are set; the heating block stays as the `block_mode` select left it, so after turning on the select usually reads *hot water only* until the optimizer sets a mode. In any other state turning on does nothing. Replaces a hand-written template switch. No extra polling; not restored after a reset. Enabled by default on new installations only. *(INT)* |
 
 ## 8. Heating circuit control
 
@@ -352,6 +354,8 @@ These keys were renamed. The old key stays in the entity contract, the integrati
 |---|---|---|
 | `aux_heater_1` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `aux_heater_2` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
+| `block_mode` | select | [7. Blocks (switches)](#7-blocks-switches) |
+| `block_power` | switch | [7. Blocks (switches)](#7-blocks-switches) |
 | `buffer_type` | sensor | [14. System, firmware and equipment](#14-system-firmware-and-equipment) |
 | `cap_cooling` | binary_sensor | [14. System, firmware and equipment](#14-system-firmware-and-equipment) |
 | `cap_heating` | binary_sensor | [14. System, firmware and equipment](#14-system-firmware-and-equipment) |

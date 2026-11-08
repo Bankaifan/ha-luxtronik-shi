@@ -667,6 +667,8 @@ views:
         | Wärmepumpe Status: connection | `online` | `binary_sensor.warmepumpe_status_connection` |
         | Wärmepumpe Heating | `climate_heating` | `climate.warmepumpe_heating` |
         | Wärmepumpe Hot water | `water_heater_dhw` | `water_heater.warmepumpe_hot_water` |
+        | Wärmepumpe Operating mode (blocks) | `block_mode` | `select.warmepumpe_operating_mode_blocks` |
+        | Wärmepumpe On/off (blocks) | `block_power` | `switch.warmepumpe_on_off_blocks` |
   - type: grid
     cards:
     - type: heading

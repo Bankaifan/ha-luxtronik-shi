@@ -79,7 +79,7 @@ that is already set up.
 | **Climate / water heater** | heating circuit (auto / heat, setpoint 15–75 °C) and hot water (no influence / setpoint / offset / level, setpoint 30–75 °C), see below |
 | **Write: numbers** | **heating curve offset** (−20 … +20 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset, power limit value (0–30 kW) |
 | **Write: selects** | mode (no influence / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating; level (normal / increased / increased step 2 / decreased); power limit mode (none / soft / hard) |
-| **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water* |
+| **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump**, *extra hot water*; plus the block views *operating mode (blocks)* (select) and *on/off (blocks)* (switch), see [below](#block-views-for-the-heat-pump-optimizer) |
 | Pumps and I/O | **pump heating (HUP), hot water (BUP), circulation (ZIP)** running, outputs **VBO** and **FP1** (FP2 and FP3 disabled by default; not measured), inputs **EVU** and **EVU 2** as a level (disabled by default). Read from the same registers as the matching `raw_` sensors, which stay as they are. For EVU only the name is proven by the firmware analysis; that level 1 means *released* is inferred from one measured state, so the sensors show the level, not "locked". The operating mode *utility lockout* reports the lock itself |
 | Diagnostic | buffer tank type, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default). The switching lock, minimum runtime and minimum hot water temperature are fixed firmware constants and disabled by default for new installations |
 
@@ -139,6 +139,43 @@ and `no_influence` instead of the water heater operation `off`.
 
 **Overall heating** (mode, offset and level, 10065–10067) is disabled by default: its effect is not proven, and it
 overrides the per-circuit settings.
+
+### Block views for the Heat Pump Optimizer
+
+A **select** (`block_mode`, *Operating mode (blocks)*) and a **switch** (`block_power`, *On/off (blocks)*) in the main
+device are views on the two registers `heating_block` (10050) and `dhw_block` (10051). They read and write exactly
+those, poll nothing extra, and write like every other entity (read-back, no notice about "changed outside Home
+Assistant"). Like the blocks themselves they are **not restored** after a reset. They replace the template select and
+template switch that some installations keep in `configuration.yaml` for the Heat Pump Optimizer; a coordinator
+entity writes its state on every poll, which keeps the optimizer's freshness check (`last_reported`) honest, whereas
+Home Assistant does not re-report an unchanged template state.
+
+| Option key | Shown as | Heating block | Hot water block |
+|---|---|---|---|
+| `heating_dhw` | Heating and hot water | off | off |
+| `heating` | Heating only | off | **on** |
+| `dhw_hot_water` | Hot water only | **on** | off |
+
+The option keys fold (letters and digits only) to `Heating + DHW`, `Heating` and `DHW (Hot Water)`, the labels the
+optimizer recognises, so it maps them to full / heating only / hot water only.
+
+* **"Hot water only" is also shown while both blocks are set.** Three options cannot show that state. The switch
+  shows the real *off*: it is off exactly when both blocks are set.
+* **Switch:** turning off sets both blocks (hot water first). Turning on releases the **hot water block only, and
+  only if both blocks are set**; the heating block stays as the select left it. In any other state turning on does
+  nothing.
+* **Write order.** Two writes follow each other, and the SHI releases everything when its watchdog expires. A change
+  therefore releases before it blocks, so an interruption between the two writes leaves fewer blocks, never more
+  (heating only -> hot water only passes through "heating and hot water"). Both registers are written every time. After
+  each write the value is read back; if the heat pump does not take it (for example while its error 816 *multiple SHI
+  write sources* is active, which drops writes without an error code), the sequence stops with an error.
+* Enabled by default on new installations; for entries created before they existed they are disabled (enable them in
+  the entity settings).
+
+**Using them with the optimizer:** in the optimizer's options, set the *heat pump mode* entity to the select and the
+on/off entity to the switch (entity IDs depend on your device name and language, see the entity registry). Then remove
+the old template select and switch from `configuration.yaml`, restart or reload template entities, and delete the
+orphaned entities. Use only one writer of the blocks at a time.
 
 ### Structure in Home Assistant
 
