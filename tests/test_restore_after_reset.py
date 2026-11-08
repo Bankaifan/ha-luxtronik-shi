@@ -281,7 +281,7 @@ async def test_value_set_back_to_neutral_is_not_restored(hass: HomeAssistant, sh
     entry = await _setup(hass, shi)
     mode = _entity_id(hass, entry, "select", "cfg_heating_mode")
     level = _entity_id(hass, entry, "select", "cfg_heating_level")
-    for entity_id, option in ((mode, "setpoint"), (level, "increased2"), (mode, "off"), (level, "normal")):
+    for entity_id, option in ((mode, "setpoint"), (level, "decreased"), (mode, "no_influence"), (level, "normal")):
         await hass.services.async_call(
             "select", "select_option", {"entity_id": entity_id, "option": option}, blocking=True
         )

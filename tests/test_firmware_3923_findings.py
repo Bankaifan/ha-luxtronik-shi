@@ -2,8 +2,9 @@
 
 Fake SHI only. Covered: firmware ranges and defaults of the writable holdings, the revert to the default on a write
 outside the range (never sent), the default read-back reported as an error, the triggers circulation and extra hot
-water, the overall group (no setpoint), the level labels, the resolved registers (operating hours cooling/solar,
-extra hot water values, solar equipment flag) and the signed heat quantity counters.
+water (buttons with a running flag), the overall group (no setpoint option), the level options (raw 1 and 2 are one
+option), the resolved registers (operating hours cooling/solar, extra hot water values, solar equipment flag, the
+calculated maximum flow) and the signed heat quantity counters.
 """
 
 from __future__ import annotations
@@ -28,9 +29,16 @@ from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
     BY_KEY,
     CONTROL_MODES,
+    DERIVED_FLAGS,
+    LEVEL_OPTIONS,
     OVERALL_MODE_KEY,
+    REMOVED_ENTITIES,
+    REMOVED_KEYS,
+    RENAMED_KEYS,
     RESOLVED_IN_0_17,
-    SHARES_ADDRESS,
+    TRIGGER_ACTIONS,
+    TRIGGER_REQUIRES,
+    TriggerAction,
     decode,
     encode_int16,
     raw_in_range,
@@ -67,6 +75,8 @@ def test_every_writable_holding_has_the_firmware_range_and_default() -> None:
     assert BY_KEY["cfg_overall_offset"].min_value == -5.0 and BY_KEY["cfg_overall_offset"].max_value == 5.0
     for key in ("heating_block", "dhw_block", "cooling_block", "pool_block", "circulation", "extra_dhw"):
         assert BY_KEY[key].reset_default == 0
+    # the levels: raw 0 ... 3 are all inside the range, raw 1 and 2 are the same option
+    assert raw_in_range(BY_KEY["cfg_heating_level"], 2) and not raw_in_range(BY_KEY["cfg_heating_level"], 4)
     # 10060 binds a persisted controller parameter: no fixed default, the range is open (owner decision 20-40)
     assert BY_KEY["cfg_room_setpoint"].reset_default is None
 
@@ -79,8 +89,12 @@ def test_raw_in_range_covers_numbers_selects_and_switches() -> None:
     assert raw_in_range(setpoint, 150) and raw_in_range(setpoint, 750) and not raw_in_range(setpoint, 900)
     mode = BY_KEY["cfg_heating_mode"]
     assert raw_in_range(mode, 3) and not raw_in_range(mode, 4)
+    # the overall mode's raw 1 (setpoint) is not implemented by the firmware: never written
+    assert raw_in_range(BY_KEY[OVERALL_MODE_KEY], 2) and not raw_in_range(BY_KEY[OVERALL_MODE_KEY], 1)
     block = BY_KEY["heating_block"]
     assert raw_in_range(block, 1) and not raw_in_range(block, 2)
+    for key in ("circulation", "extra_dhw"):
+        assert raw_in_range(BY_KEY[key], 1) and raw_in_range(BY_KEY[key], 0) and not raw_in_range(BY_KEY[key], 2)
     # 10060: the firmware range is open, the owner's 20-40 degC of the number entity is applied as the range
     room = BY_KEY["cfg_room_setpoint"]
     assert raw_in_range(room, 200) and raw_in_range(room, 400) and not raw_in_range(room, 100)
@@ -209,32 +223,116 @@ async def test_proven_default_counts_as_a_reset_value(hass: HomeAssistant, shi: 
     assert coordinator.learned == {"cfg_dhw_setpoint": 400}
 
 
-# ------------------------------------------------------------------ triggers
-def test_triggers_are_excluded_from_restore_and_external_changes() -> None:
+# ------------------------------------------------------------------ triggers (buttons + running flags)
+def test_triggers_are_buttons_with_running_flags() -> None:
+    """A trigger is a button (write 1) and a binary sensor on the same register, never a switch."""
     assert TRIGGER_KEYS == {"circulation", "extra_dhw"}
     assert not TRIGGER_KEYS & RESTORE_KEYS
     assert TRIGGER_KEYS <= EXTERNAL_CHANGE_EXCLUDED
+    flags = {flag.key: flag for flag in DERIVED_FLAGS}
     for key in TRIGGER_KEYS:
-        assert BY_KEY[key].platform == "switch" and BY_KEY[key].reset_default == 0
+        assert BY_KEY[key].platform == "button" and BY_KEY[key].reset_default == 0
         assert "trigger" in BY_KEY[key].source
+        running = flags[f"{key}_running"]
+        assert running.source == key and running.on_values is None and running.device_class == "running"
+    assert ("switch", "circulation") in REMOVED_ENTITIES and ("switch", "extra_dhw") in REMOVED_ENTITIES
+    assert TRIGGER_ACTIONS == (TriggerAction("extra_dhw_stop", "Extra: beenden", "Extra: end", "extra_dhw", 0),)
+    assert TRIGGER_REQUIRES == {"circulation": "cap_hot_water"}
+
+
+@pytest.mark.parametrize("key", sorted(TRIGGER_KEYS))
+async def test_pressing_the_button_starts_the_trigger_and_the_flag_follows(
+    hass: HomeAssistant, shi: FakeSHI, key: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    entry = await _setup(hass, shi)
+    address = BY_KEY[key].address
+    button = _entity_id(hass, entry, "button", key)
+    running = _entity_id(hass, entry, "binary_sensor", f"{key}_running")
+    assert hass.states.get(running).state == "off"
+    with caplog.at_level(logging.WARNING):
+        await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
+    assert _writes(shi, address) == [(6, address, 1)]
+    assert shi.holding[address] == 1
+    assert hass.states.get(running).state == "on"  # the read-back of the write feeds the flag
+    assert "was not taken" not in caplog.text
+    shi.holding[address] = 0  # the firmware ended the run / the timer
+    await _polls(entry, 3)
+    assert hass.states.get(running).state == "off"
 
 
 @pytest.mark.parametrize("key", sorted(TRIGGER_KEYS))
 async def test_trigger_ending_at_once_is_not_an_error(
     hass: HomeAssistant, shi: FakeSHI, key: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The firmware sets the trigger back to 0 itself; a read-back of 0 is the normal end."""
+    """The firmware sets the trigger back to 0 itself; a read-back of 0 right after the press is the normal end."""
     entry = await _setup(hass, shi)
     address = BY_KEY[key].address
     shi.instant_triggers = {address}
-    entity_id = _entity_id(hass, entry, "switch", key)
+    button = _entity_id(hass, entry, "button", key)
     with caplog.at_level(logging.WARNING):
-        await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+        await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
     assert _writes(shi, address) == [(6, address, 1)]
-    assert hass.states.get(entity_id).state == "off"
-    assert "was not taken" not in caplog.text
-    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
-    assert shi.holding[address] == 0
+    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", f"{key}_running")).state == "off"
+    assert "was not taken" not in caplog.text and "reset the register" not in caplog.text
+
+
+async def test_extra_dhw_stop_ends_the_timer(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Writing 0 to 10071 sets the extra hot water timer to 0 (proven)."""
+    entry = await _setup(hass, shi)
+    await hass.services.async_call(
+        "button", "press", {"entity_id": _entity_id(hass, entry, "button", "extra_dhw")}, blocking=True
+    )
+    assert shi.holding[10071] == 1
+    await hass.services.async_call(
+        "button", "press", {"entity_id": _entity_id(hass, entry, "button", "extra_dhw_stop")}, blocking=True
+    )
+    assert _writes(shi, 10071) == [(6, 10071, 1), (6, 10071, 0)]
+    assert shi.holding[10071] == 0
+    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "extra_dhw_running")).state == "off"
+
+
+async def test_circulation_button_is_unavailable_while_hot_water_is_off(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Discrete input 10001 reads 0 while hot water is not equipped or its controller mode is off; the firmware
+    does not accept the circulation trigger then (full analysis, 3.3)."""
+    shi.discrete[10001] = False
+    entry = await _setup(hass, shi)
+    button = _entity_id(hass, entry, "button", "circulation")
+    assert hass.states.get(button).state == "unavailable"
+    assert hass.states.get(_entity_id(hass, entry, "button", "extra_dhw")).state != "unavailable"
+    # Home Assistant skips a service call on an unavailable entity; the press itself refuses as well
+    await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
+    assert _writes(shi, 10070) == []
+    from custom_components.luxtronik_shi.button import LuxtronikTriggerButton
+
+    with pytest.raises(ServiceValidationError) as err:
+        await LuxtronikTriggerButton(entry.runtime_data, BY_KEY["circulation"]).async_press()
+    assert err.value.translation_key == "trigger_blocked"
+    assert _writes(shi, 10070) == []
+    shi.discrete[10001] = True
+    entry.runtime_data._tick = 0
+    await _polls(entry, 1)
+    assert hass.states.get(button).state != "unavailable"
+
+
+async def test_circulation_blocked_by_holiday_is_silent(hass: HomeAssistant, shi: FakeSHI, caplog) -> None:
+    """Holiday mode (3) is not readable over the SHI: the write is accepted, nothing starts, no error (open)."""
+    entry = await _setup(hass, shi)
+    shi.circulation_blocked = True
+    with caplog.at_level(logging.WARNING):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": _entity_id(hass, entry, "button", "circulation")}, blocking=True
+        )
+    assert shi.holding[10070] == 0 and "was not taken" not in caplog.text
+    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "circulation_running")).state == "off"
+
+
+async def test_trigger_not_available_makes_button_and_flag_unavailable(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """0x7FFF: the SHI has no circulation pump in this installation (visibility ID_Visi_Zirkulation)."""
+    shi.holding[10070] = 0x7FFF
+    entry = await _setup(hass, shi)
+    assert hass.states.get(_entity_id(hass, entry, "button", "circulation")).state == "unavailable"
+    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "circulation_running")).state == "unavailable"
+    assert hass.states.get(_entity_id(hass, entry, "button", "extra_dhw")).state != "unavailable"
 
 
 async def test_trigger_running_then_ended_by_the_firmware_is_no_external_change(
@@ -251,28 +349,86 @@ async def test_trigger_running_then_ended_by_the_firmware_is_no_external_change(
     assert not [i for i in ir.async_get(hass).issues.values() if i.domain == "luxtronik_shi"]
 
 
+async def test_old_trigger_switches_are_removed_from_the_registry(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """0.16.x created switch entities for the triggers; their registry entries are orphans and are deleted."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain="luxtronik_shi", title="WP", unique_id=f"127.0.0.1:{shi.port}:1",
+        data={"host": "127.0.0.1", "port": shi.port, "slave": 1}, options={"scan_interval": 30, "features": ["mk1"]},
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    old_switch = registry.async_get_or_create(
+        "switch", "luxtronik_shi", f"{entry.entry_id}_circulation", config_entry=entry,
+        suggested_object_id="zirkulationspumpe_circulation_pump",
+    )
+    old_raw = registry.async_get_or_create(
+        "sensor", "luxtronik_shi", f"{entry.entry_id}_raw_10502", config_entry=entry
+    )
+    kept = registry.async_get_or_create(
+        "sensor", "luxtronik_shi", f"{entry.entry_id}_raw_10113", config_entry=entry,
+        suggested_object_id="warmepumpe_diagnose_rohwert_10113",
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert registry.async_get(old_switch.entity_id) is None
+    assert registry.async_get(old_raw.entity_id) is None
+    # the renamed raw value keeps its entity ID under the new key
+    assert registry.async_get_entity_id("sensor", "luxtronik_shi", f"{entry.entry_id}_flow_calc_max") == kept.entity_id
+    assert registry.async_get_entity_id("button", "luxtronik_shi", f"{entry.entry_id}_circulation")
+
+
 # ------------------------------------------------------------------ overall group and levels
-async def test_overall_setpoint_mode_is_refused(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_overall_mode_does_not_offer_setpoint(hass: HomeAssistant, shi: FakeSHI) -> None:
+    """Mode 1 is not implemented for the overall group: the option is not in the list, a write is refused by
+    Home Assistant, and a foreign raw 1 shows no state (the diagnostics still show the raw value)."""
     entry = await _setup_with(hass, shi, ALL_FEATURES)
     registry = er.async_get(hass)
     entity_id = _entity_id(hass, entry, "select", OVERALL_MODE_KEY)
     registry.async_update_entity(entity_id, disabled_by=None)
     await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
-    assert hass.states.get(entity_id).attributes["options"] == list(CONTROL_MODES)
-    with pytest.raises(ServiceValidationError) as err:
+    assert hass.states.get(entity_id).attributes["options"] == ["no_influence", "offset", "level"]
+    with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
             "select", "select_option", {"entity_id": entity_id, "option": "setpoint"}, blocking=True
         )
-    assert err.value.translation_key == "overall_setpoint_not_implemented"
     assert shi.holding[10065] == 0
     await hass.services.async_call(
         "select", "select_option", {"entity_id": entity_id, "option": "offset"}, blocking=True
     )
     assert shi.holding[10065] == 2
-    shi.holding[10065] = 1  # another client wrote the unimplemented mode: still shown
+    shi.holding[10065] = 1  # another client wrote the unimplemented mode
     await _polls(entry, 3)
-    assert hass.states.get(entity_id).state == "setpoint"
+    assert hass.states.get(entity_id).state == "unknown"
+    assert entry.runtime_data.data[OVERALL_MODE_KEY] == 1
+    # the other mode selects offer all four options
+    assert hass.states.get(_entity_id(hass, entry, "select", "cfg_heating_mode")).attributes["options"] == list(
+        CONTROL_MODES
+    )
+
+
+async def test_level_select_offers_increased_once_and_shows_raw_2_as_increased(
+    hass: HomeAssistant, shi: FakeSHI
+) -> None:
+    """Raw 1 and 2 use the same controller parameter (proven): one option, written as 1."""
+    entry = await _setup(hass, shi)
+    entity_id = _entity_id(hass, entry, "select", "cfg_heating_level")
+    assert hass.states.get(entity_id).attributes["options"] == list(LEVEL_OPTIONS) == [
+        "normal", "increased", "decreased"
+    ]
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": entity_id, "option": "increased"}, blocking=True
+    )
+    assert shi.holding[10003] == 1
+    shi.holding[10003] = 2  # another client wrote python-luxtronik's "Increased2"
+    await _polls(entry, 3)
+    assert hass.states.get(entity_id).state == "increased"
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": entity_id, "option": "decreased"}, blocking=True
+    )
+    assert shi.holding[10003] == 3
 
 
 @pytest.mark.parametrize("lang", ["en", "de"])
@@ -286,13 +442,17 @@ def test_level_and_overall_labels_say_what_the_firmware_does(lang: str) -> None:
     )["entity"]["select"]
     for key in ("cfg_heating_level", "cfg_dhw_level", "cfg_mk1_level", "cfg_overall_level"):
         states = texts[key]["state"]
+        assert set(states) == {"normal", "increased", "decreased"}  # no "increased2"
         assert "Erhöhung" in states["increased"] and "Erhöhung" not in states["decreased"]
         assert "Absenkung" in states["decreased"]
-        assert ("Stufe 1" if lang == "de" else "step 1") in states["increased2"]
     overall = texts[OVERALL_MODE_KEY]["state"]
-    assert ("nicht umgesetzt" if lang == "de" else "not implemented") in overall["setpoint"]
+    assert ("nicht umgesetzt" if lang == "de" else "not implemented") in overall["setpoint"]  # notices only
     assert ("Vorrang" if lang == "de" else "overrides") in overall["offset"]
     assert texts["cfg_heating_mode"]["state"]["setpoint"] != overall["setpoint"]
+    for key in ("cfg_heating_mode", "cfg_dhw_mode", OVERALL_MODE_KEY):
+        assert "off" not in texts[key]["state"] and texts[key]["state"]["no_influence"].startswith(
+            "Keine Vorgabe" if lang == "de" else "No influence"
+        )
 
 
 # ------------------------------------------------------------------ resolved registers
@@ -313,10 +473,17 @@ def test_resolved_registers_follow_the_firmware_table() -> None:
     assert by_key["extra_dhw_duration"].state_class is None  # a setting, not a measurement
     for reg in RESOLVED_IN_0_17:
         assert reg.source and reg.source.startswith("proven:")
-    assert set(SHARES_ADDRESS) == set(by_key)
+    # the raw word sensors of the same addresses are gone: one entity per proven value
+    for key in ("raw_10410", "raw_10411", "raw_10416", "raw_10417", "raw_10500", "raw_10501", "raw_10502"):
+        assert key not in BY_KEY and key in REMOVED_KEYS
+    assert len({reg.address for reg in ALL_REGISTERS if reg.address in (10410, 10416, 10500, 10501, 10502)}) == 5
     # 10412 (pool hours, divisor 7200) stays a raw value until the factor is proven
     assert "raw_10412" in BY_KEY and not any(reg.address == 10412 for reg in RESOLVED_IN_0_17)
-    assert BY_KEY["raw_10113"].name_en.startswith("Flow: calculated maximum")
+    # 10113 is a proper sensor now; the registry entry of raw_10113 is migrated to it
+    assert "raw_10113" not in BY_KEY and RENAMED_KEYS["raw_10113"] == "flow_calc_max"
+    calc = BY_KEY["flow_calc_max"]
+    assert (calc.address, calc.dtype, calc.scale, calc.device_class) == (10113, "int16", 0.1, "temperature")
+    assert calc.name_en.startswith("Flow: calculated maximum") and not calc.enabled_default and calc.diagnostic
     assert BY_KEY["heating_limit"].name_en == "Demand border" and BY_KEY["dhw_limit"].name_en == "Demand border"
 
 
@@ -347,23 +514,22 @@ async def test_resolved_sensors_read_the_fake_values(hass: HomeAssistant, shi: F
     }
     for key, value in expected.items():
         assert hass.states.get(_entity_id(hass, entry, "sensor", key)).state == value, key
-    # the raw twins keep key, platform and the disabled default; the shared address is read once per block
+    # no raw twin exists for these addresses any more
     for raw_key in ("raw_10410", "raw_10411", "raw_10416", "raw_10500", "raw_10502"):
-        assert registry.async_get(_entity_id(hass, entry, "sensor", raw_key)).disabled_by is not None
+        assert registry.async_get_entity_id("sensor", "luxtronik_shi", f"{entry.entry_id}_{raw_key}") is None
+    assert [reg.address for reg in entry.runtime_data.polled_registers if reg.address == 10502] == [10502]
 
 
-async def test_resolved_sensor_and_raw_twin_share_one_read(hass: HomeAssistant, shi: FakeSHI) -> None:
-    entry = await _setup_with(hass, shi, ALL_FEATURES)
+async def test_flow_calc_max_reads_the_fake_value(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.input[10113] = 257
+    entry = await _setup(hass, shi)
     registry = er.async_get(hass)
-    registry.async_update_entity(_entity_id(hass, entry, "sensor", "raw_10502"), disabled_by=None)
+    entity_id = _entity_id(hass, entry, "sensor", "flow_calc_max")
+    assert registry.async_get(entity_id).disabled_by is not None  # diagnostic, disabled by default
+    registry.async_update_entity(entity_id, disabled_by=None)
     await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
-    coordinator = entry.runtime_data
-    assert coordinator.data["extra_dhw_remaining"] == coordinator.data["raw_10502"] == 0
-    polled = [reg.address for reg in coordinator.polled_registers if reg.address == 10502]
-    assert len(polled) == 2
-    reads = [r for r in shi.requests if r[0] == 4 and r[1] <= 10502 < r[1] + r[2]]
-    assert reads  # read as part of a block, not twice
+    assert hass.states.get(entity_id).state == "25.7"
 
 
 async def test_solar_equipment_flag_and_option(hass: HomeAssistant, shi: FakeSHI) -> None:

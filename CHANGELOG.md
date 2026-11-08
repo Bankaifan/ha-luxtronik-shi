@@ -16,18 +16,62 @@ versioning follows [Semantic Versioning](https://semver.org/):
 Everything in this version follows the full analysis of the SHI firmware V3.92.3
 ([docs/firmware-3.92.3-shi-full-analysis.md](docs/firmware-3.92.3-shi-full-analysis.md), German:
 [docs/firmware-3.92.3-shi-full-analysis.de.md](docs/firmware-3.92.3-shi-full-analysis.de.md)); the evidence grade of
-each item is given as *proven* (read from the firmware), *likely* (inferred) or *open*. No key was renamed or removed;
-entity IDs are unchanged.
+each item is given as *proven* (read from the firmware), *likely* (inferred) or *open*. **This version contains
+breaking changes**: entities whose model misled (a trigger shown as a switch, options the firmware does not implement
+or treats alike, a mode key called `off` that does not switch anything off) were corrected instead of preserved
+(CLAUDE.md, hard rule 1). Dead registry entries of removed or moved entities are deleted when the integration starts.
 
 ### Action required
+- **Circulation and extra hot water are buttons, not switches** (registers 10070/10071 are triggers: the firmware sets
+  them back to 0 itself when the run or the timer ends; proven). The switches `switch.<name>_circulation…` and
+  `switch.<name>_extra…` (keys `circulation`, `extra_dhw`) **are removed**; their registry entries are deleted at
+  start. New: button `circulation` (*Circulation: start run*), button `extra_dhw` (*Extra: start*), button
+  `extra_dhw_stop` (*Extra: end*, writes 0 = timer to 0), binary sensors `circulation_running` (*Circulation: run
+  active*, 10070 = 1) and `extra_dhw_running` (*Extra: running*, 10071 = 1), all in the *Hot water* device with new
+  entity IDs. **Automations and the Heat Pump Optimizer configuration:** call `button.press` on the new circulation
+  button instead of `switch.turn_on` on the old switch, and read the running state from the binary sensor
+  (`circulation` is one of the keys the HPO of the reference installation uses). The circulation button is
+  unavailable while `cap_hot_water` is off (the controller does not accept the trigger while its hot water mode is
+  *off*; *holiday* cannot be read, a press is then silently without effect).
+- **Mode option `off` is now `no_influence`** on every mode select (`cfg_heating_mode`, `cfg_dhw_mode`,
+  `cfg_mk1_mode` … `cfg_mk3_mode`, `cfg_mk1_cool_mode` … `cfg_mk3_cool_mode`, `cfg_overall_mode`) and in the climate
+  attribute `controller_mode`. Raw 0 means "the controller uses its own values"; the circuit keeps running, so `off`
+  misled. Automations, templates and an optimizer configuration that select or compare `off` must use `no_influence`
+  (the water heater already used that key). Entity IDs are unchanged.
+- **Operating mode state `off` is now `no_request`** (`sensor.<name>_operating_mode`, raw 5: the heat pump is idle
+  and waits for a demand, it is not off). Adjust automations that compare the state `off`.
+- **Level option `increased2` is gone** (`cfg_heating_level`, `cfg_dhw_level`, `cfg_mk1_level` … `cfg_mk3_level`,
+  `cfg_overall_level`). The firmware uses the same controller parameter *Erhöhung* for raw 1 and raw 2 (proven), so
+  both are the one option `increased` (written as raw 1; a raw 2 another client wrote shows as `increased`). Options
+  are now `normal` / `increased` / `decreased`. Automations that selected `increased2` must select `increased`.
+- **Overall mode (`cfg_overall_mode`, 10065) no longer offers `setpoint`**: the firmware does not implement raw 1 for
+  this group (it acts like *no influence*; proven). Options are `no_influence` / `offset` / `level`; a raw 1 another
+  client wrote shows as *unknown*. Previously the option was listed and refused at write time.
+- **Raw word sensors removed:** `raw_10410`, `raw_10411` (operating hours cooling), `raw_10416`, `raw_10417`
+  (operating hours solar), `raw_10500`, `raw_10501`, `raw_10502` (extra hot water). Their registers have proper sensors
+  (`hours_cooling`, `hours_solar`, `extra_dhw_setpoint`, `extra_dhw_duration`, `extra_dhw_remaining`); the raw twins
+  were disabled diagnostics and their registry entries are deleted at start. Nothing to do unless an automation used
+  one of them.
+- **`raw_10113` is now `flow_calc_max`** (*Flow: calculated maximum (TVL calc max)*, 0.1 °C, proven). The registry
+  entry is migrated like the earlier renames, so the entity ID, history and settings stay; only the unique ID suffix
+  changes. Adjust anything that matches on the unique ID `…_raw_10113`.
 - **Overall offset (`cfg_overall_offset`, 10066): the range is now −5.0 … +5.0 K** (proven; python-luxtronik listed
   −20 … +20 K). The firmware acknowledges a value beyond ±5 K and resets the register to 0 instead. Automations that
   wrote larger values now get a validation error instead of a silent reset. The entity is disabled by default.
 - New equipment option **Solar** (operating hours of the solar function, `hours_solar`), pre-filled from the new
   equipment flag `cap_solar`. Existing entries keep their options; the new option is off until you turn it on under
   *Options*.
+- **Working rules (CLAUDE.md):** the entity contract is no longer a ban on renames and removals. Correctness comes
+  first; a misleading entity is fixed with an *Action required* note, migration notes in both READMEs and orphan
+  cleanup, and `tests/test_contract.py` is a change detector that is updated deliberately.
 
 ### Added
+- **Button platform** for the two trigger registers (`button.py`): `circulation` and `extra_dhw` write 1 and read the
+  register back (a read-back of 0 is the normal end, `TRIGGER_KEYS`); `extra_dhw_stop` writes 0 (`TRIGGER_ACTIONS`).
+  The buttons are unavailable while the register reads *not available* (0x7FFF) and, for circulation, while
+  `cap_hot_water` is off (`TRIGGER_REQUIRES`); a press in that state raises `trigger_blocked`. Binary sensors
+  `circulation_running` and `extra_dhw_running` (`DERIVED_FLAGS`, device class *running*) show the register state;
+  they share the one read of the register with the button.
 - **Firmware ranges and defaults for every writable register** (proven). `Register.reset_default` records the raw word
   the firmware resets a register to at boot, on watchdog expiry and after a write outside its range (setpoints 350 /
   400 / 200, power limit 300, everything else 0; the room setpoint 10060 reverts to its persisted controller
@@ -42,9 +86,14 @@ entity IDs are unchanged.
 - **Resolved registers, new keys** (proven): `hours_cooling` (10410, needs *cooling*), `hours_solar` (10416, needs
   *solar*), `extra_dhw_setpoint` (10500, 0.1 °C, controller parameter 1146), `extra_dhw_duration` (10501, minutes,
   parameter 1147) and `extra_dhw_remaining` (10502, minutes, the running extra hot water timer), `cap_solar`
-  (discrete input 10004). The matching `raw_<address>` sensors keep their keys and stay disabled; a shared address
-  is read once. The pool hour counter 10412 stays a raw value: the firmware divides it by 7200 instead of 3600, so
-  the wire value is likely half the hours (not measured, no pool on the reference installation).
+  (discrete input 10004), `flow_calc_max` (10113, *TVL calc max*, replaces `raw_10113` with a migrated registry
+  entry). The raw word sensors of these addresses are removed (see *Action required*). The pool hour counter 10412
+  stays a raw value: the firmware divides it by 7200 instead of 3600, so the wire value is likely half the hours (not
+  measured, no pool on the reference installation).
+- `Register.unselectable`: options a select shows when read but does not offer for writing (the overall mode's
+  `setpoint`); `raw_in_range` refuses them. `Register.options` may list one option at several raw positions when the
+  firmware treats the raw values alike (the levels). `REMOVED_ENTITIES` names keys that moved to another platform;
+  `async_remove_obsolete_entities` deletes their old registry entries like those of `REMOVED_KEYS`.
 - Diagnostics download names the controller parameter 1161 **Enable SHI** (not readable over Modbus): while it is off,
   setpoints, offsets, levels and the power limit are read back but ignored; blocks, circulation and extra hot water
   work regardless (proven).
@@ -54,23 +103,25 @@ entity IDs are unchanged.
 
 ### Changed
 - **Overall group (10065–10067)** (proven): a mode other than *no influence* takes precedence over the heating mode
-  **and** the mixing circuit modes; hot water is not affected. Mode *setpoint* is not implemented by the firmware for
-  this group (acts like *no influence*): the select refuses to write it (`overall_setpoint_not_implemented`), the
-  option stays listed so a value another client wrote is shown. Option labels say so. The level uses the parameters
-  *Hz. allg.* (1187/1188). The entities stay disabled by default and are still not restored (owner decision: an active
-  overall mode silently overrides what an optimizer writes per circuit).
-- **Level labels** (proven): 0 normal; 1 and 2 both raise the target by the controller parameter *Erhöhung* of the
-  circuit (the same parameter, so 2 equals 1); 3 lowers it by *Absenkung*. The amounts are the controller parameters
-  1187–1198 (menu *Offsets*). Option keys unchanged.
-- **Circulation pump and extra hot water are triggers** (proven, `TRIGGER_KEYS`): the firmware sets them back to 0
-  itself when the circulation run or the extra hot water timer ends. A read-back of 0 is the normal end, never a
-  failed write; they remain excluded from the restore and from the external change notice. The circulation trigger is
-  not accepted while the controller's hot water mode is *holiday* or *off*.
+  **and** the mixing circuit modes; hot water is not affected. Raw 1 (*setpoint*) is not implemented by the firmware
+  for this group and is not offered any more (see *Action required*). Option labels say what the group does. The
+  level uses the parameters *Hz. allg.* (1187/1188). The entities stay disabled by default and are still not restored
+  (owner decision: an active overall mode silently overrides what an optimizer writes per circuit).
+- **Levels** (proven): raw 0 `normal`; raw 1 and 2 are the one option `increased` (the controller parameter
+  *Erhöhung* of the circuit); raw 3 `decreased` (*Absenkung*). The amounts are the controller parameters 1187–1198
+  (menu *Offsets*). Labels say so.
+- **Mode selects**: raw 0 is `no_influence` (see *Action required*); the labels say that the controller uses its own
+  values. The water heater's operation modes are the same option keys as the mode select.
+- **Circulation and extra hot water are triggers** (proven, `TRIGGER_KEYS`): the firmware sets them back to 0 itself
+  when the circulation run or the extra hot water timer ends. They are buttons with running flags now (see *Action
+  required*); a read-back of 0 is the normal end, never a failed write; they remain excluded from the restore and from
+  the external change notice.
+- **Blocks stay switches** (10050–10053): a block is a state the writer holds until it is changed or the SHI watchdog
+  releases it (proven), so the switch model is right; documented in `switch.py`.
 - **Names** (keys unchanged): `heating_limit` and `dhw_limit` are *Demand border* (firmware items *Heating demand
-  border* / *DHW Demand border*: effective target minus hysteresis, tracked by the firmware, not parameters);
-  `raw_10113` is *Flow: calculated maximum (TVL calc max)* instead of *heating target (calculated)*; the raw sensors
-  of 10410–10417 and 10500–10502 are named after their firmware counters. Entity IDs of existing installations stay;
-  the generated dashboards use the new default IDs for new installations.
+  border* / *DHW Demand border*: effective target minus hysteresis, tracked by the firmware, not parameters). Entity
+  IDs of existing installations stay; the generated dashboards use the new default IDs for new installations and show
+  the trigger buttons and running flags.
 - **Heat quantity counters** (`energy_th_*`, 10320–10328) decode as signed 32-bit values (firmware builder INT32); the
   electric counters stay unsigned. Values do not change for any plausible counter reading.
 - Reset detection of the restore option accepts the proven firmware default of a setpoint as its reset value, next
@@ -92,8 +143,14 @@ entity IDs are unchanged.
 ### Tests
 - `tests/test_firmware_3923_findings.py`: ranges and defaults of every writable holding, refusal of out-of-range
   writes (number entity, coordinator, restore), default read-back as an error, deferred hot water writes, proven
-  default as reset value, triggers, overall mode without setpoint, level and overall labels, resolved registers,
-  shared addresses, solar flag and option, signed heat quantity counters.
+  default as reset value, trigger buttons and running flags (press, instant end, stop, blocked by the hot water mode,
+  not available, firmware end is no external change, old switch and raw entries removed, `raw_10113` migrated),
+  overall mode without the setpoint option, level select with one `increased`, labels, resolved registers,
+  `flow_calc_max`, solar flag and option, signed heat quantity counters.
+- `tests/test_contract.py` compares the fixture with the code in both directions and checks `REMOVED_KEYS`,
+  `REMOVED_ENTITIES` and `RENAMED_KEYS` for consistency (`tests/contract.py` is shared with `tools/gen_contract.py`,
+  which now also prints stale fixture entries). Fake SHI: the circulation trigger is not accepted while discrete input
+  10001 is off or `circulation_blocked` is set.
 
 ## [0.16.1] – 2026-11-08
 

@@ -26,6 +26,7 @@ from .registers import (
     BLOCK_SELECT_KEYS,
     BLOCK_SWITCH_KEYS,
     CLIMATE_KEYS,
+    REMOVED_ENTITIES,
     REMOVED_KEYS,
     RENAMED_KEYS,
     WATER_HEATER_KEYS,
@@ -38,6 +39,7 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.SWITCH,
+    Platform.BUTTON,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.CLIMATE,
@@ -72,11 +74,21 @@ async def async_migrate_renamed_keys(hass: HomeAssistant, entry: ConfigEntry) ->
 
 
 def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Delete the registry entries of entities that no longer exist (``REMOVED_KEYS``)."""
+    """Delete the registry entries of entities that no longer exist.
+
+    ``REMOVED_KEYS``: keys without any entity (on every platform). ``REMOVED_ENTITIES``: keys that moved to
+    another platform; only the entry of the old platform goes (the switches ``circulation`` and ``extra_dhw``
+    of 0.16.x, which are buttons since 0.17.0). Without this, a dead entity would stay in the registry
+    forever.
+    """
     registry = er.async_get(hass)
     obsolete = {f"{entry.entry_id}_{key}" for key in REMOVED_KEYS}
+    moved = {(domain, f"{entry.entry_id}_{key}") for domain, key in REMOVED_ENTITIES}
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if entity.platform == DOMAIN and entity.unique_id in obsolete:
+        if entity.platform != DOMAIN:
+            continue
+        if entity.unique_id in obsolete or (entity.domain, entity.unique_id) in moved:
+            _LOGGER.info("%s: removing the obsolete entity %s", entry.title, entity.entity_id)
             registry.async_remove(entity.entity_id)
 
 

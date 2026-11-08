@@ -292,9 +292,17 @@ views:
       heading: Warmwasser
       icon: mdi:water-boiler
     - type: tile
-      entity: switch.warmepumpe_warmwasser_zirkulationspumpe
+      entity: button.warmepumpe_warmwasser_zirkulation_lauf_starten
     - type: tile
-      entity: switch.warmepumpe_warmwasser_extra
+      entity: binary_sensor.warmepumpe_warmwasser_zirkulation_lauf_aktiv
+    - type: tile
+      entity: button.warmepumpe_warmwasser_extra_starten
+    - type: tile
+      entity: button.warmepumpe_warmwasser_extra_beenden
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_extra_lauft
+    - type: tile
+      entity: sensor.warmepumpe_warmwasser_extra_restlaufzeit
     - type: tile
       entity: select.warmepumpe_warmwasser_betriebsart
     - type: tile
@@ -630,8 +638,8 @@ views:
         | Wärmepumpe Warmwasser Sperren | `dhw_block` | `switch.warmepumpe_warmwasser_sperren` |
         | Wärmepumpe Kühlung Sperren | `cooling_block` | `switch.warmepumpe_kuhlung_sperren` |
         | Wärmepumpe Pool Sperren | `pool_block` | `switch.warmepumpe_pool_sperren` |
-        | Wärmepumpe Warmwasser Zirkulationspumpe | `circulation` | `switch.warmepumpe_warmwasser_zirkulationspumpe` |
-        | Wärmepumpe Warmwasser Extra | `extra_dhw` | `switch.warmepumpe_warmwasser_extra` |
+        | Wärmepumpe Warmwasser Zirkulation: Lauf starten | `circulation` | `button.warmepumpe_warmwasser_zirkulation_lauf_starten` |
+        | Wärmepumpe Warmwasser Extra: starten | `extra_dhw` | `button.warmepumpe_warmwasser_extra_starten` |
         | Wärmepumpe Temperatur: Außen Mittelwert | `outside_temp_average` | `sensor.warmepumpe_temperatur_aussen_mittelwert` |
         | Wärmepumpe Temperatur: Wärmequelle Eintritt | `heat_source_input` | `sensor.warmepumpe_temperatur_warmequelle_eintritt` |
         | Wärmepumpe Heizung Mischkreis 2: Betriebsart | `cfg_mk2_mode` | `select.warmepumpe_heizung_mischkreis_2_betriebsart` |
@@ -685,6 +693,8 @@ views:
         | Wärmepumpe Heizung Läuft | `heating_running` | `binary_sensor.warmepumpe_heizung_lauft` |
         | Wärmepumpe Warmwasser Läuft | `dhw_running` | `binary_sensor.warmepumpe_warmwasser_lauft` |
         | Wärmepumpe Leistungsbegrenzung: Modus eingestellt | `power_limit_configured` | `binary_sensor.warmepumpe_leistungsbegrenzung_modus_eingestellt` |
+        | Wärmepumpe Warmwasser Zirkulation: Lauf aktiv | `circulation_running` | `binary_sensor.warmepumpe_warmwasser_zirkulation_lauf_aktiv` |
+        | Wärmepumpe Warmwasser Extra: läuft | `extra_dhw_running` | `binary_sensor.warmepumpe_warmwasser_extra_lauft` |
         | Wärmepumpe Firmware-Version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
         | Wärmepumpe Status: Verdichter 1 läuft | `compressor_1` | `binary_sensor.warmepumpe_status_verdichter_1_lauft` |
         | Wärmepumpe Status: Verdichter 2 läuft | `compressor_2` | `binary_sensor.warmepumpe_status_verdichter_2_lauft` |
@@ -695,6 +705,7 @@ views:
         | Wärmepumpe Warmwasser | `water_heater_dhw` | `water_heater.warmepumpe_warmwasser` |
         | Wärmepumpe Betriebsart (Sperren) | `block_mode` | `select.warmepumpe_betriebsart_sperren` |
         | Wärmepumpe Ein/Aus (Sperren) | `block_power` | `switch.warmepumpe_ein_aus_sperren` |
+        | Wärmepumpe Warmwasser Extra: beenden | `extra_dhw_stop` | `button.warmepumpe_warmwasser_extra_beenden` |
   - type: grid
     cards:
     - type: heading

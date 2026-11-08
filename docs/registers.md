@@ -34,7 +34,7 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `heat_source_input` | 10110 | input | int16 | 0.1 | °C | - | open |
 | `heat_source_out` | 10111 | input | int16 | 0.1 | °C | - | open |
 | `max_flow_temp` | 10112 | input | uint16 | 0.1 | °C | - | open |
-| `raw_10113` | 10113 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x67 'TVL calc max' (return target + moving average of the flow-return spread); measured |
+| `flow_calc_max` | 10113 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x67 'TVL calc max' (return target + moving average of the flow-return spread); measured |
 | `dhw` | 10120 | input | int16 | 0.1 | °C | - | open |
 | `dhw_target` | 10121 | input | uint16 | 0.1 | °C | - | open |
 | `dhw_min` | 10122 | input | int16 | 0.1 | °C | - | open |
@@ -97,19 +97,12 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `hours_heating` | 10406 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `hours_dhw` | 10408 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `hours_cooling` | 10410 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10410` | 10410 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10411` | 10411 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `raw_10412` | 10412 | input | uint16 | 1 | - | - | proven: firmware Zaehler_BetrZeitSW; divisor 7200 (likely hours / 2, not measured) |
 | `raw_10413` | 10413 | input | uint16 | 1 | - | - | proven: firmware Zaehler_BetrZeitSW; divisor 7200 (likely hours / 2, not measured) |
 | `hours_solar` | 10416 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10416` | 10416 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10417` | 10417 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `extra_dhw_setpoint` | 10500 | input | int16 | 0.1 | °C | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10500` | 10500 | input | int16 | 0.1 | °C | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `extra_dhw_duration` | 10501 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10501` | 10501 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `extra_dhw_remaining` | 10502 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `raw_10502` | 10502 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_heating_mode` | 10000 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_heating_setpoint` | 10001 | holding | uint16 | 0.1 | °C | 15 … 75 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_heating_offset` | 10002 | holding | int16 | 0.1 | K | -20 … 20 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
@@ -149,7 +142,7 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `cfg_overall_mode` | 10065 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_overall_offset` | 10066 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_overall_level` | 10067 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `circulation` | 10070 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware |
+| `circulation` | 10070 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware once no run is active |
 | `extra_dhw` | 10071 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware when the timer ends |
 | `cap_heating` | 10000 | discrete | uint16 | 1 | - | - | open |
 | `cap_hot_water` | 10001 | discrete | uint16 | 1 | - | - | open |

@@ -180,7 +180,7 @@ EQUIPMENT_TEXT = {
 
 STATES = {
     "en": {
-        "off": "Off",
+        "no_influence": "No influence",
         "setpoint": "Setpoint",
         "offset": "Offset",
         "level": "Level",
@@ -189,7 +189,6 @@ STATES = {
         "normal": "Normal",
         "boost": "Boost",
         "increased": "Increased",
-        "increased2": "Increased (step 2)",
         "decreased": "Decreased",
         "none": "No limit",
         "soft": "Soft limit",
@@ -211,7 +210,7 @@ STATES = {
         **{f"unknown_{n}": f"Unknown ({n})" for n in range(4, 16)},
     },
     "de": {
-        "off": "Aus",
+        "no_influence": "Keine Vorgabe",
         "setpoint": "Sollwert",
         "offset": "Anhebung",
         "level": "Stufe",
@@ -220,7 +219,6 @@ STATES = {
         "normal": "Normal",
         "boost": "Boost",
         "increased": "Erhöht",
-        "increased2": "Erhöht (Stufe 2)",
         "decreased": "Abgesenkt",
         "none": "Keine Begrenzung",
         "soft": "Weiche Begrenzung",
@@ -266,61 +264,62 @@ NOTICES = {
 }
 
 # Labels per option tuple where one option key means different things in different registers. Each label says what
-# the option does (sources: python-luxtronik datatypes ControlMode, LevelMode, OperationMode).
+# the option does (sources: firmware V3.92.3 full analysis, python-luxtronik datatypes ControlMode, LevelMode,
+# OperationMode).
 OPTION_OVERRIDES = {
-    # ControlMode of every mode select: raw 0 is "no influence" (the controller uses its own values), never "off".
+    # ControlMode of every mode select: raw 0 is "no influence" (the controller uses its own values); the circuit
+    # keeps running.
     registers.CONTROL_MODES: {
         "en": {
-            "off": "No influence",
+            "no_influence": "No influence (controller uses its own values)",
             "setpoint": "Setpoint (replaces the controller's target)",
             "offset": "Offset (controller's target plus offset)",
             "level": "Level (controller's target corrected by the level)",
         },
         "de": {
-            "off": "Keine Vorgabe",
+            "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
             "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
             "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
             "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)",
         },
     },
-    # Level (firmware V3.92.3, proven): 0 no correction; 1 and 2 both raise the target by the controller parameter
-    # "Erhöhung" of the circuit (the same parameter, so 2 equals 1); 3 lowers it by the parameter "Absenkung".
+    # Level (firmware V3.92.3, proven): 0 no correction; raw 1 and 2 both raise the target by the controller
+    # parameter "Erhöhung" of the circuit (one option, written as 1); 3 lowers it by the parameter "Absenkung".
     # The amounts are set at the control panel (menu "Offsets", -20 ... +20 K), not over the SHI.
     registers._LEVELS: {
         "en": {
             "normal": "Normal (no correction)",
             "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-            "increased2": "Increased, step 2 (same as step 1 in the firmware)",
             "decreased": "Decreased (by the controller's \"Absenkung\" parameter)",
         },
         "de": {
             "normal": "Normal (keine Korrektur)",
             "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-            "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
             "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)",
         },
     },
-    # OperationMode: 5 is "no request", 2 "swimming pool/solar", 6 "heating external source".
+    # OperationMode: 5 is "no request" (idle, not off), 2 "swimming pool/solar", 6 "heating external source".
     registers._OPERATING_MODES: {
-        "en": {"off": "No request", "pool": "Pool / solar", "external_source": "Heating (external source)"},
-        "de": {"off": "Keine Anforderung", "pool": "Schwimmbad / Solar", "external_source": "Heizen (externe Quelle)"},
+        "en": {"no_request": "No request", "pool": "Pool / solar", "external_source": "Heating (external source)"},
+        "de": {"no_request": "Keine Anforderung", "pool": "Schwimmbad / Solar", "external_source": "Heizen (externe Quelle)"},
     },
 }
 
 
 # Labels that differ for one register only. The overall mode (10065) shares the option tuple of the other mode
-# selects, but the firmware does not implement its mode 1 (setpoint): it acts like 0 (V3.92.3, proven), and the
-# select refuses to write it. A mode other than 0 overrides the heating and mixing circuit modes.
+# selects, but the firmware does not implement its mode 1 (setpoint): it acts like 0 (V3.92.3, proven), so the
+# select does not offer it (``Register.unselectable``); the label is still needed for the notice about a value
+# another client wrote. A mode other than 0 overrides the heating and mixing circuit modes.
 KEY_OPTION_OVERRIDES = {
     registers.OVERALL_MODE_KEY: {
         "en": {
-            "off": "No influence (circuits follow their own modes)",
+            "no_influence": "No influence (circuits follow their own modes)",
             "setpoint": "Setpoint (not implemented by the firmware, acts like no influence)",
             "offset": "Offset for all heating circuits (overrides their modes)",
             "level": "Level for all heating circuits (overrides their modes)",
         },
         "de": {
-            "off": "Keine Vorgabe (Kreise folgen ihren eigenen Betriebsarten)",
+            "no_influence": "Keine Vorgabe (Kreise folgen ihren eigenen Betriebsarten)",
             "setpoint": "Sollwert (von der Firmware nicht umgesetzt, wirkt wie keine Vorgabe)",
             "offset": "Anhebung für alle Heizkreise (hat Vorrang vor deren Betriebsarten)",
             "level": "Stufe für alle Heizkreise (hat Vorrang vor deren Betriebsarten)",
@@ -334,8 +333,8 @@ def option_label(lang: str, options: tuple[str, ...], option: str, key: str | No
     return by_key.get(option) or OPTION_OVERRIDES.get(options, {}).get(lang, {}).get(option, STATES[lang][option])
 
 
-# Operation modes of the water heater (water_heater.OPERATION_MODES), raw value order of the mode select.
-WATER_HEATER_OPERATIONS = ("no_influence", "setpoint", "offset", "level")
+# Operation modes of the water heater (water_heater.OPERATION_MODES): the options of the mode select.
+WATER_HEATER_OPERATIONS = registers.CONTROL_MODES
 
 FIRMWARE_NAME = {"en": "Firmware version", "de": "Firmware-Version"}
 
@@ -375,7 +374,7 @@ def exceptions(lang: str) -> dict[str, dict[str, str]]:
                 setpoint=labels["setpoint"], mode=labels[mode] if mode in labels else _UNKNOWN_MODE[lang]
             )
         }
-        for mode in ("off", "offset", "level", "unknown")
+        for mode in ("no_influence", "offset", "level", "unknown")
     }
     out.update(EXCEPTIONS[lang])
     return out
@@ -424,8 +423,8 @@ EXCEPTIONS = {
         "write_reverted_to_default": {
             "message": "The heat pump did not take {key} = {value}: the register reads its default {default} again. The controller reverts a value set over the Smart Home Interface when another Modbus client writes as well (error 816, more than two write sources within an hour), when its watchdog expired at that moment, or when the value is outside its range. The value set before is gone as well; set it again."
         },
-        "overall_setpoint_not_implemented": {
-            "message": "The overall mode has no setpoint: the heat pump firmware does not implement this mode for the overall group and treats it like \"no influence\". Use offset or level, or set the mode of the single circuit."
+        "trigger_blocked": {
+            "message": "{key} was not started: the controller does not accept it while hot water is not equipped or its operating mode at the control panel is off ({flag} reads off)."
         },
         "not_writable": {"message": "Register {key} cannot be written."},
         "poll_failed": {"message": "No connection to the heat pump: {error}"},
@@ -451,8 +450,8 @@ EXCEPTIONS = {
         "write_reverted_to_default": {
             "message": "Die Wärmepumpe hat {key} = {value} nicht übernommen: Das Register liest wieder seinen Standardwert {default}. Die Regelung setzt einen über die Smart-Home-Schnittstelle gesetzten Wert zurück, wenn ein weiterer Modbus-Client ebenfalls schreibt (Fehler 816, mehr als zwei Schreibquellen innerhalb einer Stunde), wenn ihr Wächter in diesem Moment abgelaufen ist oder wenn der Wert außerhalb des Bereichs liegt. Der zuvor gesetzte Wert ist damit ebenfalls weg; setze ihn erneut."
         },
-        "overall_setpoint_not_implemented": {
-            "message": "Die Gesamt-Betriebsart hat keinen Sollwert: Die Firmware der Wärmepumpe setzt diese Betriebsart für die Gesamt-Gruppe nicht um und behandelt sie wie „keine Vorgabe“. Verwende Anhebung oder Stufe oder setze die Betriebsart des einzelnen Kreises."
+        "trigger_blocked": {
+            "message": "{key} wurde nicht gestartet: Die Regelung nimmt ihn nicht an, solange Warmwasser nicht ausgestattet ist oder seine Betriebsart am Bedienteil Aus ist ({flag} liest aus)."
         },
         "not_writable": {"message": "Register {key} kann nicht geschrieben werden."},
         "poll_failed": {"message": "Keine Verbindung zur Wärmepumpe: {error}"},
@@ -501,7 +500,7 @@ ISSUES = {
 }
 
 for lang in ("en", "de"):
-    entity: dict[str, dict] = {"sensor": {}, "binary_sensor": {}, "switch": {}, "number": {}, "select": {}}
+    entity: dict[str, dict] = {"sensor": {}, "binary_sensor": {}, "switch": {}, "button": {}, "number": {}, "select": {}}
     for reg in registers.ALL_REGISTERS:
         name = reg.name_en if lang == "en" else reg.name_de
         if reg.key in registers.RAW_KEYS:
@@ -560,6 +559,8 @@ for lang in ("en", "de"):
         entity["sensor"][difference.key] = {"name": difference.name_en if lang == "en" else difference.name_de}
     for flag in registers.DERIVED_FLAGS:
         entity["binary_sensor"][flag.key] = {"name": flag.name_en if lang == "en" else flag.name_de}
+    for action in registers.TRIGGER_ACTIONS:
+        entity["button"][action.key] = {"name": action.name_en if lang == "en" else action.name_de}
     for key, _bit, de, en in binary_sensor.STATUS_BITS:
         entity["binary_sensor"][key] = {"name": en if lang == "en" else de}
     entity["binary_sensor"]["online"] = {"name": "Status: connection" if lang == "en" else "Status: Verbindung"}

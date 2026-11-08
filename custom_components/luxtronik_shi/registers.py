@@ -2,7 +2,8 @@
 
 The map covers every documented register of the SHI (firmware 3.90 ... 3.92) that was
 verified on a running installation (alpha innotec LWDV 91-1/3, firmware 3.92.3).
-Everything that can be written through Modbus is exposed as number, select or switch.
+Everything that can be written through Modbus is exposed as number, select or switch; the two trigger
+registers (circulation run, extra hot water) as button plus a "running" binary sensor.
 
 Naming scheme of the keys: they are identical to the suffix of the entity IDs
 that the former YAML ``modbus:`` configuration produced (``lwdv_shi_<key>``),
@@ -19,7 +20,7 @@ DType = Literal["uint16", "int16", "uint32", "int32"]
 # The SHI word for "not available" (const.SHI_NOT_AVAILABLE; this module has no package imports, tools load it
 # standalone, tests pin that both agree).
 _NOT_AVAILABLE_WORD = 0x7FFF
-Platform = Literal["sensor", "binary_sensor", "switch", "number", "select", "internal"]
+Platform = Literal["sensor", "binary_sensor", "switch", "button", "number", "select", "internal"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,8 +49,13 @@ class Register:
     step: float | None = None
     # Entity category "configuration" (settings that are normally not touched daily).
     config: bool = False
-    # Enumerations: the raw value is the index into this tuple (select and enum sensors).
+    # Enumerations: the raw value is the index into this tuple (select and enum sensors). The same option may
+    # appear at several positions when the firmware treats those raw values alike (``_LEVELS``: raw 1 and 2 both
+    # mean "increased"); a write uses the first position.
     options: tuple[str, ...] | None = None
+    # Selects only: options that exist as raw values but are not offered for writing because the firmware does
+    # not implement them (``cfg_overall_mode``: ``setpoint``). Read back, the select shows no state for them.
+    unselectable: frozenset[str] = frozenset()
     # Where the register facts come from (shown in docs/registers.md). ``None`` = no source recorded (open).
     source: str | None = None
     # Writable holdings only: the raw word the firmware resets the register to at boot, on watchdog expiry and
@@ -125,12 +131,13 @@ def raw_in_range(reg: Register, raw: int) -> bool:
     The SHI firmware answers a write outside the range of a register with a normal Modbus acknowledgement but
     resets the register to its default instead of storing the value (FW 3.92.3 full analysis, 1.4; proven). So
     nothing outside the range may ever be sent. Numbers: ``min_value`` ... ``max_value`` in physical units
-    (negative values as two's complement). Selects: an index of ``options``. Switches: 0 or 1 (the firmware treats
-    every value other than 0 as 1, but only 0 and 1 are written). Holdings without a range accept every word.
+    (negative values as two's complement). Selects: an index of ``options`` that is not ``unselectable``.
+    Switches and buttons (triggers): 0 or 1 (the firmware treats every value other than 0 as 1, but only 0 and 1
+    are written). Holdings without a range accept every word.
     """
     if reg.platform == "select" and reg.options is not None:
-        return 0 <= raw < len(reg.options)
-    if reg.platform == "switch":
+        return 0 <= raw < len(reg.options) and reg.options[raw] not in reg.unselectable
+    if reg.platform in ("switch", "button"):
         return raw in (0, 1)
     if reg.min_value is None or reg.max_value is None:
         return True
@@ -168,20 +175,31 @@ _HOURS = {
     "every": 10,
 }
 _SETTING = {"config": True, "every": 2}
-# Control mode of a circuit (python-luxtronik ``ControlMode``). Raw 0 ("off") means "no influence": the controller
-# uses its own values. It does NOT switch the circuit off. The option keys stay for compatibility; the display text
-# says what each option does (tools/gen_translations.py).
-_MODES = ("off", "setpoint", "offset", "level")
+# Control mode of a circuit (python-luxtronik ``ControlMode``, FW 3.92.3 full analysis, 3.1; proven). Raw 0 is
+# "no influence": the controller uses its own values (heating curve, time programme). It does NOT switch the
+# circuit off, so the option is called ``no_influence`` (up to 0.16.x ``off``, which misled automations). 1 =
+# setpoint (replaces the controller's target), 2 = offset (controller's target plus the offset register), 3 = level
+# (controller's target corrected by the level parameter).
+_MODES = ("no_influence", "setpoint", "offset", "level")
 CONTROL_MODES: tuple[str, ...] = _MODES
+MODE_NO_INFLUENCE = "no_influence"
+MODE_SETPOINT = "setpoint"
 # Level of a circuit (FW 3.92.3 full analysis, 3.1; proven): 0 normal, 1 and 2 both raise the target by the
-# controller parameter "Erhöhung <circuit>" (the same parameter for both, so 2 equals 1), 3 lowers it by the
-# parameter "Absenkung <circuit>". The amounts are the device parameters 1187 ... 1198 (menu "Offsets", -20 ... +20 K
-# in 0.5 K steps), not anything the SHI can read or write. The option keys stay (python-luxtronik ``LevelMode``).
-_LEVELS = ("normal", "increased", "increased2", "decreased")
+# controller parameter "Erhöhung <circuit>" (the same parameter for both, so raw 2 IS "increased"), 3 lowers it by
+# the parameter "Absenkung <circuit>". The amounts are the device parameters 1187 ... 1198 (menu "Offsets",
+# -20 ... +20 K in 0.5 K steps), not anything the SHI can read or write. Raw 1 and 2 therefore share one option;
+# the select offers ``increased`` once and writes raw 1 (python-luxtronik's ``Increased2`` is not a separate value
+# in the firmware; the option ``increased2`` of 0.16.x is gone).
+_LEVELS = ("normal", "increased", "increased", "decreased")
+LEVEL_OPTIONS: tuple[str, ...] = tuple(dict.fromkeys(_LEVELS))
 # The overall group (10065 ... 10067) takes precedence over the heating and the mixing circuit modes; its mode 1
 # (setpoint) is not implemented in the firmware and acts like 0 (full analysis, 3.1; proven). The raw values are
-# the same as CONTROL_MODES, so the option tuple is the same; ``select.py`` refuses to write ``setpoint`` there.
+# the same as CONTROL_MODES; ``setpoint`` is ``unselectable`` there (not offered, shown as no state when read).
 OVERALL_MODE_KEY = "cfg_overall_mode"
+OVERALL_UNSELECTABLE: frozenset[str] = frozenset({MODE_SETPOINT})
+# The two trigger registers (buttons; see their entries in REGISTERS and const.TRIGGER_KEYS).
+CIRCULATION_KEY = "circulation"
+EXTRA_DHW_KEY = "extra_dhw"
 # Raw defaults of the writable holdings (full analysis, 3.4; proven): setpoints 350 / 400 / 200 (0.1 degC), the power
 # limit 300 (0.1 kW), everything else 0. These are also the values a register reads after a watchdog expiry, a
 # reboot and a write outside its range.
@@ -199,13 +217,17 @@ _STATUS_UNKNOWN_TO = 15
 FUNCTION_STATUS = ("disabled", "no_request", "requested", "running") + tuple(
     f"unknown_{n}" for n in range(_STATUS_UNKNOWN_FROM, _STATUS_UNKNOWN_TO + 1)
 )
+# Operating state of the heat pump (input 10002, python-luxtronik ``OperationMode``): 0 heating, 1 hot water,
+# 2 swimming pool / solar, 3 utility lock (EVU), 4 defrost, 5 no request (idle; up to 0.16.x the option was
+# called ``off``, which it is not: the heat pump is ready and waits for a demand), 6 heating with the external
+# source, 7 cooling.
 _OPERATING_MODES = (
     "heating",
     "hot_water",
     "pool",
     "evu_lock",
     "defrost",
-    "off",
+    "no_request",
     "external_source",
     "cooling",
 )
@@ -606,12 +628,13 @@ REGISTERS: tuple[Register, ...] = (
     ),
     # Overall heating (10065-10067, firmware 3.92.0 or later): proven by the firmware (full analysis, 3.1). A mode
     # other than 0 takes precedence over the heating mode (10000) AND the mixing circuit modes; mode 1 (setpoint) is
-    # not implemented there and acts like 0. The level uses the parameters "Hz. allg." 1187/1188. The offset range is
-    # -5.0 ... +5.0 K (not -20 ... 20 as python-luxtronik lists: a larger value resets the register to 0). The
-    # entities stay disabled by default (owner decision): an active overall mode silently overrides what an
-    # optimizer writes to the heating circuit.
+    # not implemented there and acts like 0, so the select does not offer it (``unselectable``). The level uses
+    # the parameters "Hz. allg." 1187/1188. The offset range is -5.0 ... +5.0 K (not -20 ... 20 as python-luxtronik
+    # lists: a larger value resets the register to 0). The entities stay disabled by default (owner decision): an
+    # active overall mode silently overrides what an optimizer writes to the heating circuit.
     _select(
-        OVERALL_MODE_KEY, 10065, "Gesamt: Betriebsart", "Overall: mode", _MODES, enabled_default=False
+        OVERALL_MODE_KEY, 10065, "Gesamt: Betriebsart", "Overall: mode", _MODES, enabled_default=False,
+        unselectable=OVERALL_UNSELECTABLE,
     ),
     _number(
         "cfg_overall_offset",
@@ -659,21 +682,23 @@ REGISTERS: tuple[Register, ...] = (
     _h("cooling_block", 10052, "Sperren", "Block", platform="switch", reset_default=0, source=_FW),
     _h("pool_block", 10053, "Sperren", "Block", platform="switch", reset_default=0, source=_FW),
     # Circulation pump and extra hot water (firmware 3.92.0 or later). Both are triggers (full analysis, 3.2 and
-    # 3.3; proven): 10070 starts a circulation run and is set back to 0 by the firmware once no run is active;
-    # 10071 starts extra hot water for the controller's duration (parameter 1147, shown by ``extra_dhw_duration``)
-    # and is set back to 0 by the firmware when the timer runs out. Reading 0 again is therefore the normal end,
-    # not a failure; see const.TRIGGER_KEYS.
+    # 3.3; proven): 10070 starts a circulation run (run and pause times of the controller, Einst_Zirk_Ein/Aus) and
+    # is set back to 0 by the firmware once no run is active; 10071 starts extra hot water for the controller's
+    # duration (parameter 1147, shown by ``extra_dhw_duration``) and is set back to 0 by the firmware when the timer
+    # runs out. Up to 0.16.x both were switches, which suggested a state the user holds; a trigger is a button
+    # (press = write 1, read-back 0 is the normal end) and the running state is a binary sensor on the same register
+    # (``DERIVED_FLAGS``: ``circulation_running``, ``extra_dhw_running``). See const.TRIGGER_KEYS.
     _h(
-        "circulation",
+        CIRCULATION_KEY,
         10070,
-        "Zirkulationspumpe",
-        "Circulation pump",
-        platform="switch",
+        "Zirkulation: Lauf starten",
+        "Circulation: start run",
+        platform="button",
         reset_default=0,
-        source=_FW + "; trigger, reset to 0 by the firmware",
+        source=_FW + "; trigger, reset to 0 by the firmware once no run is active",
     ),
     _h(
-        "extra_dhw", 10071, "Extra", "Extra", platform="switch", reset_default=0,
+        EXTRA_DHW_KEY, 10071, "Extra: starten", "Extra: start", platform="button", reset_default=0,
         source=_FW + "; trigger, reset to 0 by the firmware when the timer ends",
     ),
     # --------------------------------------- formerly raw values, meaning from python-luxtronik
@@ -694,6 +719,20 @@ REGISTERS: tuple[Register, ...] = (
         diagnostic=True,
         enabled_default=False,
         every=4,
+    ),
+    # t0/0x67 "TVL calc max": the calculated maximum flow temperature (return target + moving average of the
+    # flow-return spread, 0x0019ac68), firmware text "TVL calc max", visibility 0x165; INT16, 0.1 degC (full
+    # analysis, 2.2; proven, measured 25.7 degC at a return target of 20.0). Whether the controller uses it as a
+    # setpoint or as an upper limit is open. Was ``raw_10113`` up to 0.16.x (RENAMED_KEYS: the entity ID stays).
+    _temp_in(
+        "flow_calc_max",
+        10113,
+        "Vorlauf: berechnetes Maximum (TVL calc max)",
+        "Flow: calculated maximum (TVL calc max)",
+        diagnostic=True,
+        enabled_default=False,
+        every=4,
+        source="proven: firmware t0/0x67 'TVL calc max' (return target + moving average of the flow-return spread); measured",
     ),
 )
 
@@ -778,9 +817,10 @@ ADDED_IN_0_4: tuple[Register, ...] = (
 REGISTERS = REGISTERS + ADDED_IN_0_4
 
 # Resolved by the firmware analysis of V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md, section 2.2; proven).
-# New keys; the ``raw_<address>`` sensors of the same addresses keep their keys and stay disabled (see ALIAS_OF).
-# 10412 (operating hours pool, divisor 7200 instead of 3600) gets no counter entity: the firmware most likely shows
-# half the hours on the wire, which is not proven, so it stays a raw value.
+# The ``raw_<address>`` sensors that used to show the same addresses word by word (raw_10410/10411, raw_10416/10417,
+# raw_10500 ... raw_10502) were removed in 0.17.0 (REMOVED_KEYS): a proven value has one entity, not a disabled
+# twin. 10412 (operating hours pool, divisor 7200 instead of 3600) gets no counter entity: the firmware most likely
+# shows half the hours on the wire, which is not proven, so it stays a raw value.
 _EXTRA_DHW = "proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md)"
 RESOLVED_IN_0_17: tuple[Register, ...] = (
     # Zaehler_BetrZeitKue, parameter 730; BSTD_Solar, parameter 882 (visibility ID_Visi_Solar).
@@ -803,19 +843,19 @@ RESOLVED_IN_0_17: tuple[Register, ...] = (
 )
 REGISTERS = REGISTERS + RESOLVED_IN_0_17
 
-# Keys that were renamed with the owner's approval: old key -> new key (same platform, same address).
-# ``async_setup_entry`` moves the registry entries over, so the entity IDs stay. The old keys stay in the entity
-# contract fixture, and ``tests/test_contract.py`` accepts them as long as the new key exists.
+# Keys that were renamed: old key -> new key (same platform, same address). ``async_setup_entry`` moves the
+# registry entries over, so the entity IDs stay. The old keys are no longer in the entity contract fixture;
+# ``tests/test_contract.py`` checks that each new key exists on the platform of the old one.
 RENAMED_KEYS: dict[str, str] = {
     "raw_10109": "outside_temp_average",
     "raw_10110": "heat_source_input",
     "raw_10112": "max_flow_temp",
+    "raw_10113": "flow_calc_max",
 }
 
 # Raw values whose meaning is not documented. Disabled by default; handy for
 # analysis and for reverse engineering of new firmware versions.
 RAW_INPUT_ADDRESSES: tuple[int, ...] = (
-    10113,
     10350,
     10351,
     10354,
@@ -831,15 +871,8 @@ RAW_INPUT_ADDRESSES: tuple[int, ...] = (
 RAW_INPUT_ADDRESSES_ADDED: tuple[int, ...] = (
     10352,
     10353,
-    10410,
-    10411,
     10412,
     10413,
-    10416,
-    10417,
-    10500,
-    10501,
-    10502,
 )
 # Holding registers that only python-luxtronik lists as read-only and with unknown function. Read, never written.
 # (10060 was briefly here but is the writable RBE room-temperature setpoint, now exposed as cfg_room_setpoint.)
@@ -851,22 +884,9 @@ RAW_HOLDING_ADDRESSES_ADDED: tuple[int, ...] = ()
 # equipment exists. They keep the key ``raw_<address>`` and stay disabled by default (diagnostic); only the display
 # name, unit and scale are filled in. Other raw values stay open.
 RAW_MEANINGS: dict[int, dict] = {
-    # t0/0x67 "TVL calc max": the calculated maximum flow temperature (return target + moving average of the
-    # flow-return spread, 0x0019ac68), firmware text "TVL calc max", visibility 0x165. INT16, 0.1 degC. Up to 0.16.x
-    # named "heating target (calculated)"; the firmware text replaces that reading (full analysis, 2.2; proven).
-    10113: {
-        "name_de": "Vorlauf: berechnetes Maximum (TVL calc max)",
-        "name_en": "Flow: calculated maximum (TVL calc max)",
-        "dtype": "int16",
-        **_TEMP,
-        "scale": 0.1,
-        "source": "proven: firmware t0/0x67 'TVL calc max' (return target + moving average of the flow-return spread); measured",
-    },
-    # Operating hour counters (32 bit, two words each; the ``hours_*`` sensors decode them). The raw sensors show the
-    # single words. 10412/10413: Zaehler_BetrZeitSW (pool) with divisor 7200: wire value most likely hours / 2
-    # (likely, not measured: the reference installation has no pool).
-    10410: {"name_de": "Betriebsstunden Kühlung: Wort 1", "name_en": "Operating hours cooling: word 1", "source": _FW},
-    10411: {"name_de": "Betriebsstunden Kühlung: Wort 2", "name_en": "Operating hours cooling: word 2", "source": _FW},
+    # Operating hour counter of the pool (32 bit, two words): Zaehler_BetrZeitSW with divisor 7200 instead of the
+    # 3600 of every other hour counter: the wire value is most likely hours / 2 (likely, not measured: the
+    # reference installation has no pool). Stays a raw value until a pool installation confirms the factor.
     10412: {
         "name_de": "Betriebsstunden Schwimmbad: Wort 1 (Teiler 7200)",
         "name_en": "Operating hours pool: word 1 (divisor 7200)",
@@ -877,12 +897,6 @@ RAW_MEANINGS: dict[int, dict] = {
         "name_en": "Operating hours pool: word 2 (divisor 7200)",
         "source": "proven: firmware Zaehler_BetrZeitSW; divisor 7200 (likely hours / 2, not measured)",
     },
-    10416: {"name_de": "Betriebsstunden Solar: Wort 1", "name_en": "Operating hours solar: word 1", "source": _FW},
-    10417: {"name_de": "Betriebsstunden Solar: Wort 2", "name_en": "Operating hours solar: word 2", "source": _FW},
-    # Extra hot water (same registers as the extra_dhw_* sensors). The firmware builds them as INT16.
-    10500: {"name_de": "Extra-Warmwasser: Sollwert", "name_en": "Extra hot water: setpoint", "dtype": "int16", **_TEMP, "scale": 0.1, "source": _EXTRA_DHW},
-    10501: {"name_de": "Extra-Warmwasser: Dauer", "name_en": "Extra hot water: duration", "dtype": "int16", "unit": "min", "device_class": "duration", "source": _EXTRA_DHW},
-    10502: {"name_de": "Extra-Warmwasser: Restlaufzeit", "name_en": "Extra hot water: remaining time", "dtype": "int16", "unit": "min", "device_class": "duration", "source": _EXTRA_DHW},
     # Digital outputs of the controller (0 = off, 1 = on). Variable names are those of the firmware (0x0008bef8).
     10350: {"name_de": "Ausgang: VBO", "name_en": "Output: VBO", "source": "proven: firmware VBOout (t0/0x45); measured: runs with the compressor"},
     10351: {"name_de": "Ausgang: FP1", "name_en": "Output: FP1", "source": "proven: firmware FP1out (t0/0x6d); measured: follows the heating pump"},
@@ -975,17 +989,6 @@ REGISTERS = tuple(replace(reg, diagnostic=True) if reg.key in _SECONDARY_KEYS el
 # poll like their raw twin. The level is shown as read (on = 1). For the EVU inputs only the name is proven;
 # that 1 means "released" is inferred from one measured state, so they stay disabled and say "level".
 ALIAS_OF: dict[str, str] = {}
-# The sensors resolved in 0.17.0 (RESOLVED_IN_0_17) share their addresses with raw values that keep their keys: a 32
-# bit counter with the raw sensors of its two words, an extra hot water value with the raw sensor of the same
-# address. Unlike ALIAS_OF they decode the words themselves (type, scale, unit). A shared address inside one block
-# is read once; the raw sensors stay disabled by default.
-SHARES_ADDRESS: dict[str, tuple[str, ...]] = {
-    "hours_cooling": ("raw_10410", "raw_10411"),
-    "hours_solar": ("raw_10416", "raw_10417"),
-    "extra_dhw_setpoint": ("raw_10500",),
-    "extra_dhw_duration": ("raw_10501",),
-    "extra_dhw_remaining": ("raw_10502",),
-}
 
 
 def _flag_of_raw(key: str, address: int, de: str, en: str, **kw) -> Register:
@@ -1084,6 +1087,32 @@ def active_registers(features: list[str] | tuple[str, ...] | set[str] | None) ->
 
 
 BY_KEY: dict[str, Register] = {reg.key: reg for reg in ALL_REGISTERS}
+
+
+# ------------------------------------------------------------------- trigger buttons
+@dataclass(frozen=True)
+class TriggerAction:
+    """A button that writes one fixed word to a trigger register (next to the register's own start button)."""
+
+    key: str
+    name_de: str
+    name_en: str
+    register: str  # key of the trigger register
+    raw: int  # the word written on press
+
+
+# Writing 0 to 10071 sets the extra hot water timer to 0 (full analysis, 3.2; proven), so the run can be ended
+# early. For the circulation trigger the effect of writing 0 during a run is not stated by the firmware analysis,
+# so there is no stop button for it (open).
+TRIGGER_ACTIONS: tuple[TriggerAction, ...] = (
+    TriggerAction("extra_dhw_stop", "Extra: beenden", "Extra: end", EXTRA_DHW_KEY, 0),
+)
+TRIGGER_ACTION_KEYS: tuple[str, ...] = tuple(action.key for action in TRIGGER_ACTIONS)
+# The circulation trigger is not accepted while the controller's hot water operating mode is "holiday" (3) or
+# "off" (4) (full analysis, 3.3; proven). Over the SHI only "off" is visible: discrete input 10001 (``cap_hot_water``)
+# reads 0 while hot water is not equipped or its operating mode is "off" (full analysis, 2.3; proven). The button
+# is unavailable while that flag is off; "holiday" cannot be read, a press is then silently without effect.
+TRIGGER_REQUIRES: dict[str, str] = {CIRCULATION_KEY: "cap_hot_water"}
 
 # Entities of the climate platform. They are not registers of their own: they combine existing registers
 # (``cfg_heating_mode``, ``cfg_heating_setpoint``, ``flow``). Their keys are part of the entity contract.
@@ -1212,6 +1241,16 @@ DERIVED_FLAGS: tuple[DerivedFlag, ...] = (
         "cfg_power_limit_mode",
         frozenset({_option("cfg_power_limit_mode", "soft"), _option("cfg_power_limit_mode", "hard")}),
     ),
+    # Running state of the two triggers, read from the trigger register itself (full analysis, 3.2 and 3.3;
+    # proven): 10070 reads 1 while a circulation run is active and 0 once the firmware ended it; 10071 reads 1
+    # while the extra hot water timer runs (``extra_dhw_remaining`` shows the minutes left) and 0 when the firmware
+    # ended it. ``circulation_running`` is the run of the controller logic (run and pause times), not the pump
+    # output: that is ``pump_circulation`` (ZIP). 0x7FFF (not available, e.g. no circulation pump) is unavailable.
+    DerivedFlag(
+        "circulation_running", "Zirkulation: Lauf aktiv", "Circulation: run active", CIRCULATION_KEY, None,
+        "running",
+    ),
+    DerivedFlag("extra_dhw_running", "Extra: läuft", "Extra: running", EXTRA_DHW_KEY, None, "running"),
 )
 DERIVED_FLAG_KEYS: tuple[str, ...] = tuple(flag.key for flag in DERIVED_FLAGS)
 
@@ -1219,9 +1258,26 @@ DERIVED_FLAG_KEYS: tuple[str, ...] = tuple(flag.key for flag in DERIVED_FLAGS)
 # part of the entity contract.
 FIRMWARE_SENSOR_KEY = "firmware_version"
 FIRMWARE_PARTS: tuple[str, str, str] = ("fw_version_major", "fw_version_minor", "fw_version_patch")
-# Entities of earlier versions that no longer exist (owner-approved removal, CHANGELOG 0.11.0): the integration
-# deletes their registry entries at setup. Keys listed here are no longer in the entity contract.
-REMOVED_KEYS: tuple[str, ...] = ("fw_platform", "fw_major", "fw_minor")
+# Entities of earlier versions that no longer exist (CHANGELOG 0.11.0 and 0.17.0): the integration deletes their
+# registry entries at setup. Keys listed here have no entity on any platform and are out of the entity contract.
+# 0.17.0: the raw word sensors of registers that have a proper entity (``hours_cooling``, ``hours_solar``,
+# ``extra_dhw_setpoint``, ``extra_dhw_duration``, ``extra_dhw_remaining``).
+REMOVED_KEYS: tuple[str, ...] = (
+    "fw_platform",
+    "fw_major",
+    "fw_minor",
+    "raw_10410",
+    "raw_10411",
+    "raw_10416",
+    "raw_10417",
+    "raw_10500",
+    "raw_10501",
+    "raw_10502",
+)
+# Entities whose key moved to another platform (CHANGELOG 0.17.0): (old platform, key). The key lives on; the
+# registry entry of the old platform is an orphan and is deleted at setup. The triggers ``circulation`` and
+# ``extra_dhw`` were switches up to 0.16.x and are buttons now.
+REMOVED_ENTITIES: tuple[tuple[str, str], ...] = (("switch", CIRCULATION_KEY), ("switch", EXTRA_DHW_KEY))
 
 
 def firmware_version(values: dict[str, float | int | None]) -> str | None:
@@ -1328,8 +1384,9 @@ _COOLING_KEYS = frozenset(
 _POOL_KEYS = frozenset({"pool_block", "pool_status", "energy_el_pool", "energy_th_pool"})
 _HOT_WATER_KEYS = frozenset(
     {
-        "circulation",
-        "extra_dhw",
+        CIRCULATION_KEY,
+        "circulation_running",
+        EXTRA_DHW_KEY,
         "hot_water_status",
         "energy_el_dhw",
         "energy_th_dhw",

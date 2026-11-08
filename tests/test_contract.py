@@ -1,96 +1,92 @@
-"""Entity contract: unique IDs and platforms must never change.
+"""Entity contract: a change detector for the entity set, to be updated deliberately.
 
-Consumers such as the Heat Pump Optimizer address entities by entity ID. Home Assistant keeps an
-entity ID only as long as (platform, unique_id) stays the same. The unique ID is
-``<entry_id>_<key>``, so every key in ``fixtures/entity_contract.json`` must keep existing on the
-same platform. A key may only disappear if ``RENAMED_KEYS`` maps it to a key that exists on the same platform (the
-integration moves the registry entry, see ``tests/test_migration.py``). New keys are fine; add them to the fixture with ``python tools/gen_contract.py``.
-Removing or renaming a key, or moving it to another platform, is a breaking change.
+Consumers such as the Heat Pump Optimizer address entities by entity ID. Home Assistant keeps an entity ID only as
+long as (platform, unique_id) stays the same; the unique ID is ``<entry_id>_<key>``. ``fixtures/entity_contract.json``
+lists every entity as ``platform -> keys`` and must equal what the code creates, in both directions:
+
+* a new key is added with ``python tools/gen_contract.py``;
+* a removed, renamed or moved key is edited into the fixture by hand, listed in ``REMOVED_KEYS`` (no entity left),
+  ``REMOVED_ENTITIES`` (moved to another platform; the old registry entry is deleted at setup) or ``RENAMED_KEYS``
+  (the registry entry is migrated, the entity ID stays), and documented under *Action required* in the CHANGELOG
+  (CLAUDE.md, hard rule 1). This test makes sure none of that happens by accident.
 """
 
 from __future__ import annotations
 
-import ast
 import json
 import pathlib
 
 from custom_components.luxtronik_shi.registers import (
-    ALL_REGISTERS,
-    BLOCK_SELECT_KEYS,
-    BLOCK_SWITCH_KEYS,
-    CLIMATE_KEYS,
-    DERIVED_FLAG_KEYS,
-    DERIVED_SENSOR_KEYS,
-    FIRMWARE_SENSOR_KEY,
+    BY_KEY,
+    REMOVED_ENTITIES,
     REMOVED_KEYS,
     RENAMED_KEYS,
-    WATER_HEATER_KEYS,
 )
 
+from .contract import current_entities
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CONTRACT = json.loads((ROOT / "tests" / "fixtures" / "entity_contract.json").read_text(encoding="utf-8"))
+CONTRACT: dict[str, list[str]] = json.loads(
+    (ROOT / "tests" / "fixtures" / "entity_contract.json").read_text(encoding="utf-8")
+)
 
 
-def _status_bits() -> list[str]:
-    tree = ast.parse((ROOT / "custom_components" / "luxtronik_shi" / "binary_sensor.py").read_text(encoding="utf-8"))
-    bits = next(
-        ast.literal_eval(node.value)
-        for node in tree.body
-        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "STATUS_BITS"
-    )
-    return [bit[0] for bit in bits]
-
-
-def _current() -> dict[str, set[str]]:
-    current: dict[str, set[str]] = {}
-    for reg in ALL_REGISTERS:
-        if reg.platform == "internal":
-            continue  # read only, no entity
-        current.setdefault(reg.platform, set()).add(reg.key)
-    current["climate"] = set(CLIMATE_KEYS)
-    current["water_heater"] = set(WATER_HEATER_KEYS)
-    current["select"] |= set(BLOCK_SELECT_KEYS)
-    current["switch"] |= set(BLOCK_SWITCH_KEYS)
-    current["sensor"] |= set(DERIVED_SENSOR_KEYS) | {FIRMWARE_SENSOR_KEY}
-    current.setdefault("binary_sensor", set()).update([*_status_bits(), *DERIVED_FLAG_KEYS, "online"])
-    return current
-
-
-def test_no_contract_key_removed_or_moved():
-    current = _current()
-    broken = [
+def test_fixture_equals_the_code() -> None:
+    """Every entity in the fixture exists on its platform and every entity of the code is in the fixture."""
+    current = current_entities()
+    gone = [
         f"{platform}.{key}"
         for platform, keys in CONTRACT.items()
         for key in keys
-        if key not in current.get(platform, set()) and RENAMED_KEYS.get(key) not in current.get(platform, set())
+        if key not in current.get(platform, set())
     ]
-    assert not broken, f"Entity contract broken (key removed, renamed or moved to another platform): {broken}"
-
-
-def test_new_keys_are_registered_in_contract():
-    current = _current()
+    assert not gone, (
+        f"Entities in the fixture no longer exist (removed, renamed or moved to another platform): {gone}. "
+        "If intended: edit tests/fixtures/entity_contract.json, list the key in REMOVED_KEYS / REMOVED_ENTITIES / "
+        "RENAMED_KEYS and document it under 'Action required' in the CHANGELOG."
+    )
     missing = [
         f"{platform}.{key}"
         for platform, keys in current.items()
         for key in keys
         if key not in CONTRACT.get(platform, [])
     ]
-    assert not missing, f"Add new keys to tests/fixtures/entity_contract.json (tools/gen_contract.py): {missing}"
+    assert not missing, f"Add new keys to tests/fixtures/entity_contract.json (python tools/gen_contract.py): {missing}"
 
 
-def test_renamed_keys_are_consistent():
-    """Every rename keeps the old key in the contract, the new key on the same platform, and drops the old one."""
-    current = _current()
+def test_fixture_is_sorted_and_unique() -> None:
+    for platform, keys in CONTRACT.items():
+        assert keys == sorted(set(keys)), platform
+    assert list(CONTRACT) == sorted(CONTRACT)
+
+
+def test_renamed_keys_are_consistent() -> None:
+    """A rename keeps the platform: the new key exists, the old one is gone from the code and the fixture."""
+    current = current_entities()
     for old, new in RENAMED_KEYS.items():
-        platform = next(p for p, keys in CONTRACT.items() if old in keys)
-        assert new in current[platform], f"{old} -> {new}: new key missing on {platform}"
-        assert old not in current[platform], f"{old} is still defined next to its replacement {new}"
+        platforms = [platform for platform, keys in current.items() if new in keys]
+        assert len(platforms) == 1, f"{old} -> {new}: the new key must exist on exactly one platform"
+        assert all(old not in keys for keys in current.values()), f"{old} is still defined next to {new}"
+        assert all(old not in keys for keys in CONTRACT.values()), f"{old} is still in the contract fixture"
         assert new not in RENAMED_KEYS, "chained renames are not supported"
+        assert new in BY_KEY, f"{new} is not a register"
 
 
-def test_removed_keys_are_gone_everywhere():
-    """A removal is a deliberate exception (CHANGELOG): the key is out of the contract and out of the map."""
-    current = _current()
+def test_removed_keys_are_gone_everywhere() -> None:
+    """A removal is a deliberate exception (CHANGELOG): the key is out of the contract and out of the code."""
+    current = current_entities()
     for key in REMOVED_KEYS:
         assert all(key not in keys for keys in CONTRACT.values()), f"{key} is still in the contract fixture"
         assert all(key not in keys for keys in current.values()), f"{key} still defines an entity"
+        assert key not in RENAMED_KEYS
+
+
+def test_moved_entities_live_on_another_platform() -> None:
+    """A key that moved platform: gone from the old platform, present on exactly one other."""
+    current = current_entities()
+    for old_platform, key in REMOVED_ENTITIES:
+        assert key not in current.get(old_platform, set()), f"{old_platform}.{key} still exists"
+        assert key not in CONTRACT.get(old_platform, []), f"{old_platform}.{key} is still in the fixture"
+        platforms = [platform for platform, keys in current.items() if key in keys]
+        assert len(platforms) == 1 and platforms[0] != old_platform, (old_platform, key, platforms)
+        assert key not in REMOVED_KEYS

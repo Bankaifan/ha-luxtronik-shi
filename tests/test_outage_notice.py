@@ -46,7 +46,7 @@ async def test_changed_value_raises_issue_with_old_and_new(hass: HomeAssistant, 
     assert not issue.is_fixable
     changes = issue.translation_placeholders["changes"]
     assert "heating block: released -> blocked" in changes
-    assert "hot water mode: off -> offset" in changes
+    assert "hot water mode: no_influence -> offset" in changes
     assert "heating mode" not in changes
 
 

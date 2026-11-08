@@ -5,7 +5,7 @@ from custom_components.luxtronik_shi.registers import (
     ALIAS_OF,
     ALL_REGISTERS,
     BY_KEY,
-    SHARES_ADDRESS,
+    LEVEL_OPTIONS,
     decode,
     encode_int16,
 )
@@ -16,19 +16,18 @@ def test_keys_and_addresses_are_unique():
     seen = set()
     for reg in ALL_REGISTERS:
         ident = (reg.kind, reg.address)
-        if reg.key in ALIAS_OF or reg.key in SHARES_ADDRESS:
+        if reg.key in ALIAS_OF:
             continue  # shares the register of a raw value, checked below
         assert ident not in seen, ident
         seen.add(ident)
 
 
-def test_resolved_sensors_share_the_words_of_their_raw_values():
-    """A resolved sensor (0.17.0) covers exactly the addresses of the raw sensors it names; the raw twins stay."""
-    for key, raw_keys in SHARES_ADDRESS.items():
-        reg = BY_KEY[key]
-        addresses = tuple(BY_KEY[raw].address for raw in raw_keys)
-        assert addresses == tuple(range(reg.address, reg.address + reg.width)), key
-        assert all(BY_KEY[raw].kind == reg.kind and not BY_KEY[raw].enabled_default for raw in raw_keys)
+def test_no_word_of_a_32_bit_register_has_a_second_entity():
+    """A proven value has one entity: no raw word sensor next to a counter or an extra hot water value."""
+    wide = {reg.address + i for reg in ALL_REGISTERS if reg.width == 2 for i in range(2)}
+    for reg in ALL_REGISTERS:
+        if reg.width == 1 and reg.kind == "input" and reg.key not in ALIAS_OF:
+            assert reg.address not in wide, reg.key
 
 
 def test_aliases_share_their_register():
@@ -62,11 +61,14 @@ def test_encode_negative_offset():
     assert decode(BY_KEY["cfg_heating_offset"], [65531]) == -0.5
 
 
-def test_level_options_follow_python_luxtronik():
-    # python-luxtronik LevelMode: 0 Normal, 1 Increased, 2 Increased2, 3 Decreased.
-    expected = ("normal", "increased", "increased2", "decreased")
+def test_level_options_follow_the_firmware():
+    # Firmware V3.92.3 (full analysis, 3.1): raw 1 and 2 both use the parameter "Erhöhung", so they are one option;
+    # python-luxtronik's "Increased2" is not a separate value. Raw value = position, "increased" is written as 1.
+    expected = ("normal", "increased", "increased", "decreased")
     for key in ("cfg_heating_level", "cfg_dhw_level", "cfg_mk1_level", "cfg_overall_level"):
         assert BY_KEY[key].options == expected
+        assert BY_KEY[key].options.index("increased") == 1
+    assert LEVEL_OPTIONS == ("normal", "increased", "decreased")
 
 
 def test_room_setpoint_is_writable_number():
@@ -105,9 +107,13 @@ def test_raw_meanings_keep_key_and_stay_disabled():
         assert reg.name_de == meaning["name_de"] and reg.name_en == meaning["name_en"]
         assert not reg.enabled_default and reg.diagnostic
         assert reg.key not in RAW_KEYS
-    assert BY_KEY["raw_10113"].scale == 0.1 and BY_KEY["raw_10113"].dtype == "int16"
-    assert decode(BY_KEY["raw_10113"], [253]) == 25.3
-    # all raw values of RAW_INPUT_ADDRESSES_ADDED have a proven meaning since 0.17.0; the pool counter stays a
-    # raw value because its divisor 7200 is only likely
+    # 10113 is the proper sensor flow_calc_max since 0.17.0 (was raw_10113)
+    assert "raw_10113" not in BY_KEY
+    assert BY_KEY["flow_calc_max"].scale == 0.1 and BY_KEY["flow_calc_max"].dtype == "int16"
+    assert decode(BY_KEY["flow_calc_max"], [253]) == 25.3
+    # the pool counter stays a raw value because its divisor 7200 is only likely; the other resolved addresses
+    # have proper sensors and no raw twin
     assert BY_KEY["raw_10412"].source.startswith("proven:") and "likely" in BY_KEY["raw_10412"].source
-    assert not RAW_KEYS & {"raw_10410", "raw_10416", "raw_10500", "raw_10501", "raw_10502"}
+    assert not {"raw_10410", "raw_10416", "raw_10500", "raw_10501", "raw_10502"} & set(BY_KEY)
+    # the remaining raw values without a meaning: outputs/inputs with binary sensor twins only
+    assert RAW_KEYS == set()

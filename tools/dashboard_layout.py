@@ -335,7 +335,8 @@ def build(res, lang: str, *, hacs: bool = False) -> dict:
             tile("cfg_power_limit_mode"), tile("cfg_power_limit"),
         ]),
         section("h_dhw_extra", "mdi:water-boiler", [
-            tile("circulation"), tile("extra_dhw"), tile("cfg_dhw_mode"),
+            tile("circulation"), tile("circulation_running"), tile("extra_dhw"), tile("extra_dhw_stop"),
+            tile("extra_dhw_running"), tile("extra_dhw_remaining"), tile("cfg_dhw_mode"),
             tile("cfg_dhw_setpoint", extra={"state_content": ["state", "effective_target"]}),
         ]),
         section("h_grid", "mdi:transmission-tower", [

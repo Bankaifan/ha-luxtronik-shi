@@ -202,7 +202,7 @@
           "pool": "Schwimmbad / Solar",
           "evu_lock": "EVU-Sperre",
           "defrost": "Abtauen",
-          "off": "Keine Anforderung",
+          "no_request": "Keine Anforderung",
           "external_source": "Heizen (externe Quelle)",
           "cooling": "Kühlen"
         }
@@ -327,6 +327,9 @@
       "max_flow_temp": {
         "name": "Temperatur: Vorlauf Maximum"
       },
+      "flow_calc_max": {
+        "name": "Vorlauf: berechnetes Maximum (TVL calc max)"
+      },
       "heat_source_out": {
         "name": "Temperatur: Wärmequelle Austritt"
       },
@@ -357,9 +360,6 @@
       "extra_dhw_remaining": {
         "name": "Extra: Restlaufzeit"
       },
-      "raw_10113": {
-        "name": "Vorlauf: berechnetes Maximum (TVL calc max)"
-      },
       "raw_10350": {
         "name": "Ausgang: VBO"
       },
@@ -387,32 +387,11 @@
       "raw_10353": {
         "name": "Ausgang: FP3"
       },
-      "raw_10410": {
-        "name": "Betriebsstunden Kühlung: Wort 1"
-      },
-      "raw_10411": {
-        "name": "Betriebsstunden Kühlung: Wort 2"
-      },
       "raw_10412": {
         "name": "Betriebsstunden Schwimmbad: Wort 1 (Teiler 7200)"
       },
       "raw_10413": {
         "name": "Betriebsstunden Schwimmbad: Wort 2 (Teiler 7200)"
-      },
-      "raw_10416": {
-        "name": "Betriebsstunden Solar: Wort 1"
-      },
-      "raw_10417": {
-        "name": "Betriebsstunden Solar: Wort 2"
-      },
-      "raw_10500": {
-        "name": "Extra-Warmwasser: Sollwert"
-      },
-      "raw_10501": {
-        "name": "Extra-Warmwasser: Dauer"
-      },
-      "raw_10502": {
-        "name": "Extra-Warmwasser: Restlaufzeit"
       },
       "firmware_version": {
         "name": "Firmware-Version"
@@ -521,6 +500,12 @@
       "power_limit_configured": {
         "name": "Leistungsbegrenzung: Modus eingestellt"
       },
+      "circulation_running": {
+        "name": "Zirkulation: Lauf aktiv"
+      },
+      "extra_dhw_running": {
+        "name": "Extra: läuft"
+      },
       "compressor_1": {
         "name": "Status: Verdichter 1 läuft"
       },
@@ -559,14 +544,19 @@
       "pool_block": {
         "name": "Sperren"
       },
-      "circulation": {
-        "name": "Zirkulationspumpe"
-      },
-      "extra_dhw": {
-        "name": "Extra"
-      },
       "block_power": {
         "name": "Ein/Aus (Sperren)"
+      }
+    },
+    "button": {
+      "circulation": {
+        "name": "Zirkulation: Lauf starten"
+      },
+      "extra_dhw": {
+        "name": "Extra: starten"
+      },
+      "extra_dhw_stop": {
+        "name": "Extra: beenden"
       }
     },
     "number": {
@@ -648,7 +638,7 @@
       "cfg_heating_mode": {
         "name": "Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -659,14 +649,13 @@
         "state": {
           "normal": "Normal (keine Korrektur)",
           "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
           "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_dhw_mode": {
         "name": "Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -677,14 +666,13 @@
         "state": {
           "normal": "Normal (keine Korrektur)",
           "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
           "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk1_mode": {
         "name": "Mischkreis 1: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -695,14 +683,13 @@
         "state": {
           "normal": "Normal (keine Korrektur)",
           "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
           "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk1_cool_mode": {
         "name": "Mischkreis 1: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -719,7 +706,7 @@
       "cfg_overall_mode": {
         "name": "Gesamt: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe (Kreise folgen ihren eigenen Betriebsarten)",
+          "no_influence": "Keine Vorgabe (Kreise folgen ihren eigenen Betriebsarten)",
           "setpoint": "Sollwert (von der Firmware nicht umgesetzt, wirkt wie keine Vorgabe)",
           "offset": "Anhebung für alle Heizkreise (hat Vorrang vor deren Betriebsarten)",
           "level": "Stufe für alle Heizkreise (hat Vorrang vor deren Betriebsarten)"
@@ -730,14 +717,13 @@
         "state": {
           "normal": "Normal (keine Korrektur)",
           "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
           "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk2_mode": {
         "name": "Mischkreis 2: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -748,14 +734,13 @@
         "state": {
           "normal": "Normal (keine Korrektur)",
           "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
           "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk2_cool_mode": {
         "name": "Mischkreis 2: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -764,7 +749,7 @@
       "cfg_mk3_mode": {
         "name": "Mischkreis 3: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -775,14 +760,13 @@
         "state": {
           "normal": "Normal (keine Korrektur)",
           "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
-          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
           "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk3_cool_mode": {
         "name": "Mischkreis 3: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
+          "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
           "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -807,7 +791,7 @@
           "controller_mode": {
             "name": "Betriebsart der Schnittstelle",
             "state": {
-              "off": "Keine Vorgabe",
+              "no_influence": "Keine Vorgabe (Regelung nutzt ihre eigenen Werte)",
               "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
               "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
               "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
@@ -877,7 +861,7 @@
     "base_values_changed": {
       "message": "Nach einem Neustart der Wärmepumpe haben sich die Grundwerte geändert, auf die diese Sollwerte zurückfallen (bisher gelernt -> jetzt):\n\n{changes}\n\nDie in Home Assistant gesetzten Werte gelten weiter und wurden wiederhergestellt:\n\n{restored}\n\nEs ist nichts zu tun. Das ist nur ein Hinweis."
     },
-    "setpoint_not_active_off": {
+    "setpoint_not_active_no_influence": {
       "message": "Der Sollwert wirkt nur in der Betriebsart „Sollwert“. {select} steht auf „Keine Vorgabe“, deshalb wurde nichts geschrieben. Stelle {select} zuerst auf „Sollwert“."
     },
     "setpoint_not_active_offset": {
@@ -919,8 +903,8 @@
     "write_reverted_to_default": {
       "message": "Die Wärmepumpe hat {key} = {value} nicht übernommen: Das Register liest wieder seinen Standardwert {default}. Die Regelung setzt einen über die Smart-Home-Schnittstelle gesetzten Wert zurück, wenn ein weiterer Modbus-Client ebenfalls schreibt (Fehler 816, mehr als zwei Schreibquellen innerhalb einer Stunde), wenn ihr Wächter in diesem Moment abgelaufen ist oder wenn der Wert außerhalb des Bereichs liegt. Der zuvor gesetzte Wert ist damit ebenfalls weg; setze ihn erneut."
     },
-    "overall_setpoint_not_implemented": {
-      "message": "Die Gesamt-Betriebsart hat keinen Sollwert: Die Firmware der Wärmepumpe setzt diese Betriebsart für die Gesamt-Gruppe nicht um und behandelt sie wie „keine Vorgabe“. Verwende Anhebung oder Stufe oder setze die Betriebsart des einzelnen Kreises."
+    "trigger_blocked": {
+      "message": "{key} wurde nicht gestartet: Die Regelung nimmt ihn nicht an, solange Warmwasser nicht ausgestattet ist oder seine Betriebsart am Bedienteil Aus ist ({flag} liest aus)."
     },
     "not_writable": {
       "message": "Register {key} kann nicht geschrieben werden."

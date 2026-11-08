@@ -9,7 +9,7 @@ import pytest
 from custom_components.luxtronik_shi import PLATFORMS
 
 _READ_ONLY = {"binary_sensor", "sensor"}
-_WRITABLE = {"switch", "number", "select", "climate", "water_heater"}
+_WRITABLE = {"switch", "button", "number", "select", "climate", "water_heater"}
 
 
 @pytest.mark.parametrize("platform", sorted(_READ_ONLY | _WRITABLE))

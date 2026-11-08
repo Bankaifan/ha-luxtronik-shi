@@ -4,9 +4,10 @@ It does not read or write anything of its own: it is a view on the existing regi
 (10005), ``cfg_dhw_setpoint`` (10006), the hot water temperature ``dhw`` (10120) and the hot water target
 ``dhw_target`` (10121), using the same write and read-back path as the number and select entities.
 
-Operation modes are the control modes of the mode select. Raw 0 is ``no_influence`` (python-luxtronik
-ControlMode 0: the controller uses its own values), never ``off``: hot water keeps working. The setpoint only
-applies in mode ``setpoint``; a target write in another mode is refused.
+Operation modes are the control modes of the mode select (``registers.CONTROL_MODES``, the same option keys).
+Raw 0 is ``no_influence`` (python-luxtronik ControlMode 0: the controller uses its own values), never "off":
+hot water keeps working. The setpoint only applies in mode ``setpoint``; a target write in another mode is
+refused.
 
 Planners such as the Heat Pump Optimizer do not control hot water through this entity. Do not let a planner
 and this entity write the same registers at the same time.
@@ -27,16 +28,15 @@ from . import LuxtronikConfigEntry
 from .compat import WATER_HEATER_NATIVE_TEMPERATURE
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
-from .registers import BY_KEY, WATER_HEATER_DHW_KEY, encode_int16
+from .registers import BY_KEY, CONTROL_MODES, WATER_HEATER_DHW_KEY, encode_int16
 from .setpoint import setpoint_attributes, validate_setpoint_write
 
 _MODE_REG = BY_KEY["cfg_dhw_mode"]
 _SETPOINT_REG = BY_KEY["cfg_dhw_setpoint"]
 _TEMP_REG = BY_KEY["dhw"]
-# Operation mode per raw value. Same order as the mode select options; raw 0 is shown as "no influence", not
-# "off".
-OPERATION_MODES: tuple[str, ...] = ("no_influence", "setpoint", "offset", "level")
-assert len(OPERATION_MODES) == len(_MODE_REG.options)
+# Operation mode per raw value: the options of the mode select (raw value = position).
+OPERATION_MODES: tuple[str, ...] = CONTROL_MODES
+assert OPERATION_MODES == _MODE_REG.options
 
 # One write at a time per platform; the Modbus client serialises access to the SHI anyway.
 PARALLEL_UPDATES = 1

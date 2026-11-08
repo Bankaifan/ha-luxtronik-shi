@@ -13,7 +13,7 @@ from .block_views import MODE_BLOCKS, async_write_sequence, blocks, mode_for, wr
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import BLOCK_MODE_KEY, BLOCK_MODES, OVERALL_MODE_KEY, Register
+from .registers import BLOCK_MODE_KEY, BLOCK_MODES, Register
 
 # One write at a time per platform; the Modbus client serialises access to the SHI anyway.
 PARALLEL_UPDATES = 1
@@ -34,13 +34,24 @@ async def async_setup_entry(
     )
 
 
+def select_options(reg: Register) -> list[str]:
+    """The options a select offers: each option once (raw values the firmware treats alike share one
+    option, ``registers._LEVELS``), without the options the firmware does not implement (``unselectable``)."""
+    assert reg.options
+    return [option for option in dict.fromkeys(reg.options) if option not in reg.unselectable]
+
+
 class LuxtronikSelect(LuxtronikEntity, SelectEntity):
-    """An enumeration stored in a holding register (the raw value is the option index)."""
+    """An enumeration stored in a holding register (the raw value is the position in ``Register.options``).
+
+    A raw value whose option is not offered (``unselectable``: the overall mode's ``setpoint``, which the
+    firmware does not implement) shows no state; the register value is still visible in the diagnostics and in
+    the notice about changes outside Home Assistant.
+    """
 
     def __init__(self, coordinator: LuxtronikCoordinator, reg: Register) -> None:
         super().__init__(coordinator, reg)
-        assert reg.options
-        self._attr_options = list(reg.options)
+        self._attr_options = select_options(reg)
 
     @property
     def current_option(self) -> str | None:
@@ -48,21 +59,11 @@ class LuxtronikSelect(LuxtronikEntity, SelectEntity):
         value = self._value
         if value is None or not 0 <= value < len(self._reg.options):
             return None
-        return self._reg.options[value]
+        option = self._reg.options[value]
+        return None if option in self._reg.unselectable else option
 
     async def async_select_option(self, option: str) -> None:
-        """Write the index of the chosen option.
-
-        The overall mode (10065) has no setpoint: the firmware does not implement mode 1 there and treats it
-        like
-        0 (docs/firmware-3.92.3-shi-full-analysis.md, 3.1). Writing it would only look like a setting, so it
-        is
-        refused; the option stays in the list so that a value another client wrote is still shown.
-        """
-        if self._reg.key == OVERALL_MODE_KEY and option == "setpoint":
-            raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="overall_setpoint_not_implemented"
-            )
+        """Write the raw value of the chosen option (its first position in the register's option tuple)."""
         await self.coordinator.async_write(self._reg, self._reg.options.index(option))
 
 

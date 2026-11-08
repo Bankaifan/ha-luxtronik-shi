@@ -220,6 +220,10 @@ class FakeSHI:
         self.reverted: list[tuple[int, int]] = []  # (address, rejected value)
         # Triggers that end at once in the simulator (the firmware writes 0 back when the run or timer ends).
         self.instant_triggers: set[int] = set()
+        # The circulation trigger (10070) is not accepted while the controller's hot water operating mode is
+        # "holiday" (3) or "off" (4) (full analysis, 3.3). "Off" also clears discrete input 10001 (equipment hot
+        # water AND mode != off), "holiday" does not: set this flag to simulate holiday.
+        self.circulation_blocked = False
         self._server: asyncio.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
 
@@ -290,6 +294,8 @@ class FakeSHI:
                     self.pending.pop(address, None)
                     self.holding[address] = default
                     return pdu[:5]
+            if address == 10070 and (self.circulation_blocked or not self.discrete.get(10001, True)):
+                return pdu[:5]  # accepted on the wire, the controller does not start a run (stays 0)
             if address in self.instant_triggers and address in TRIGGERS:
                 self.holding[address] = 0  # the run ended before the read-back
                 return pdu[:5]
