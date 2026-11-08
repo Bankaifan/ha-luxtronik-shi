@@ -46,7 +46,8 @@
           "mk3": "Mischkreis 3",
           "cooling": "Kühlung",
           "pool": "Pool / Schwimmbad",
-          "room_unit": "Raumeinheit (Raumtemperatur)"
+          "room_unit": "Raumeinheit (Raumtemperatur)",
+          "solar": "Solar (Betriebsstunden)"
         }
       }
     },
@@ -73,7 +74,8 @@
           "mk3": "Mischkreis 3",
           "cooling": "Kühlung",
           "pool": "Pool / Schwimmbad",
-          "room_unit": "Raumeinheit (Raumtemperatur)"
+          "room_unit": "Raumeinheit (Raumtemperatur)",
+          "solar": "Solar (Betriebsstunden)"
         },
         "data_description": {
           "scan_interval": "Basisintervall, höchstens 300 Sekunden (5 Minuten): Die Wärmepumpe verwirft über die Smart-Home-Schnittstelle gesetzte Werte nach 10 Minuten ohne Zugriff. Langsam veränderliche Werte (Zähler, Einstellungen, Firmware) werden automatisch seltener abgefragt.",
@@ -107,7 +109,7 @@
         "name": "Temperatur: Raum (Raumeinheit)"
       },
       "heating_limit": {
-        "name": "Grenztemperatur"
+        "name": "Anforderungsgrenze"
       },
       "outside": {
         "name": "Temperatur: Außen"
@@ -125,7 +127,7 @@
         "name": "Maximum"
       },
       "dhw_limit": {
-        "name": "Grenztemperatur"
+        "name": "Anforderungsgrenze"
       },
       "mk1_flow": {
         "name": "Mischkreis 1: Vorlauf"
@@ -340,8 +342,23 @@
       "energy_th_pool": {
         "name": "Energie: Wärme"
       },
+      "hours_cooling": {
+        "name": "Betriebsstunden"
+      },
+      "hours_solar": {
+        "name": "Betriebsstunden: Solar"
+      },
+      "extra_dhw_setpoint": {
+        "name": "Extra: Sollwert"
+      },
+      "extra_dhw_duration": {
+        "name": "Extra: Dauer"
+      },
+      "extra_dhw_remaining": {
+        "name": "Extra: Restlaufzeit"
+      },
       "raw_10113": {
-        "name": "Vorlauf: Soll Heizen (berechnet)"
+        "name": "Vorlauf: berechnetes Maximum (TVL calc max)"
       },
       "raw_10350": {
         "name": "Ausgang: VBO"
@@ -370,8 +387,32 @@
       "raw_10353": {
         "name": "Ausgang: FP3"
       },
-      "raw": {
-        "name": "Rohwert: {address}"
+      "raw_10410": {
+        "name": "Betriebsstunden Kühlung: Wort 1"
+      },
+      "raw_10411": {
+        "name": "Betriebsstunden Kühlung: Wort 2"
+      },
+      "raw_10412": {
+        "name": "Betriebsstunden Schwimmbad: Wort 1 (Teiler 7200)"
+      },
+      "raw_10413": {
+        "name": "Betriebsstunden Schwimmbad: Wort 2 (Teiler 7200)"
+      },
+      "raw_10416": {
+        "name": "Betriebsstunden Solar: Wort 1"
+      },
+      "raw_10417": {
+        "name": "Betriebsstunden Solar: Wort 2"
+      },
+      "raw_10500": {
+        "name": "Extra-Warmwasser: Sollwert"
+      },
+      "raw_10501": {
+        "name": "Extra-Warmwasser: Dauer"
+      },
+      "raw_10502": {
+        "name": "Extra-Warmwasser: Restlaufzeit"
       },
       "firmware_version": {
         "name": "Firmware-Version"
@@ -440,6 +481,9 @@
       },
       "cap_pool": {
         "name": "Ausstattung: Pool"
+      },
+      "cap_solar": {
+        "name": "Ausstattung: Solar"
       },
       "cap_room_controller": {
         "name": "Ausstattung: Raumregler"
@@ -614,9 +658,9 @@
         "name": "Stufe",
         "state": {
           "normal": "Normal (keine Korrektur)",
-          "increased": "Erhöht",
-          "increased2": "Erhöht (Stufe 2)",
-          "decreased": "Abgesenkt"
+          "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+          "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_dhw_mode": {
@@ -632,9 +676,9 @@
         "name": "Stufe",
         "state": {
           "normal": "Normal (keine Korrektur)",
-          "increased": "Erhöht",
-          "increased2": "Erhöht (Stufe 2)",
-          "decreased": "Abgesenkt"
+          "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+          "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk1_mode": {
@@ -650,9 +694,9 @@
         "name": "Mischkreis 1: Stufe",
         "state": {
           "normal": "Normal (keine Korrektur)",
-          "increased": "Erhöht",
-          "increased2": "Erhöht (Stufe 2)",
-          "decreased": "Abgesenkt"
+          "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+          "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk1_cool_mode": {
@@ -675,19 +719,19 @@
       "cfg_overall_mode": {
         "name": "Gesamt: Betriebsart",
         "state": {
-          "off": "Keine Vorgabe",
-          "setpoint": "Sollwert (ersetzt den Sollwert der Regelung)",
-          "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
-          "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
+          "off": "Keine Vorgabe (Kreise folgen ihren eigenen Betriebsarten)",
+          "setpoint": "Sollwert (von der Firmware nicht umgesetzt, wirkt wie keine Vorgabe)",
+          "offset": "Anhebung für alle Heizkreise (hat Vorrang vor deren Betriebsarten)",
+          "level": "Stufe für alle Heizkreise (hat Vorrang vor deren Betriebsarten)"
         }
       },
       "cfg_overall_level": {
         "name": "Gesamt: Stufe",
         "state": {
           "normal": "Normal (keine Korrektur)",
-          "increased": "Erhöht",
-          "increased2": "Erhöht (Stufe 2)",
-          "decreased": "Abgesenkt"
+          "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+          "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk2_mode": {
@@ -703,9 +747,9 @@
         "name": "Mischkreis 2: Stufe",
         "state": {
           "normal": "Normal (keine Korrektur)",
-          "increased": "Erhöht",
-          "increased2": "Erhöht (Stufe 2)",
-          "decreased": "Abgesenkt"
+          "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+          "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk2_cool_mode": {
@@ -730,9 +774,9 @@
         "name": "Mischkreis 3: Stufe",
         "state": {
           "normal": "Normal (keine Korrektur)",
-          "increased": "Erhöht",
-          "increased2": "Erhöht (Stufe 2)",
-          "decreased": "Abgesenkt"
+          "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+          "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+          "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)"
         }
       },
       "cfg_mk3_cool_mode": {
@@ -868,6 +912,15 @@
     },
     "write_failed": {
       "message": "Schreiben von {key} fehlgeschlagen: {error}"
+    },
+    "write_out_of_range": {
+      "message": "{key}: {value} liegt außerhalb des Bereichs {min} … {max}, den die Firmware der Wärmepumpe annimmt. Es wurde nichts geschrieben: Die Firmware würde den Schreibzugriff bestätigen und das Register stattdessen auf seinen Standardwert zurücksetzen."
+    },
+    "write_reverted_to_default": {
+      "message": "Die Wärmepumpe hat {key} = {value} nicht übernommen: Das Register liest wieder seinen Standardwert {default}. Die Regelung setzt einen über die Smart-Home-Schnittstelle gesetzten Wert zurück, wenn ein weiterer Modbus-Client ebenfalls schreibt (Fehler 816, mehr als zwei Schreibquellen innerhalb einer Stunde), wenn ihr Wächter in diesem Moment abgelaufen ist oder wenn der Wert außerhalb des Bereichs liegt. Der zuvor gesetzte Wert ist damit ebenfalls weg; setze ihn erneut."
+    },
+    "overall_setpoint_not_implemented": {
+      "message": "Die Gesamt-Betriebsart hat keinen Sollwert: Die Firmware der Wärmepumpe setzt diese Betriebsart für die Gesamt-Gruppe nicht um und behandelt sie wie „keine Vorgabe“. Verwende Anhebung oder Stufe oder setze die Betriebsart des einzelnen Kreises."
     },
     "not_writable": {
       "message": "Register {key} kann nicht geschrieben werden."

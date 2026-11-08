@@ -24,22 +24,22 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `return` | 10100 | input | uint16 | 0.1 | °C | - | open |
 | `return_target` | 10101 | input | uint16 | 0.1 | °C | - | open |
 | `return_external` | 10102 | input | int16 | 0.1 | °C | - | open |
-| `return_limit` | 10103 | input | int16 | 0.1 | °C | - | open |
-| `return_min_target` | 10104 | input | int16 | 0.1 | °C | - | open |
+| `return_limit` | 10103 | input | int16 | 0.1 | °C | - | proven: firmware parameter 87 Einst_TRBegr; upper clamp of the heating setpoint |
+| `return_min_target` | 10104 | input | int16 | 0.1 | °C | - | proven: firmware parameter 979; lower clamp of the heating setpoint and target while heating is blocked |
 | `flow` | 10105 | input | uint16 | 0.1 | °C | - | open |
 | `room` | 10106 | input | int16 | 0.1 | °C | - | open |
-| `heating_limit` | 10107 | input | int16 | 0.1 | °C | - | open |
+| `heating_limit` | 10107 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x57 'Heating demand border' (effective target minus hysteresis) |
 | `outside` | 10108 | input | int16 | 0.1 | °C | - | open |
 | `outside_temp_average` | 10109 | input | int16 | 0.1 | °C | - | open |
 | `heat_source_input` | 10110 | input | int16 | 0.1 | °C | - | open |
 | `heat_source_out` | 10111 | input | int16 | 0.1 | °C | - | open |
 | `max_flow_temp` | 10112 | input | uint16 | 0.1 | °C | - | open |
-| `raw_10113` | 10113 | input | int16 | 0.1 | °C | - | proven: firmware 0x0019ac68 (return target + moving average of flow-return spread); measured |
+| `raw_10113` | 10113 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x67 'TVL calc max' (return target + moving average of the flow-return spread); measured |
 | `dhw` | 10120 | input | int16 | 0.1 | °C | - | open |
 | `dhw_target` | 10121 | input | uint16 | 0.1 | °C | - | open |
 | `dhw_min` | 10122 | input | int16 | 0.1 | °C | - | open |
-| `dhw_max` | 10123 | input | int16 | 0.1 | °C | - | open |
-| `dhw_limit` | 10124 | input | int16 | 0.1 | °C | - | open |
+| `dhw_max` | 10123 | input | int16 | 0.1 | °C | - | proven: firmware parameter 973 Einst_BW_max; upper limit of every hot water target |
+| `dhw_limit` | 10124 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x58 'DHW Demand border' (effective target minus hysteresis) |
 | `mk1_flow` | 10140 | input | int16 | 0.1 | °C | - | open |
 | `mk1_flow_target` | 10141 | input | int16 | 0.1 | °C | - | open |
 | `mk1_flow_min` | 10142 | input | int16 | 0.1 | °C | - | open |
@@ -67,11 +67,11 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `energy_el_dhw` | 10314 | input | uint32 | 0.1 | kWh | - | open |
 | `energy_el_cooling` | 10316 | input | uint32 | 0.1 | kWh | - | open |
 | `energy_el_pool` | 10318 | input | uint32 | 0.1 | kWh | - | open |
-| `energy_th_total` | 10320 | input | uint32 | 0.1 | kWh | - | open |
-| `energy_th_heating` | 10322 | input | uint32 | 0.1 | kWh | - | open |
-| `energy_th_dhw` | 10324 | input | uint32 | 0.1 | kWh | - | open |
-| `energy_th_cooling` | 10326 | input | uint32 | 0.1 | kWh | - | open |
-| `energy_th_pool` | 10328 | input | uint32 | 0.1 | kWh | - | open |
+| `energy_th_total` | 10320 | input | int32 | 0.1 | kWh | - | open |
+| `energy_th_heating` | 10322 | input | int32 | 0.1 | kWh | - | open |
+| `energy_th_dhw` | 10324 | input | int32 | 0.1 | kWh | - | open |
+| `energy_th_cooling` | 10326 | input | int32 | 0.1 | kWh | - | open |
+| `energy_th_pool` | 10328 | input | int32 | 0.1 | kWh | - | open |
 | `output_vbo` | 10350 | input | uint16 | 1 | - | - | proven: firmware VBOout (t0/0x45); measured: runs with the compressor |
 | `raw_10350` | 10350 | input | uint16 | 1 | - | - | proven: firmware VBOout (t0/0x45); measured: runs with the compressor |
 | `output_fp1` | 10351 | input | uint16 | 1 | - | - | proven: firmware FP1out (t0/0x6d); measured: follows the heating pump |
@@ -93,63 +93,69 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `fw_version_major` | 10400 | input | uint16 | 1 | - | - | open |
 | `fw_version_minor` | 10401 | input | uint16 | 1 | - | - | open |
 | `fw_version_patch` | 10402 | input | uint16 | 1 | - | - | open |
-| `hours_hp` | 10404 | input | uint32 | 1 | h | - | open |
-| `hours_heating` | 10406 | input | uint32 | 1 | h | - | open |
-| `hours_dhw` | 10408 | input | uint32 | 1 | h | - | open |
-| `raw_10410` | 10410 | input | uint16 | 1 | - | - | open |
-| `raw_10411` | 10411 | input | uint16 | 1 | - | - | open |
-| `raw_10412` | 10412 | input | uint16 | 1 | - | - | open |
-| `raw_10413` | 10413 | input | uint16 | 1 | - | - | open |
-| `raw_10416` | 10416 | input | uint16 | 1 | - | - | open |
-| `raw_10417` | 10417 | input | uint16 | 1 | - | - | open |
-| `raw_10500` | 10500 | input | uint16 | 1 | - | - | open |
-| `raw_10501` | 10501 | input | uint16 | 1 | - | - | open |
-| `raw_10502` | 10502 | input | uint16 | 1 | - | - | open |
-| `cfg_heating_mode` | 10000 | holding | uint16 | 1 | - | - | open |
-| `cfg_heating_setpoint` | 10001 | holding | uint16 | 0.1 | °C | 15 … 75 | open |
-| `cfg_heating_offset` | 10002 | holding | int16 | 0.1 | K | -20 … 20 | open |
-| `cfg_heating_level` | 10003 | holding | uint16 | 1 | - | - | open |
-| `cfg_dhw_mode` | 10005 | holding | uint16 | 1 | - | - | open |
-| `cfg_dhw_setpoint` | 10006 | holding | uint16 | 0.1 | °C | 30 … 75 | open |
-| `cfg_dhw_offset` | 10007 | holding | int16 | 0.1 | K | -20 … 20 | open |
-| `cfg_dhw_level` | 10008 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk1_mode` | 10010 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk1_setpoint` | 10011 | holding | uint16 | 0.1 | °C | 20 … 65 | open |
-| `cfg_mk1_offset` | 10012 | holding | int16 | 0.1 | K | -5 … 5 | open |
-| `cfg_mk1_level` | 10013 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk1_cool_mode` | 10015 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk1_cool_setpoint` | 10016 | holding | uint16 | 0.1 | °C | 5 … 25 | open |
-| `cfg_mk1_cool_offset` | 10017 | holding | int16 | 0.1 | K | -5 … 5 | open |
-| `cfg_mk2_mode` | 10020 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk2_setpoint` | 10021 | holding | uint16 | 0.1 | °C | 20 … 65 | open |
-| `cfg_mk2_offset` | 10022 | holding | int16 | 0.1 | K | -5 … 5 | open |
-| `cfg_mk2_level` | 10023 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk2_cool_mode` | 10025 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk2_cool_setpoint` | 10026 | holding | uint16 | 0.1 | °C | 5 … 25 | open |
-| `cfg_mk2_cool_offset` | 10027 | holding | int16 | 0.1 | K | -5 … 5 | open |
-| `cfg_mk3_mode` | 10030 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk3_setpoint` | 10031 | holding | uint16 | 0.1 | °C | 20 … 65 | open |
-| `cfg_mk3_offset` | 10032 | holding | int16 | 0.1 | K | -5 … 5 | open |
-| `cfg_mk3_level` | 10033 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk3_cool_mode` | 10035 | holding | uint16 | 1 | - | - | open |
-| `cfg_mk3_cool_setpoint` | 10036 | holding | uint16 | 0.1 | °C | 5 … 25 | open |
-| `cfg_mk3_cool_offset` | 10037 | holding | int16 | 0.1 | K | -5 … 5 | open |
-| `cfg_power_limit_mode` | 10040 | holding | uint16 | 1 | - | - | open |
-| `cfg_power_limit` | 10041 | holding | uint16 | 0.1 | kW | 0 … 30 | open |
-| `heating_block` | 10050 | holding | uint16 | 1 | - | - | open |
-| `dhw_block` | 10051 | holding | uint16 | 1 | - | - | open |
-| `cooling_block` | 10052 | holding | uint16 | 1 | - | - | open |
-| `pool_block` | 10053 | holding | uint16 | 1 | - | - | open |
-| `cfg_room_setpoint` | 10060 | holding | uint16 | 0.1 | °C | 20 … 40 | open |
-| `cfg_overall_mode` | 10065 | holding | uint16 | 1 | - | - | open |
-| `cfg_overall_offset` | 10066 | holding | int16 | 0.1 | K | -20 … 20 | open |
-| `cfg_overall_level` | 10067 | holding | uint16 | 1 | - | - | open |
-| `circulation` | 10070 | holding | uint16 | 1 | - | - | open |
-| `extra_dhw` | 10071 | holding | uint16 | 1 | - | - | open |
+| `hours_hp` | 10404 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `hours_heating` | 10406 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `hours_dhw` | 10408 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `hours_cooling` | 10410 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10410` | 10410 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10411` | 10411 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10412` | 10412 | input | uint16 | 1 | - | - | proven: firmware Zaehler_BetrZeitSW; divisor 7200 (likely hours / 2, not measured) |
+| `raw_10413` | 10413 | input | uint16 | 1 | - | - | proven: firmware Zaehler_BetrZeitSW; divisor 7200 (likely hours / 2, not measured) |
+| `hours_solar` | 10416 | input | uint32 | 1 | h | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10416` | 10416 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10417` | 10417 | input | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `extra_dhw_setpoint` | 10500 | input | int16 | 0.1 | °C | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10500` | 10500 | input | int16 | 0.1 | °C | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `extra_dhw_duration` | 10501 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10501` | 10501 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `extra_dhw_remaining` | 10502 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `raw_10502` | 10502 | input | int16 | 1 | min | - | proven: firmware V3.92.3 ExtraDHW (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_heating_mode` | 10000 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_heating_setpoint` | 10001 | holding | uint16 | 0.1 | °C | 15 … 75 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_heating_offset` | 10002 | holding | int16 | 0.1 | K | -20 … 20 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_heating_level` | 10003 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_dhw_mode` | 10005 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_dhw_setpoint` | 10006 | holding | uint16 | 0.1 | °C | 30 … 75 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_dhw_offset` | 10007 | holding | int16 | 0.1 | K | -20 … 20 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_dhw_level` | 10008 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_mode` | 10010 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_setpoint` | 10011 | holding | uint16 | 0.1 | °C | 20 … 65 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_offset` | 10012 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_level` | 10013 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_cool_mode` | 10015 | holding | uint16 | 1 | - | - | likely: firmware V3.92.3 enum; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_cool_setpoint` | 10016 | holding | uint16 | 0.1 | °C | 5 … 25 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk1_cool_offset` | 10017 | holding | int16 | 0.1 | K | -5 … 5 | likely: firmware V3.92.3 range; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_mode` | 10020 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_setpoint` | 10021 | holding | uint16 | 0.1 | °C | 20 … 65 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_offset` | 10022 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_level` | 10023 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_cool_mode` | 10025 | holding | uint16 | 1 | - | - | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_cool_setpoint` | 10026 | holding | uint16 | 0.1 | °C | 5 … 25 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_cool_offset` | 10027 | holding | int16 | 0.1 | K | -5 … 5 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_mode` | 10030 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_setpoint` | 10031 | holding | uint16 | 0.1 | °C | 20 … 65 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_offset` | 10032 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_level` | 10033 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_cool_mode` | 10035 | holding | uint16 | 1 | - | - | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_cool_setpoint` | 10036 | holding | uint16 | 0.1 | °C | 5 … 25 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_cool_offset` | 10037 | holding | int16 | 0.1 | K | -5 … 5 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_power_limit_mode` | 10040 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_power_limit` | 10041 | holding | uint16 | 0.1 | kW | 0 … 30 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `heating_block` | 10050 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `dhw_block` | 10051 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cooling_block` | 10052 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `pool_block` | 10053 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_room_setpoint` | 10060 | holding | uint16 | 0.1 | °C | 20 … 40 | proven: firmware V3.92.3 writable parameter 1148; range open (owner decision 20-40) |
+| `cfg_overall_mode` | 10065 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_overall_offset` | 10066 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_overall_level` | 10067 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `circulation` | 10070 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware |
+| `extra_dhw` | 10071 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware when the timer ends |
 | `cap_heating` | 10000 | discrete | uint16 | 1 | - | - | open |
 | `cap_hot_water` | 10001 | discrete | uint16 | 1 | - | - | open |
 | `cap_cooling` | 10002 | discrete | uint16 | 1 | - | - | open |
 | `cap_pool` | 10003 | discrete | uint16 | 1 | - | - | open |
+| `cap_solar` | 10004 | discrete | uint16 | 1 | - | - | open |
 | `cap_room_controller` | 10005 | discrete | uint16 | 1 | - | - | open |
 | `cap_mk1_heating` | 10006 | discrete | uint16 | 1 | - | - | open |
 | `cap_mk1_cooling` | 10007 | discrete | uint16 | 1 | - | - | open |

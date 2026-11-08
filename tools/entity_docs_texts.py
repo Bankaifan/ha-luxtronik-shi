@@ -51,8 +51,8 @@ SOURCE_LEGEND = {
         "python-luxtronik (Bouni/python-luxtronik, `luxtronik/definitions/{inputs,holdings}.py`, `datatypes.py`)",
     ),
     "FW": (
-        "[firmware analysis](firmware-3.92.3-shi-analysis.md) and [register meanings](firmware-3.92.3-register-meanings.md) of V3.92.3 (English)",
-        "[Firmware-Analyse](firmware-3.92.3-shi-analysis.md) und [Registerbedeutungen](firmware-3.92.3-register-meanings.md) von V3.92.3 (englisch)",
+        "[firmware analysis](firmware-3.92.3-shi-analysis.md), [register meanings](firmware-3.92.3-register-meanings.md) and the [full analysis](firmware-3.92.3-shi-full-analysis.md) of V3.92.3 (proven = read from the firmware; likely = inferred; open = not determined)",
+        "[Firmware-Analyse](firmware-3.92.3-shi-analysis.md), [Registerbedeutungen](firmware-3.92.3-register-meanings.md) und die [Vollanalyse](firmware-3.92.3-shi-full-analysis.de.md) von V3.92.3 (belegt = aus der Firmware gelesen; wahrscheinlich = geschlossen; offen = nicht bestimmt)",
     ),
     "M": (
         "measurement on the reference installation (LWDV 91-1/3, firmware 3.92.3), documented in the README or CHANGELOG",
@@ -502,7 +502,7 @@ PAGE = {
         },
         "features": {
             "mk1": "mixing circuit 1", "mk2": "mixing circuit 2", "mk3": "mixing circuit 3",
-            "cooling": "cooling", "pool": "pool", "room_unit": "room unit",
+            "cooling": "cooling", "pool": "pool", "room_unit": "room unit", "solar": "solar",
         },
         "flags": {
             "disabled": "disabled by default",
@@ -581,7 +581,7 @@ PAGE = {
         },
         "features": {
             "mk1": "Mischkreis 1", "mk2": "Mischkreis 2", "mk3": "Mischkreis 3",
-            "cooling": "Kühlung", "pool": "Pool", "room_unit": "Raumeinheit",
+            "cooling": "Kühlung", "pool": "Pool", "room_unit": "Raumeinheit", "solar": "Solar",
         },
         "flags": {
             "disabled": "standardmäßig deaktiviert",
@@ -604,10 +604,12 @@ PITFALLS = {
         "1. **Values set over the SHI are volatile.** The controller discards every value set over Modbus when it "
         "reboots, and when nothing has accessed the SHI for 600 s (10 minutes); every Modbus access resets that "
         "timer, a pure read included. While the integration polls, the watchdog does not expire; the maximum "
-        "update interval is therefore 300 s. After a reset **modes, levels and blocks read 0**, **setpoints "
-        "read their stored or default value** (not 0), and offsets are assumed to read 0 (not proven). A Home "
-        "Assistant downtime of more than 10 minutes has the same effect. Blocks reading 0 means *not blocked*: "
-        "the heat pump falls back to its own control (FW).\n"
+        "update interval is therefore 300 s. After a reset **modes, levels, offsets, blocks and triggers read "
+        "0**, the **setpoints read their firmware defaults** (heating and mixing circuits 35.0 °C, hot water "
+        "40.0 °C, cooling 20.0 °C, power limit 30.0 kW) and the room setpoint its persisted controller value. "
+        "Expiry and return are written to the controller's event log. A Home Assistant downtime of more than "
+        "10 minutes has the same effect. Blocks reading 0 means *not blocked*: the heat pump falls back to its "
+        "own control (FW, proven).\n"
         "2. **Restore after a device reset** is an option, off by default. When on, the integration writes back the "
         "values it set itself, but only after a connection outage and only if every one of them reads its reset "
         "value; a change seen during continuous polling counts as somebody else's. Restored keys: {restored}. "
@@ -631,9 +633,22 @@ PITFALLS = {
         "8. **Equipment decides which entities exist.** Parts that are switched off in the options are not polled "
         "and get no entities; their entity IDs stay reserved. Do not switch off a part that an optimizer reads "
         "or writes (for example mixing circuit 1).\n"
-        "9. **Write ranges** are those of python-luxtronik. The controller applies its own limits on top; the "
-        "read-back after every write shows what it really took.\n"
-        "10. **Slow values** (counters, hours, settings, firmware) are read only every Nth poll, so they can lag "
+        "9. **Write ranges are the firmware's.** A write outside the range is acknowledged by the firmware, but "
+        "the register is **reset to its default** instead of keeping the previous value (FW, proven). The "
+        "integration therefore never sends such a value (number limits, climate, water heater and the restore "
+        "refuse it). A read-back that shows the default after a write is reported as an error: the cause is "
+        "then error 816 (more than two write sources within an hour) or a watchdog expiry. The controller "
+        "clamps the effect on top: the heating setpoint to [return target minimum, return limit], the hot water "
+        "target to the maximum hot water temperature.\n"
+        "10. **The overall group takes precedence.** While `cfg_overall_mode` is not `off`, the heating mode and "
+        "the mixing circuit modes are ignored; the overall mode has no setpoint (its mode `setpoint` acts like "
+        "`off` and is refused). Levels: 1 and 2 both raise by the controller parameter *Erhöhung*, 3 lowers by "
+        "*Absenkung* (menu *Offsets*, set at the control panel).\n"
+        "11. **Enable SHI.** The controller parameter *Enable SHI* (1161, menu: Modbus TCP / myUplink / both) "
+        "cannot be read over Modbus. While it is off, setpoints, offsets, levels and the power limit are read "
+        "back correctly but have no effect; blocks, circulation and extra hot water work regardless. The "
+        "diagnostics download names it (FW, proven).\n"
+        "12. **Slow values** (counters, hours, settings, firmware) are read only every Nth poll, so they can lag "
         "by several update intervals."
     ),
     "de": (
@@ -641,10 +656,12 @@ PITFALLS = {
         "wenn sie neu startet und wenn 600 s (10 Minuten) lang niemand auf die SHI zugegriffen hat; jeder "
         "Modbus-Zugriff setzt diesen Zeitgeber zurück, auch ein reines Lesen. Solange die Integration abfragt, "
         "läuft der Watchdog nicht ab; das größte Aktualisierungsintervall ist deshalb 300 s. Nach einem Reset "
-        "lesen **Betriebsarten, Stufen und Sperren 0**, **Sollwerte ihren gespeicherten oder Standardwert** "
-        "(nicht 0), und Anhebungen lesen vermutlich 0 (nicht belegt). Eine Auszeit von Home Assistant über 10 "
-        "Minuten wirkt genauso. Sperren, die 0 lesen, heißt *nicht gesperrt*: Die Wärmepumpe fällt auf ihre "
-        "eigene Regelung zurück (FW).\n"
+        "lesen **Betriebsarten, Stufen, Anhebungen, Sperren und Trigger 0**, die **Sollwerte ihre "
+        "Firmware-Standardwerte** (Heizung und Mischkreise 35,0 °C, Warmwasser 40,0 °C, Kühlung 20,0 °C, "
+        "Leistungsbegrenzung 30,0 kW) und der Raumsollwert seinen gespeicherten Reglerwert. Ablauf und "
+        "Wiederkehr landen im Ereignisprotokoll der Regelung. Eine Auszeit von Home Assistant über 10 Minuten "
+        "wirkt genauso. Sperren, die 0 lesen, heißt *nicht gesperrt*: Die Wärmepumpe fällt auf ihre eigene "
+        "Regelung zurück (FW, belegt).\n"
         "2. **Wiederherstellung nach einem Geräte-Reset** ist eine Option, standardmäßig aus. Ist sie an, schreibt "
         "die Integration die selbst gesetzten Werte zurück, aber nur nach einem Verbindungsausfall und nur, wenn "
         "jeder davon seinen Reset-Wert liest; eine Änderung bei durchgehender Abfrage gilt als fremd. "
@@ -671,9 +688,24 @@ PITFALLS = {
         "8. **Die Ausstattung bestimmt, welche Entitäten es gibt.** Abgewählte Teile werden nicht abgefragt und "
         "bekommen keine Entitäten; ihre Entity-IDs bleiben reserviert. Wähle keinen Teil ab, den ein "
         "Optimierer liest oder schreibt (zum Beispiel Mischkreis 1).\n"
-        "9. **Schreibbereiche** stammen aus python-luxtronik. Die Regelung wendet zusätzlich eigene Grenzen an; "
-        "das Zurücklesen nach jedem Schreiben zeigt, was sie wirklich übernommen hat.\n"
-        "10. **Langsame Werte** (Zähler, Stunden, Einstellungen, Firmware) werden nur jede N-te Abfrage gelesen "
+        "9. **Die Schreibbereiche sind die der Firmware.** Einen Wert außerhalb des Bereichs bestätigt die "
+        "Firmware zwar, setzt das Register aber auf seinen **Standardwert zurück**, statt den vorherigen Wert zu "
+        "behalten (FW, belegt). Die Integration schickt einen solchen Wert deshalb nie (Grenzen der Zahlen, "
+        "Climate, Water Heater und die Wiederherstellung lehnen ab). Liest ein Register nach dem Schreiben "
+        "seinen Standardwert, wird das als Fehler gemeldet: Ursache ist dann Fehler 816 (mehr als zwei "
+        "Schreibquellen innerhalb einer Stunde) oder ein Ablauf des Wächters. Die Regelung begrenzt zusätzlich "
+        "die Wirkung: den Heizungs-Sollwert auf [Rücklauf-Soll Minimum, Rücklauf-Begrenzung], das "
+        "Warmwasser-Ziel auf die maximale Warmwassertemperatur.\n"
+        "10. **Die Gesamt-Gruppe hat Vorrang.** Solange `cfg_overall_mode` nicht `off` ist, werden die "
+        "Heizungs-Betriebsart und die Mischkreis-Betriebsarten ignoriert; die Gesamt-Betriebsart hat keinen "
+        "Sollwert (ihre Betriebsart `setpoint` wirkt wie `off` und wird abgelehnt). Stufen: 1 und 2 erhöhen "
+        "beide um den Reglerparameter *Erhöhung*, 3 senkt um *Absenkung* (Menü *Offsets*, am Bedienteil "
+        "eingestellt).\n"
+        "11. **Enable SHI.** Der Reglerparameter *Enable SHI* (1161, Menü: Modbus TCP / myUplink / beides) lässt "
+        "sich über Modbus nicht lesen. Steht er aus, werden Sollwerte, Anhebungen, Stufen und die "
+        "Leistungsbegrenzung korrekt zurückgelesen, wirken aber nicht; Sperren, Zirkulation und "
+        "Extra-Warmwasser funktionieren trotzdem. Der Diagnose-Download nennt ihn (FW, belegt).\n"
+        "12. **Langsame Werte** (Zähler, Stunden, Einstellungen, Firmware) werden nur jede N-te Abfrage gelesen "
         "und können deshalb mehrere Aktualisierungsintervalle hinterherhinken."
     ),
 }

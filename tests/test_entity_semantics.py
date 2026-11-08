@@ -217,7 +217,8 @@ def test_mode_zero_is_no_influence_on_every_mode_select(lang: str, label: str) -
     mode_selects = [reg.key for reg in ALL_REGISTERS if reg.platform == "select" and reg.options == CONTROL_MODES]
     assert len(mode_selects) == 9  # heating, hot water, MK1-3 heating and cooling, overall heating
     for key in mode_selects:
-        assert selects[key]["state"]["off"] == label, key
+        # the overall mode adds what "no influence" means for the circuits (tools/gen_translations.py)
+        assert selects[key]["state"]["off"].startswith(label), key
         assert set(selects[key]["state"]) == set(CONTROL_MODES)
 
 

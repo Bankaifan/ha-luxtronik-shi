@@ -5,6 +5,7 @@ from custom_components.luxtronik_shi.registers import (
     ALIAS_OF,
     ALL_REGISTERS,
     BY_KEY,
+    SHARES_ADDRESS,
     decode,
     encode_int16,
 )
@@ -15,10 +16,19 @@ def test_keys_and_addresses_are_unique():
     seen = set()
     for reg in ALL_REGISTERS:
         ident = (reg.kind, reg.address)
-        if reg.key in ALIAS_OF:
-            continue  # shares the register of a raw value, checked in test_aliases_share_their_register
+        if reg.key in ALIAS_OF or reg.key in SHARES_ADDRESS:
+            continue  # shares the register of a raw value, checked below
         assert ident not in seen, ident
         seen.add(ident)
+
+
+def test_resolved_sensors_share_the_words_of_their_raw_values():
+    """A resolved sensor (0.17.0) covers exactly the addresses of the raw sensors it names; the raw twins stay."""
+    for key, raw_keys in SHARES_ADDRESS.items():
+        reg = BY_KEY[key]
+        addresses = tuple(BY_KEY[raw].address for raw in raw_keys)
+        assert addresses == tuple(range(reg.address, reg.address + reg.width)), key
+        assert all(BY_KEY[raw].kind == reg.kind and not BY_KEY[raw].enabled_default for raw in raw_keys)
 
 
 def test_aliases_share_their_register():
@@ -97,4 +107,7 @@ def test_raw_meanings_keep_key_and_stay_disabled():
         assert reg.key not in RAW_KEYS
     assert BY_KEY["raw_10113"].scale == 0.1 and BY_KEY["raw_10113"].dtype == "int16"
     assert decode(BY_KEY["raw_10113"], [253]) == 25.3
-    assert BY_KEY["raw_10500"].source is None and BY_KEY["raw_10500"].key in RAW_KEYS  # still open
+    # all raw values of RAW_INPUT_ADDRESSES_ADDED have a proven meaning since 0.17.0; the pool counter stays a
+    # raw value because its divisor 7200 is only likely
+    assert BY_KEY["raw_10412"].source.startswith("proven:") and "likely" in BY_KEY["raw_10412"].source
+    assert not RAW_KEYS & {"raw_10410", "raw_10416", "raw_10500", "raw_10501", "raw_10502"}

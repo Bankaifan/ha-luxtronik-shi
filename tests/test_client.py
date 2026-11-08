@@ -28,7 +28,7 @@ async def test_illegal_address(shi):
     client = LuxtronikModbusClient("127.0.0.1", shi.port, 1, timeout=2)
     try:
         with pytest.raises(ModbusIllegalAddress):
-            await client.read("input", 10500, 1)
+            await client.read("input", 10600, 1)
         # the connection stays usable
         assert await client.read("input", 10100, 1) == [285]
     finally:

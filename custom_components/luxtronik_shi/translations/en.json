@@ -46,7 +46,8 @@
           "mk3": "Mixing circuit 3",
           "cooling": "Cooling",
           "pool": "Pool / swimming pool",
-          "room_unit": "Room unit (room temperature)"
+          "room_unit": "Room unit (room temperature)",
+          "solar": "Solar (operating hours)"
         }
       }
     },
@@ -73,7 +74,8 @@
           "mk3": "Mixing circuit 3",
           "cooling": "Cooling",
           "pool": "Pool / swimming pool",
-          "room_unit": "Room unit (room temperature)"
+          "room_unit": "Room unit (room temperature)",
+          "solar": "Solar (operating hours)"
         },
         "data_description": {
           "scan_interval": "Base interval, at most 300 seconds (5 minutes): the heat pump drops values set over the Smart Home Interface after 10 minutes without access. Slowly changing values (counters, settings, firmware) are read less often automatically.",
@@ -107,7 +109,7 @@
         "name": "Temperature: room (room unit)"
       },
       "heating_limit": {
-        "name": "Limit temperature"
+        "name": "Demand border"
       },
       "outside": {
         "name": "Temperature: outside"
@@ -125,7 +127,7 @@
         "name": "Maximum"
       },
       "dhw_limit": {
-        "name": "Limit temperature"
+        "name": "Demand border"
       },
       "mk1_flow": {
         "name": "Mixing circuit 1: flow"
@@ -340,8 +342,23 @@
       "energy_th_pool": {
         "name": "Energy: thermal"
       },
+      "hours_cooling": {
+        "name": "Operating hours"
+      },
+      "hours_solar": {
+        "name": "Operating hours: solar"
+      },
+      "extra_dhw_setpoint": {
+        "name": "Extra: setpoint"
+      },
+      "extra_dhw_duration": {
+        "name": "Extra: duration"
+      },
+      "extra_dhw_remaining": {
+        "name": "Extra: remaining time"
+      },
       "raw_10113": {
-        "name": "Flow: heating target (calculated)"
+        "name": "Flow: calculated maximum (TVL calc max)"
       },
       "raw_10350": {
         "name": "Output: VBO"
@@ -370,8 +387,32 @@
       "raw_10353": {
         "name": "Output: FP3"
       },
-      "raw": {
-        "name": "Raw value: {address}"
+      "raw_10410": {
+        "name": "Operating hours cooling: word 1"
+      },
+      "raw_10411": {
+        "name": "Operating hours cooling: word 2"
+      },
+      "raw_10412": {
+        "name": "Operating hours pool: word 1 (divisor 7200)"
+      },
+      "raw_10413": {
+        "name": "Operating hours pool: word 2 (divisor 7200)"
+      },
+      "raw_10416": {
+        "name": "Operating hours solar: word 1"
+      },
+      "raw_10417": {
+        "name": "Operating hours solar: word 2"
+      },
+      "raw_10500": {
+        "name": "Extra hot water: setpoint"
+      },
+      "raw_10501": {
+        "name": "Extra hot water: duration"
+      },
+      "raw_10502": {
+        "name": "Extra hot water: remaining time"
       },
       "firmware_version": {
         "name": "Firmware version"
@@ -440,6 +481,9 @@
       },
       "cap_pool": {
         "name": "Equipment: pool"
+      },
+      "cap_solar": {
+        "name": "Equipment: solar"
       },
       "cap_room_controller": {
         "name": "Equipment: room controller"
@@ -614,9 +658,9 @@
         "name": "Level",
         "state": {
           "normal": "Normal (no correction)",
-          "increased": "Increased",
-          "increased2": "Increased (step 2)",
-          "decreased": "Decreased"
+          "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+          "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_dhw_mode": {
@@ -632,9 +676,9 @@
         "name": "Level",
         "state": {
           "normal": "Normal (no correction)",
-          "increased": "Increased",
-          "increased2": "Increased (step 2)",
-          "decreased": "Decreased"
+          "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+          "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk1_mode": {
@@ -650,9 +694,9 @@
         "name": "Mixing circuit 1: level",
         "state": {
           "normal": "Normal (no correction)",
-          "increased": "Increased",
-          "increased2": "Increased (step 2)",
-          "decreased": "Decreased"
+          "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+          "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk1_cool_mode": {
@@ -675,19 +719,19 @@
       "cfg_overall_mode": {
         "name": "Overall: mode",
         "state": {
-          "off": "No influence",
-          "setpoint": "Setpoint (replaces the controller's target)",
-          "offset": "Offset (controller's target plus offset)",
-          "level": "Level (controller's target corrected by the level)"
+          "off": "No influence (circuits follow their own modes)",
+          "setpoint": "Setpoint (not implemented by the firmware, acts like no influence)",
+          "offset": "Offset for all heating circuits (overrides their modes)",
+          "level": "Level for all heating circuits (overrides their modes)"
         }
       },
       "cfg_overall_level": {
         "name": "Overall: level",
         "state": {
           "normal": "Normal (no correction)",
-          "increased": "Increased",
-          "increased2": "Increased (step 2)",
-          "decreased": "Decreased"
+          "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+          "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk2_mode": {
@@ -703,9 +747,9 @@
         "name": "Mixing circuit 2: level",
         "state": {
           "normal": "Normal (no correction)",
-          "increased": "Increased",
-          "increased2": "Increased (step 2)",
-          "decreased": "Decreased"
+          "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+          "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk2_cool_mode": {
@@ -730,9 +774,9 @@
         "name": "Mixing circuit 3: level",
         "state": {
           "normal": "Normal (no correction)",
-          "increased": "Increased",
-          "increased2": "Increased (step 2)",
-          "decreased": "Decreased"
+          "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+          "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk3_cool_mode": {
@@ -868,6 +912,15 @@
     },
     "write_failed": {
       "message": "Writing {key} failed: {error}"
+    },
+    "write_out_of_range": {
+      "message": "{key}: {value} is outside the range {min} … {max} the heat pump firmware accepts. Nothing was written: the firmware would acknowledge the write and reset the register to its default instead."
+    },
+    "write_reverted_to_default": {
+      "message": "The heat pump did not take {key} = {value}: the register reads its default {default} again. The controller reverts a value set over the Smart Home Interface when another Modbus client writes as well (error 816, more than two write sources within an hour), when its watchdog expired at that moment, or when the value is outside its range. The value set before is gone as well; set it again."
+    },
+    "overall_setpoint_not_implemented": {
+      "message": "The overall mode has no setpoint: the heat pump firmware does not implement this mode for the overall group and treats it like \"no influence\". Use offset or level, or set the mode of the single circuit."
     },
     "not_writable": {
       "message": "Register {key} cannot be written."

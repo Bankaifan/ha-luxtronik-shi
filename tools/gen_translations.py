@@ -153,6 +153,7 @@ FEATURE_LABELS = {
         "cooling": "Cooling",
         "pool": "Pool / swimming pool",
         "room_unit": "Room unit (room temperature)",
+        "solar": "Solar (operating hours)",
     },
     "de": {
         "mk1": "Mischkreis 1",
@@ -161,6 +162,7 @@ FEATURE_LABELS = {
         "cooling": "Kühlung",
         "pool": "Pool / Schwimmbad",
         "room_unit": "Raumeinheit (Raumtemperatur)",
+        "solar": "Solar (Betriebsstunden)",
     },
 }
 EQUIPMENT_TEXT = {
@@ -281,10 +283,22 @@ OPTION_OVERRIDES = {
             "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)",
         },
     },
-    # LevelMode 0 is "Normal": no correction.
+    # Level (firmware V3.92.3, proven): 0 no correction; 1 and 2 both raise the target by the controller parameter
+    # "Erhöhung" of the circuit (the same parameter, so 2 equals 1); 3 lowers it by the parameter "Absenkung".
+    # The amounts are set at the control panel (menu "Offsets", -20 ... +20 K), not over the SHI.
     registers._LEVELS: {
-        "en": {"normal": "Normal (no correction)"},
-        "de": {"normal": "Normal (keine Korrektur)"},
+        "en": {
+            "normal": "Normal (no correction)",
+            "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
+            "increased2": "Increased, step 2 (same as step 1 in the firmware)",
+            "decreased": "Decreased (by the controller's \"Absenkung\" parameter)",
+        },
+        "de": {
+            "normal": "Normal (keine Korrektur)",
+            "increased": "Erhöht (um den Parameter „Erhöhung“ der Regelung)",
+            "increased2": "Erhöht, Stufe 2 (in der Firmware gleich Stufe 1)",
+            "decreased": "Abgesenkt (um den Parameter „Absenkung“ der Regelung)",
+        },
     },
     # OperationMode: 5 is "no request", 2 "swimming pool/solar", 6 "heating external source".
     registers._OPERATING_MODES: {
@@ -294,8 +308,30 @@ OPTION_OVERRIDES = {
 }
 
 
-def option_label(lang: str, options: tuple[str, ...], option: str) -> str:
-    return OPTION_OVERRIDES.get(options, {}).get(lang, {}).get(option, STATES[lang][option])
+# Labels that differ for one register only. The overall mode (10065) shares the option tuple of the other mode
+# selects, but the firmware does not implement its mode 1 (setpoint): it acts like 0 (V3.92.3, proven), and the
+# select refuses to write it. A mode other than 0 overrides the heating and mixing circuit modes.
+KEY_OPTION_OVERRIDES = {
+    registers.OVERALL_MODE_KEY: {
+        "en": {
+            "off": "No influence (circuits follow their own modes)",
+            "setpoint": "Setpoint (not implemented by the firmware, acts like no influence)",
+            "offset": "Offset for all heating circuits (overrides their modes)",
+            "level": "Level for all heating circuits (overrides their modes)",
+        },
+        "de": {
+            "off": "Keine Vorgabe (Kreise folgen ihren eigenen Betriebsarten)",
+            "setpoint": "Sollwert (von der Firmware nicht umgesetzt, wirkt wie keine Vorgabe)",
+            "offset": "Anhebung für alle Heizkreise (hat Vorrang vor deren Betriebsarten)",
+            "level": "Stufe für alle Heizkreise (hat Vorrang vor deren Betriebsarten)",
+        },
+    },
+}
+
+
+def option_label(lang: str, options: tuple[str, ...], option: str, key: str | None = None) -> str:
+    by_key = KEY_OPTION_OVERRIDES.get(key, {}).get(lang, {}) if key else {}
+    return by_key.get(option) or OPTION_OVERRIDES.get(options, {}).get(lang, {}).get(option, STATES[lang][option])
 
 
 # Operation modes of the water heater (water_heater.OPERATION_MODES), raw value order of the mode select.
@@ -382,6 +418,15 @@ EXCEPTIONS = {
         "control_mode_unknown": {"message": "The heating control mode is not known yet. Try again after the next update."},
         "external_change_logbook": {"message": "{name} changed outside Home Assistant: {old} -> {new}"},
         "write_failed": {"message": "Writing {key} failed: {error}"},
+        "write_out_of_range": {
+            "message": "{key}: {value} is outside the range {min} … {max} the heat pump firmware accepts. Nothing was written: the firmware would acknowledge the write and reset the register to its default instead."
+        },
+        "write_reverted_to_default": {
+            "message": "The heat pump did not take {key} = {value}: the register reads its default {default} again. The controller reverts a value set over the Smart Home Interface when another Modbus client writes as well (error 816, more than two write sources within an hour), when its watchdog expired at that moment, or when the value is outside its range. The value set before is gone as well; set it again."
+        },
+        "overall_setpoint_not_implemented": {
+            "message": "The overall mode has no setpoint: the heat pump firmware does not implement this mode for the overall group and treats it like \"no influence\". Use offset or level, or set the mode of the single circuit."
+        },
         "not_writable": {"message": "Register {key} cannot be written."},
         "poll_failed": {"message": "No connection to the heat pump: {error}"},
         "state_on": {"message": "on"},
@@ -400,6 +445,15 @@ EXCEPTIONS = {
         "control_mode_unknown": {"message": "Die Betriebsart der Heizung ist noch nicht bekannt. Versuche es nach der nächsten Aktualisierung erneut."},
         "external_change_logbook": {"message": "{name} außerhalb von Home Assistant geändert: {old} -> {new}"},
         "write_failed": {"message": "Schreiben von {key} fehlgeschlagen: {error}"},
+        "write_out_of_range": {
+            "message": "{key}: {value} liegt außerhalb des Bereichs {min} … {max}, den die Firmware der Wärmepumpe annimmt. Es wurde nichts geschrieben: Die Firmware würde den Schreibzugriff bestätigen und das Register stattdessen auf seinen Standardwert zurücksetzen."
+        },
+        "write_reverted_to_default": {
+            "message": "Die Wärmepumpe hat {key} = {value} nicht übernommen: Das Register liest wieder seinen Standardwert {default}. Die Regelung setzt einen über die Smart-Home-Schnittstelle gesetzten Wert zurück, wenn ein weiterer Modbus-Client ebenfalls schreibt (Fehler 816, mehr als zwei Schreibquellen innerhalb einer Stunde), wenn ihr Wächter in diesem Moment abgelaufen ist oder wenn der Wert außerhalb des Bereichs liegt. Der zuvor gesetzte Wert ist damit ebenfalls weg; setze ihn erneut."
+        },
+        "overall_setpoint_not_implemented": {
+            "message": "Die Gesamt-Betriebsart hat keinen Sollwert: Die Firmware der Wärmepumpe setzt diese Betriebsart für die Gesamt-Gruppe nicht um und behandelt sie wie „keine Vorgabe“. Verwende Anhebung oder Stufe oder setze die Betriebsart des einzelnen Kreises."
+        },
         "not_writable": {"message": "Register {key} kann nicht geschrieben werden."},
         "poll_failed": {"message": "Keine Verbindung zur Wärmepumpe: {error}"},
         "state_on": {"message": "an"},
@@ -459,7 +513,7 @@ for lang in ("en", "de"):
             continue  # read only to compose another entity, no entity of its own
         entry = {"name": name}
         if reg.options and reg.platform in ("sensor", "select"):
-            entry["state"] = {opt: option_label(lang, reg.options, opt) for opt in reg.options}
+            entry["state"] = {opt: option_label(lang, reg.options, opt, reg.key) for opt in reg.options}
         if reg.key in registers.SETPOINT_GROUPS:
             entry["state_attributes"] = {
                 attr: {"name": ATTRIBUTES[lang][attr]} for attr in ("setpoint_active", "effective_target")

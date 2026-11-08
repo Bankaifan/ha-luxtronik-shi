@@ -578,12 +578,12 @@ views:
         | Wärmepumpe Temperatur: Rücklauf-Begrenzung | `return_limit` | `sensor.warmepumpe_temperatur_rucklauf_begrenzung` |
         | Wärmepumpe Temperatur: Rücklauf-Soll Minimum | `return_min_target` | `sensor.warmepumpe_temperatur_rucklauf_soll_minimum` |
         | Wärmepumpe Temperatur: Vorlauf | `flow` | `sensor.warmepumpe_temperatur_vorlauf` |
-        | Wärmepumpe Heizung Grenztemperatur | `heating_limit` | `sensor.warmepumpe_heizung_grenztemperatur` |
+        | Wärmepumpe Heizung Anforderungsgrenze | `heating_limit` | `sensor.warmepumpe_heizung_anforderungsgrenze` |
         | Wärmepumpe Temperatur: Außen | `outside` | `sensor.warmepumpe_temperatur_aussen` |
         | Wärmepumpe Warmwasser Temperatur | `dhw` | `sensor.warmepumpe_warmwasser_temperatur` |
         | Wärmepumpe Warmwasser Soll | `dhw_target` | `sensor.warmepumpe_warmwasser_soll` |
         | Wärmepumpe Warmwasser Maximum | `dhw_max` | `sensor.warmepumpe_warmwasser_maximum` |
-        | Wärmepumpe Warmwasser Grenztemperatur | `dhw_limit` | `sensor.warmepumpe_warmwasser_grenztemperatur` |
+        | Wärmepumpe Warmwasser Anforderungsgrenze | `dhw_limit` | `sensor.warmepumpe_warmwasser_anforderungsgrenze` |
         | Wärmepumpe Heizung Mischkreis 1: Vorlauf | `mk1_flow` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf` |
         | Wärmepumpe Heizung Mischkreis 1: Vorlauf-Soll | `mk1_flow_target` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf_soll` |
         | Wärmepumpe Heizung Mischkreis 1: Vorlauf Minimum | `mk1_flow_min` | `sensor.warmepumpe_heizung_mischkreis_1_vorlauf_minimum` |
@@ -653,6 +653,11 @@ views:
         | Wärmepumpe Pool Energie: Strom | `energy_el_pool` | `sensor.warmepumpe_pool_energie_strom` |
         | Wärmepumpe Kühlung Energie: Wärme | `energy_th_cooling` | `sensor.warmepumpe_kuhlung_energie_warme` |
         | Wärmepumpe Pool Energie: Wärme | `energy_th_pool` | `sensor.warmepumpe_pool_energie_warme` |
+        | Wärmepumpe Kühlung Betriebsstunden | `hours_cooling` | `sensor.warmepumpe_kuhlung_betriebsstunden` |
+        | Wärmepumpe Betriebsstunden: Solar | `hours_solar` | `sensor.warmepumpe_betriebsstunden_solar` |
+        | Wärmepumpe Warmwasser Extra: Sollwert | `extra_dhw_setpoint` | `sensor.warmepumpe_warmwasser_extra_sollwert` |
+        | Wärmepumpe Warmwasser Extra: Dauer | `extra_dhw_duration` | `sensor.warmepumpe_warmwasser_extra_dauer` |
+        | Wärmepumpe Warmwasser Extra: Restlaufzeit | `extra_dhw_remaining` | `sensor.warmepumpe_warmwasser_extra_restlaufzeit` |
         | Wärmepumpe Heizung Pumpe: Heizung (HUP) | `pump_heating` | `binary_sensor.warmepumpe_heizung_pumpe_heizung_hup` |
         | Wärmepumpe Warmwasser Pumpe: Warmwasser (BUP) | `pump_hot_water` | `binary_sensor.warmepumpe_warmwasser_pumpe_warmwasser_bup` |
         | Wärmepumpe Warmwasser Pumpe: Zirkulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip` |
@@ -662,6 +667,7 @@ views:
         | Wärmepumpe Ausstattung: Warmwasser | `cap_hot_water` | `binary_sensor.warmepumpe_ausstattung_warmwasser` |
         | Wärmepumpe Ausstattung: Kühlen | `cap_cooling` | `binary_sensor.warmepumpe_ausstattung_kuhlen` |
         | Wärmepumpe Ausstattung: Pool | `cap_pool` | `binary_sensor.warmepumpe_ausstattung_pool` |
+        | Wärmepumpe Ausstattung: Solar | `cap_solar` | `binary_sensor.warmepumpe_ausstattung_solar` |
         | Wärmepumpe Ausstattung: Raumregler | `cap_room_controller` | `binary_sensor.warmepumpe_ausstattung_raumregler` |
         | Wärmepumpe Ausstattung: Mischkreis 1 Heizen | `cap_mk1_heating` | `binary_sensor.warmepumpe_ausstattung_mischkreis_1_heizen` |
         | Wärmepumpe Ausstattung: Mischkreis 1 Kühlen | `cap_mk1_cooling` | `binary_sensor.warmepumpe_ausstattung_mischkreis_1_kuhlen` |

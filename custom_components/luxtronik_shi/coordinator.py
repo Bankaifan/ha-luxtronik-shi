@@ -16,7 +16,7 @@ from typing import Any
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -57,6 +57,7 @@ from .const import (
     SHI_NOT_AVAILABLE,
     SHI_WATCHDOG_TIMEOUT,
     STORE_VERSION,
+    TRIGGER_KEYS,
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
@@ -72,6 +73,7 @@ from .registers import (
     area_of,
     decode,
     firmware_version,
+    raw_in_range,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -422,7 +424,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         shared: dict[int, list[Register]] = {}  # entities that share a register (ALIAS_OF) are read once
         for reg in block.registers:
             shared.setdefault(reg.address, []).append(reg)
-        for first, *twins in shared.values():
+        for regs in shared.values():
+            # The widest register first: a 32 bit counter and the raw sensor of its high word share an address
+            # (SHARES_ADDRESS); the single word is the first of the two.
+            first, *twins = sorted(regs, key=lambda r: -r.width)
             await self._read_single(first, poll=True, twins=twins)
 
     async def _read_single(
@@ -435,7 +440,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._mark_missing(each)
             return
         for each in (reg, *(twins or ())):
-            self._store(each, words, poll=poll)
+            self._store(each, words[: each.width], poll=poll)
 
     def _store(self, reg: Register, words: list[Any], *, poll: bool = False) -> None:
         """Keep a value read from the heat pump. ``poll``: read by the regular poll, not as a write's read-
@@ -623,6 +628,19 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_key="not_writable",
                 translation_placeholders={"key": reg.key},
             )
+        if not raw_in_range(reg, raw):
+            # Never sent: the firmware would acknowledge it and reset the register to its default instead
+            # (docs/firmware-3.92.3-shi-full-analysis.md, 1.4), which would also drop the value set before.
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="write_out_of_range",
+                translation_placeholders={
+                    "key": reg.key,
+                    "value": self._format_raw(reg, raw),
+                    "min": self._format_number(reg, reg.min_value),
+                    "max": self._format_number(reg, reg.max_value),
+                },
+            )
         # A user write cancels a pending restore of that key.
         self._pending_restore.pop(reg.key, None)
         awaiting = self._awaiting.get(reg.key)
@@ -646,6 +664,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     translation_key="write_failed",
                     translation_placeholders={"key": reg.key, "error": str(err)},
                 ) from err
+            taken = True
             if self._raw.get(reg.key) != raw and reg.key in DEFERRED_KEYS:
                 # Hot water group: committed about 10 s later; decide after the delayed read-back.
                 _LOGGER.debug(
@@ -654,13 +673,61 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 self._schedule_recheck(reg.key, raw, "user")
             else:
-                await self._remember(reg.key, raw if self._raw.get(reg.key) == raw else None)
+                taken = self._raw.get(reg.key) == raw
+                await self._remember(reg.key, raw if taken else None)
             await self._read_effective_target(reg.key)
         # Push the read-back to every entity without async_set_updated_data: that would also move the next
         # poll a full interval out, so a writer faster than the scan interval would stop the measurements from
         # updating.
         self.data = dict(self._values)
         self.async_update_listeners()
+        if not taken:
+            self._report_reverted(reg, raw)
+
+    def _report_reverted(self, reg: Register, raw: int) -> None:
+        """A write read back a different value. Reading the register's firmware default means the controller
+        reverted it (docs/firmware-3.92.3-shi-full-analysis.md, 1.4 and 4): a value outside the range (never
+        sent
+        by this integration), error 816 "multiple SHI write sources" or a watchdog expiry at that moment; the
+        value set before is gone as well. That is an error of the write. A trigger (TRIGGER_KEYS) reading 0 is
+        its normal end and nothing is reported; any other mismatch is logged.
+        """
+        current = self._raw.get(reg.key)
+        if reg.key in TRIGGER_KEYS:
+            return
+        if reg.reset_default is not None and current == reg.reset_default and raw != reg.reset_default:
+            _LOGGER.warning(
+                "%s: %s=%s was not taken; the controller reset the register to its default %s",
+                self.config_entry.title, reg.key, raw, current,
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="write_reverted_to_default",
+                translation_placeholders={
+                    "key": reg.key,
+                    "value": self._format_raw(reg, raw),
+                    "default": self._format_raw(reg, current),
+                },
+            )
+        _LOGGER.warning(
+            "%s: %s=%s was not taken by the controller (it reads %s)",
+            self.config_entry.title, reg.key, raw, current,
+        )
+
+    @staticmethod
+    def _format_number(reg: Register, value: float | None) -> str:
+        if value is None:
+            return "-"
+        text = f"{value:.{reg.precision or 0}f}"
+        return f"{text} {reg.unit}" if reg.unit else text
+
+    def _format_raw(self, reg: Register, raw: int) -> str:
+        """A raw holding word as text: option key, on/off, or value with unit (no translation lookup)."""
+        if reg.options:
+            return reg.options[raw] if 0 <= raw < len(reg.options) else str(raw)
+        if reg.platform == "switch":
+            return str(raw)
+        return self._format_number(reg, decode(reg, [raw]))
 
     async def async_read_now(self, regs: Sequence[Register]) -> None:
         """Read the given registers from the heat pump now (not a poll) and publish the values.
@@ -977,6 +1044,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if current is None or current == SHI_NOT_AVAILABLE:
             return False  # 0x7FFF means "not available", never a reset value
+        default = BY_KEY[key].reset_default
+        if default is not None and current == default:
+            return True  # the proven firmware default (docs/firmware-3.92.3-shi-full-analysis.md, 3.4)
         if key.endswith(RESET_TO_DEFAULT_SUFFIXES):
             learned = self._learned.get(key)
             return current != 0 if learned is None else current == learned
@@ -1185,6 +1255,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     pending[key] = 0  # waits for its circuit's values, or for the hot water block to release
                     continue
                 reg = self._reg(key)
+                if not raw_in_range(reg, raw):
+                    failed.append(key)  # the firmware would reset the register to its default instead
+                    continue
                 self._record_write(key, raw)
                 try:
                     await self.client.write_register(reg.address, raw)
@@ -1308,6 +1381,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
             entry["attempts"] += 1
             reg = self._reg(key)
+            if not raw_in_range(reg, raw):
+                forget.append(key)  # the firmware would reset the register to its default instead
+                continue
             async with self._write_lock:
                 self._record_write(key, raw)
                 try:
