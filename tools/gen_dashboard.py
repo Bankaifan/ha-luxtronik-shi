@@ -210,6 +210,7 @@ def detect_features(mapping: dict[str, str]) -> tuple[str, ...]:
     probe = {
         "mk1": "cfg_mk1_mode", "mk2": "cfg_mk2_mode", "mk3": "cfg_mk3_mode",
         "cooling": "cfg_mk1_cool_mode", "pool": "pool_block", "room_unit": "cfg_room_setpoint",
+        "solar": "hours_solar",
     }
     found = {f for f, key in probe.items() if key in mapping}
     if "cooling" not in found and "cooling_block" in mapping:

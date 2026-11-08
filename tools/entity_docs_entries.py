@@ -34,11 +34,17 @@ _add("return_external", "temps",
      "Wert des externen Rücklauffühlers. Ob ein solcher Fühler existiert, hängt von der Anlage ab; ohne Fühler "
      "ist der Wert bedeutungslos. Seine Verwendung durch die Regelung ist nicht dokumentiert (ungeklärt).", "PL")
 _add("return_limit", "temps",
-     "Maximum allowed return temperature, as reported by the controller.",
-     "Höchste zulässige Rücklauftemperatur laut Regelung.", "PL")
+     "Maximum allowed return temperature (controller parameter *Einst_TRBegr*). The firmware clamps the heating "
+     "setpoint to this value: the SHI cannot raise the return target above it (proven).",
+     "Höchste zulässige Rücklauftemperatur (Reglerparameter *Einst_TRBegr*). Die Firmware begrenzt den "
+     "Heizungs-Sollwert auf diesen Wert: Die SHI kann den Rücklauf-Sollwert nicht darüber heben (belegt).", "PL, FW")
 _add("return_min_target", "temps",
-     "Minimum target return temperature, as reported by the controller.",
-     "Niedrigster Rücklauf-Sollwert laut Regelung.", "PL")
+     "Minimum target return temperature (controller parameter 979). The firmware clamps the heating setpoint to "
+     "this value, and uses it as the target while heating is blocked (`heating_block`), the heating mode is *off* "
+     "at the controller or the heating limit is active (proven).",
+     "Niedrigster Rücklauf-Sollwert (Reglerparameter 979). Die Firmware begrenzt den Heizungs-Sollwert auf diesen "
+     "Wert und nutzt ihn als Sollwert, solange das Heizen gesperrt ist (`heating_block`), die Betriebsart Heizung "
+     "am Regler *Aus* ist oder die Heizgrenze greift (belegt).", "PL, FW")
 _add("flow", "temps",
      "Current flow temperature, the temperature of the water leaving the heat pump towards the heating system.",
      "Aktuelle Vorlauftemperatur, also die Temperatur des Wassers, das die Wärmepumpe Richtung Heizungsanlage "
@@ -49,12 +55,15 @@ _add("room", "temps",
      "Raumtemperatur, gemessen von der Raumeinheit (RBE+). Nur mit einer solchen Einheit vorhanden; die "
      "Entität braucht die gewählte *Raumeinheit* in der Ausstattung und ist standardmäßig deaktiviert.", "PL")
 _add("heating_limit", "temps",
-     "Limit temperature of heating. **Not the outside heating limit (Heizgrenze).** python-luxtronik describes it "
-     "as: if the temperature falls below (heating curve setpoint minus hysteresis), the soft power limit is "
-     "ignored. Its exact role beyond that is not documented (open).",
-     "Grenztemperatur des Heizens. **Nicht die Heizgrenze (Außentemperatur).** python-luxtronik beschreibt sie so: "
-     "Fällt die Temperatur unter (Heizkurven-Sollwert minus Hysterese), wird die weiche Leistungsbegrenzung "
-     "ignoriert. Ihre genaue Rolle darüber hinaus ist nicht dokumentiert (ungeklärt).", "PL")
+     "Demand border of heating (firmware item *Heating demand border*). **Not the outside heating limit "
+     "(Heizgrenze) and not a parameter:** the firmware tracks it as the effective return target minus the heating "
+     "hysteresis (in mode `setpoint` it follows the SHI setpoint). Below it heating is requested; python-luxtronik "
+     "adds that the soft power limit is ignored below it. Key unchanged, name changed in 0.17.0 (proven).",
+     "Anforderungsgrenze des Heizens (Firmware-Item *Heating demand border*). **Nicht die Heizgrenze "
+     "(Außentemperatur) und kein Parameter:** Die Firmware führt sie als wirksamen Rücklauf-Sollwert minus "
+     "Heiz-Hysterese nach (in der Betriebsart `setpoint` folgt sie dem SHI-Sollwert). Darunter wird Heizen "
+     "angefordert; laut python-luxtronik wird darunter die weiche Leistungsbegrenzung ignoriert. Schlüssel "
+     "unverändert, Name seit 0.17.0 geändert (belegt).", "FW, PL")
 _add("outside", "temps",
      "Measured outside (outdoor) temperature. It drives the heating curve.",
      "Gemessene Außentemperatur. Sie bestimmt die Heizkurve.", "PL, WEB")
@@ -96,14 +105,19 @@ _add("dhw_min", "dhw_temps",
      "30,0 °C (eine feste Firmware-Konstante, kein Messwert); das ist auch die Untergrenze der Zahl Sollwert. Für "
      "neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _add("dhw_max", "dhw_temps",
-     "Maximum adjustable hot water temperature, as reported by the controller.",
-     "Höchste einstellbare Warmwassertemperatur laut Regelung.", "PL")
+     "Maximum hot water temperature (controller parameter *Einst_BW_max*). Every hot water target is limited to it, "
+     "the SHI setpoint included: a setpoint above it is accepted but has no effect beyond this value (proven).",
+     "Maximale Warmwassertemperatur (Reglerparameter *Einst_BW_max*). Jedes Warmwasser-Ziel wird darauf begrenzt, "
+     "auch der SHI-Sollwert: Ein Sollwert darüber wird angenommen, wirkt aber nur bis zu diesem Wert (belegt).",
+     "PL, FW")
 _add("dhw_limit", "dhw_temps",
-     "Limit temperature of hot water. python-luxtronik describes it as: if the temperature falls below the desired "
-     "regulation value, the soft power limit is ignored. Its exact role beyond that is not documented (open).",
-     "Grenztemperatur des Warmwassers. python-luxtronik beschreibt sie so: Fällt die Temperatur unter den "
-     "gewünschten Regelwert, wird die weiche Leistungsbegrenzung ignoriert. Ihre genaue Rolle darüber hinaus "
-     "ist nicht dokumentiert (ungeklärt).", "PL")
+     "Demand border of hot water (firmware item *DHW Demand border*): the effective hot water target minus the "
+     "hysteresis, tracked by the firmware, not a parameter. Below it hot water is requested; python-luxtronik adds "
+     "that the soft power limit is ignored below it. Key unchanged, name changed in 0.17.0 (proven).",
+     "Anforderungsgrenze des Warmwassers (Firmware-Item *DHW Demand border*): der wirksame Warmwasser-Sollwert "
+     "minus Hysterese, von der Firmware nachgeführt, kein Parameter. Darunter wird Warmwasser angefordert; laut "
+     "python-luxtronik wird darunter die weiche Leistungsbegrenzung ignoriert. Schlüssel unverändert, Name seit "
+     "0.17.0 geändert (belegt).", "FW, PL")
 
 # ------------------------------------------------------------------ power
 _add("compressor_thermal_power", "power",
@@ -178,16 +192,34 @@ _add("cop_dhw", "energy",
      "Gesamt-COP des Warmwassers: `energy_th_dhw` geteilt durch `energy_el_dhw`. Dieselben Regeln wie beim "
      "Heizen.", "INT")
 _add("hours_hp", "energy",
-     "Operating hours of the compressor. That 10404 is an hour counter is observation, "
-     "python-luxtronik lists it as unknown.",
-     "Betriebsstunden des Verdichters. Dass 10404 ein Stundenzähler ist, ist Beobachtung; "
-     "python-luxtronik führt es als unbekannt.", "OBS")
+     "Operating hours of the compressor: firmware counter *Zaehler_BetrZeitWP* (parameter 668), seconds divided "
+     "by 3600 on the wire (proven; python-luxtronik lists 10404 as unknown).",
+     "Betriebsstunden des Verdichters: Firmware-Zähler *Zaehler_BetrZeitWP* (Parameter 668), Sekunden geteilt "
+     "durch 3600 auf dem Bus (belegt; python-luxtronik führt 10404 als unbekannt).", "FW, OBS")
 _add("hours_heating", "energy",
-     "Operating hours of heating. Interpretation as an hour counter is observation only.",
-     "Betriebsstunden des Heizens. Die Deutung als Stundenzähler ist nur Beobachtung.", "OBS")
+     "Operating hours of heating: firmware counter *Zaehler_BetrZeitHz* (parameter 728), hours (proven).",
+     "Betriebsstunden des Heizens: Firmware-Zähler *Zaehler_BetrZeitHz* (Parameter 728), Stunden (belegt).",
+     "FW, OBS")
 _add("hours_dhw", "energy",
-     "Operating hours of hot water. Interpretation as an hour counter is observation only.",
-     "Betriebsstunden des Warmwassers. Die Deutung als Stundenzähler ist nur Beobachtung.", "OBS")
+     "Operating hours of hot water: firmware counter *Zaehler_BetrZeitBW* (parameter 729), hours (proven).",
+     "Betriebsstunden des Warmwassers: Firmware-Zähler *Zaehler_BetrZeitBW* (Parameter 729), Stunden (belegt).",
+     "FW, OBS")
+_add("hours_cooling", "energy",
+     "Operating hours of cooling: firmware counter *Zaehler_BetrZeitKue* (parameter 730), hours. Needs *cooling* "
+     "in the equipment. Same two registers as the raw values `raw_10410`/`raw_10411`, which keep their keys; "
+     "the register is read once. New in 0.17.0 (proven, not measured: the reference installation does not cool).",
+     "Betriebsstunden des Kühlens: Firmware-Zähler *Zaehler_BetrZeitKue* (Parameter 730), Stunden. Braucht "
+     "*Kühlung* in der Ausstattung. Dieselben zwei Register wie die Rohwerte `raw_10410`/`raw_10411`, die ihre "
+     "Schlüssel behalten; das Register wird einmal gelesen. Neu in 0.17.0 (belegt, nicht gemessen: die "
+     "Referenzanlage kühlt nicht).", "FW")
+_add("hours_solar", "energy",
+     "Operating hours of the solar function: firmware counter *BSTD_Solar* (parameter 882), hours. Needs *solar* "
+     "in the equipment (new option, pre-filled from the equipment flag `cap_solar`). Same registers as "
+     "`raw_10416`/`raw_10417`. New in 0.17.0 (proven, not measured: no solar on the reference installation).",
+     "Betriebsstunden der Solarfunktion: Firmware-Zähler *BSTD_Solar* (Parameter 882), Stunden. Braucht *Solar* "
+     "in der Ausstattung (neue Option, vorbelegt aus dem Ausstattungs-Flag `cap_solar`). Dieselben Register wie "
+     "`raw_10416`/`raw_10417`. Neu in 0.17.0 (belegt, nicht gemessen: keine Solaranlage an der Referenzanlage).",
+     "FW")
 
 # ------------------------------------------------------------------ status
 _add("operating_mode", "status",
@@ -403,32 +435,49 @@ _add("cfg_heating_mode", "heating",
      "Control mode of the heating circuit (see the table above). 0 does not switch heating off.",
      "Betriebsart des Heizkreises (siehe Tabelle oben). 0 schaltet das Heizen nicht aus.", "PL")
 _add("cfg_heating_setpoint", "heating",
-     "Heating setpoint, a **return temperature** (tRL) that replaces the controller's target. Only in mode "
-     "`setpoint`. Measured: `return_target` followed the written value. The controller may limit it. After a reset "
-     "it reads a stored or default value, not 0. One of the keys the Heat Pump Optimizer depends on.",
-     "Heizungs-Sollwert, eine **Rücklauftemperatur** (tRL), die den Sollwert der Regelung ersetzt. Nur in der "
-     "Betriebsart `setpoint`. Gemessen: `return_target` folgte dem geschriebenen Wert. Die Regelung kann ihn "
-     "begrenzen. Nach einem Reset liest er einen gespeicherten oder Standardwert, nicht 0. Einer der Schlüssel, "
-     "auf die der Heat Pump Optimizer angewiesen ist.", "PL, M, FW")
+     "Heating setpoint, a **return temperature** (tRL) that replaces the heating curve. Only in mode `setpoint` and "
+     "only while `cfg_overall_mode` is `off`. Measured: `return_target` followed the written value. The firmware "
+     "clamps the effect to [`return_min_target`, `return_limit`]; while heating is blocked (`heating_block`) the "
+     "target is the minimum regardless. Firmware range 15.0 … 75.0 °C; a value outside it would reset the "
+     "register to its default 35.0 °C, so the integration never sends one. After a reset it reads 35.0 °C. One "
+     "of the keys the Heat Pump Optimizer depends on.",
+     "Heizungs-Sollwert, eine **Rücklauftemperatur** (tRL), die die Heizkurve ersetzt. Nur in der Betriebsart "
+     "`setpoint` und nur, solange `cfg_overall_mode` auf `off` steht. Gemessen: `return_target` folgte dem "
+     "geschriebenen Wert. Die Firmware begrenzt die Wirkung auf [`return_min_target`, `return_limit`]; bei "
+     "gesperrtem Heizen (`heating_block`) gilt ohnehin das Minimum. Firmware-Bereich 15,0 … 75,0 °C; ein Wert "
+     "außerhalb würde das Register auf den Standardwert 35,0 °C zurücksetzen, deshalb schickt die Integration "
+     "keinen. Nach einem Reset liest er 35,0 °C. Einer der Schlüssel, auf die der Heat Pump Optimizer angewiesen "
+     "ist.", "PL, M, FW")
 _add("cfg_heating_offset", "heating",
-     "Offset in kelvin added to the controller's current return target, so in effect a parallel shift of the "
-     "heating curve. Only in mode `offset`. Negative values are allowed.",
-     "Anhebung in Kelvin auf den aktuellen Rücklauf-Sollwert der Regelung, wirkt also wie eine Parallelverschiebung "
-     "der Heizkurve. Nur in der Betriebsart `offset`. Negative Werte sind erlaubt.", "PL, INT")
+     "Offset in kelvin added to the heating curve result, so in effect a parallel shift of the heating curve. "
+     "Only in mode `offset` and while the overall mode is `off`. Firmware range -20.0 … 20.0 K (proven); the "
+     "result is clamped like the setpoint.",
+     "Anhebung in Kelvin auf das Ergebnis der Heizkurve, wirkt also wie eine Parallelverschiebung der Heizkurve. "
+     "Nur in der Betriebsart `offset` und solange die Gesamt-Betriebsart `off` ist. Firmware-Bereich -20,0 … "
+     "20,0 K (belegt); das Ergebnis wird wie der Sollwert begrenzt.", "PL, FW")
 _add("cfg_heating_level", "heating",
-     "Level correction of the heating target. 0 = normal (no correction). What *increased*, *increased 2* and "
-     "*decreased* change, and by how much, is **open**: python-luxtronik marks it as not analysed, and the "
-     "firmware only proves one increase and one decrease direction.",
-     "Stufenkorrektur des Heiz-Sollwerts. 0 = normal (keine Korrektur). Was *erhöht*, *erhöht 2* und *abgesenkt* "
-     "ändern und um wie viel, ist **ungeklärt**: python-luxtronik führt es als nicht analysiert, und die "
-     "Firmware belegt nur eine Erhöhen- und eine Absenken-Richtung.", "PL, FW")
+     "Level correction of the heating target (proven): 0 = normal (no correction); 1 and 2 both **raise** the "
+     "heating curve result by the controller parameter *Erhöhung Heizen* (the same parameter, so 2 equals 1); "
+     "3 **lowers** it by *Absenkung Heizen*. The amounts are set at the control panel (menu *Offsets*, -20 … "
+     "+20 K in 0.5 K steps, parameters 1189/1190) and cannot be read or written over the SHI. Only in mode "
+     "`level` and while the overall mode is `off`.",
+     "Stufenkorrektur des Heiz-Sollwerts (belegt): 0 = normal (keine Korrektur); 1 und 2 **erhöhen** das "
+     "Heizkurven-Ergebnis beide um den Reglerparameter *Erhöhung Heizen* (derselbe Parameter, 2 ist also gleich "
+     "1); 3 **senkt** es um *Absenkung Heizen*. Die Beträge werden am Bedienteil eingestellt (Menü *Offsets*, "
+     "-20 … +20 K in 0,5-K-Schritten, Parameter 1189/1190) und sind über die SHI weder lesbar noch schreibbar. "
+     "Nur in der Betriebsart `level` und solange die Gesamt-Betriebsart `off` ist.", "FW, PL")
 _add("cfg_room_setpoint", "heating",
      "Room temperature setpoint for the room control unit (RBE), the firmware's writable register "
      "`RBE_RT_Soll`. Needs the *room unit* in the equipment. The range 20 to 40 °C is a decision of the owner, "
-     "not a register fact. What the controller does with the value is **not verified** (open).",
+     "not a register fact. What the controller does with the value is **not verified** (open). The register binds "
+     "the persisted parameter 1148: after a watchdog expiry it reads the persisted value, not a fixed default; "
+     "available only with a connected room unit and an influence factor > 0 (proven).",
      "Raumtemperatur-Sollwert für die Raumeinheit (RBE), das schreibbare Firmware-Register `RBE_RT_Soll`. Braucht "
      "die *Raumeinheit* in der Ausstattung. Der Bereich 20 bis 40 °C ist eine Entscheidung des Eigentümers, "
-     "kein Registerfakt. Was die Regelung mit dem Wert tut, ist **nicht überprüft** (ungeklärt).", "FW, INT")
+     "kein Registerfakt. Was die Regelung mit dem Wert tut, ist **nicht überprüft** (ungeklärt). Das Register "
+     "bindet den gespeicherten Parameter 1148: Nach einem Wächterablauf liest es den gespeicherten Wert, nicht "
+     "einen festen Standard; nur verfügbar mit angeschlossener Raumeinheit und Einflussfaktor > 0 (belegt).",
+     "FW, INT")
 
 # ------------------------------------------------------------------ hot water control
 _add("water_heater_dhw", "hot_water",
@@ -446,36 +495,76 @@ _add("cfg_dhw_mode", "hot_water",
      "Betriebsart des Warmwassers. 0 schaltet das Warmwasser nicht aus. Wirkt mit etwa 10 s Verzögerung; lässt "
      "sich nur setzen, solange die Warmwasser-Sperre aus ist (siehe oben).", "PL, FW, M")
 _add("cfg_dhw_setpoint", "hot_water",
-     "Hot water setpoint in °C. Only in mode `setpoint`. Deferred commit like the rest of the group. Mind the "
-     "Legionella advice at the top of the hot water temperatures.",
-     "Warmwasser-Sollwert in °C. Nur in der Betriebsart `setpoint`. Verzögerte Übernahme wie der Rest der Gruppe. "
-     "Beachte den Legionellen-Hinweis bei den Warmwassertemperaturen.", "PL, FW, WEB")
+     "Hot water setpoint in °C. Only in mode `setpoint` (the overall group does not affect hot water). Deferred "
+     "commit like the rest of the group. The firmware limits the effect to `dhw_max` and to the coverage of the "
+     "heat pump; extra hot water, thermal disinfection and reheating take precedence. Firmware range 30.0 … "
+     "75.0 °C, default after a reset 40.0 °C (proven). Mind the Legionella advice at the top of the hot water "
+     "temperatures.",
+     "Warmwasser-Sollwert in °C. Nur in der Betriebsart `setpoint` (die Gesamt-Gruppe wirkt nicht auf das "
+     "Warmwasser). Verzögerte Übernahme wie der Rest der Gruppe. Die Firmware begrenzt die Wirkung auf `dhw_max` "
+     "und auf die Deckung der Wärmepumpe; Extra-Warmwasser, thermische Desinfektion und Nachheizung haben "
+     "Vorrang. Firmware-Bereich 30,0 … 75,0 °C, Standardwert nach einem Reset 40,0 °C (belegt). Beachte den "
+     "Legionellen-Hinweis bei den Warmwassertemperaturen.", "PL, FW, WEB")
 _add("cfg_dhw_offset", "hot_water",
      "Offset in kelvin added to the controller's hot water target. Only in mode `offset`. Deferred commit.",
      "Anhebung in Kelvin auf den Warmwasser-Sollwert der Regelung. Nur in der Betriebsart `offset`. Verzögerte "
      "Übernahme.", "PL, FW")
 _add("cfg_dhw_level", "hot_water",
-     "Level correction of the hot water target. 0 = normal. The effect of the other levels is **open** (see "
-     "heating level). Deferred commit.",
-     "Stufenkorrektur des Warmwasser-Sollwerts. 0 = normal. Die Wirkung der anderen Stufen ist **ungeklärt** "
-     "(siehe Heizungs-Stufe). Verzögerte Übernahme.", "PL, FW")
+     "Level correction of the hot water target (proven): 1 and 2 raise by the controller parameter *Erhöhung "
+     "Warmwasser*, 3 lowers by *Absenkung Warmwasser* (parameters 1197/1198, set at the control panel). "
+     "Deferred commit.",
+     "Stufenkorrektur des Warmwasser-Sollwerts (belegt): 1 und 2 erhöhen um den Reglerparameter *Erhöhung "
+     "Warmwasser*, 3 senkt um *Absenkung Warmwasser* (Parameter 1197/1198, am Bedienteil eingestellt). "
+     "Verzögerte Übernahme.", "FW, PL")
 _add("circulation", "hot_water",
-     "Switches the hot water circulation pump on, but only if no time schedule is set up for it in the "
-     "controller. Needs firmware 3.92.0 or later. One of the keys the Heat Pump Optimizer depends on. The "
-     "heating circulation pumps cannot be controlled through the SHI. The controller may switch this pump itself "
-     "(time schedule, hot water run), so a change made there is not reported as a change outside Home Assistant.",
-     "Schaltet die Warmwasser-Zirkulationspumpe ein, aber nur, wenn in der Regelung kein Zeitprogramm dafür "
-     "eingerichtet ist. Braucht Firmware 3.92.0 oder neuer. Einer der Schlüssel, auf die der Heat Pump "
-     "Optimizer angewiesen ist. Die Heizungs-Umwälzpumpen lassen sich über die SHI nicht steuern. Die Regelung darf diese Pumpe selbst "
-     "schalten (Zeitprogramm, Warmwasserbereitung); eine Änderung dort wird deshalb nicht als Änderung außerhalb "
-     "von Home Assistant gemeldet.", "PL")
+     "**Trigger** for the hot water circulation pump (proven): turning it on starts a circulation run with the "
+     "controller's run and pause times (*Einst_Zirk_Ein/Aus*); once no run is active any more the firmware "
+     "sets the register back to 0, so the switch goes off by itself. Not accepted while the hot water mode of "
+     "the controller is *holiday* or *off*. Needs firmware 3.92.0 or later. One of the keys the Heat Pump "
+     "Optimizer depends on. The heating circulation pumps cannot be controlled through the SHI. Because the "
+     "controller ends it itself, a read-back of 0 is not a failed write and not a change outside Home Assistant, "
+     "and it is not restored after a reset. The *Enable SHI* parameter does not apply to it.",
+     "**Trigger** für die Warmwasser-Zirkulationspumpe (belegt): Einschalten startet einen Zirkulationslauf mit "
+     "den Lauf- und Pausenzeiten der Regelung (*Einst_Zirk_Ein/Aus*); sobald kein Lauf mehr aktiv ist, setzt die "
+     "Firmware das Register selbst auf 0, der Schalter geht also von allein aus. Nicht angenommen, solange die "
+     "Warmwasser-Betriebsart der Regelung *Ferien* oder *Aus* ist. Braucht Firmware 3.92.0 oder neuer. Einer der "
+     "Schlüssel, auf die der Heat Pump Optimizer angewiesen ist. Die Heizungs-Umwälzpumpen lassen sich über die "
+     "SHI nicht steuern. Weil die Regelung ihn selbst beendet, ist ein Rücklesen von 0 kein fehlgeschlagener "
+     "Schreibzugriff und keine Änderung außerhalb von Home Assistant, und er wird nach einem Reset nicht "
+     "wiederhergestellt. Der Parameter *Enable SHI* gilt für ihn nicht.", "FW, PL")
 _add("extra_dhw", "hot_water",
-     "Starts extra hot water: heating runs until the maximum temperature is reached. Needs firmware 3.92.0 or "
-     "later. Whether the controller resets it by itself afterwards (a one-shot) is **open**; because of that it "
-     "is neither restored after a reset nor counted as an external change.",
-     "Startet Extra-Warmwasser: Es wird geheizt, bis die Höchsttemperatur erreicht ist. Braucht Firmware 3.92.0 "
-     "oder neuer. Ob die Regelung es danach selbst zurücksetzt (Einmalschalter), ist **ungeklärt**; deshalb wird "
-     "es nach einem Reset nicht wiederhergestellt und nicht als externe Änderung gezählt.", "PL, INT")
+     "**Trigger** for extra hot water (proven): turning it on starts the controller's extra hot water timer with "
+     "the duration `extra_dhw_duration` (parameter 1147); while it runs the hot water target is raised to "
+     "`extra_dhw_setpoint` (parameter 1146, limited to `dhw_max`) and `extra_dhw_remaining` counts down. When "
+     "the timer ends the firmware sets the register back to 0 by itself; turning it off ends it early. Needs "
+     "firmware 3.92.0 or later. A read-back of 0 is the normal end, so it is not restored after a reset and not "
+     "counted as an external change. The *Enable SHI* parameter does not apply to it.",
+     "**Trigger** für Extra-Warmwasser (belegt): Einschalten startet den Extra-Warmwasser-Timer der Regelung mit "
+     "der Dauer `extra_dhw_duration` (Parameter 1147); solange er läuft, wird das Warmwasser-Ziel auf "
+     "`extra_dhw_setpoint` (Parameter 1146, begrenzt auf `dhw_max`) angehoben und `extra_dhw_remaining` zählt "
+     "herunter. Läuft der Timer ab, setzt die Firmware das Register selbst auf 0; Ausschalten beendet ihn "
+     "vorzeitig. Braucht Firmware 3.92.0 oder neuer. Ein Rücklesen von 0 ist das normale Ende, deshalb wird er "
+     "nach einem Reset nicht wiederhergestellt und nicht als externe Änderung gezählt. Der Parameter *Enable "
+     "SHI* gilt für ihn nicht.", "FW, PL")
+_add("extra_dhw_setpoint", "dhw_temps",
+     "Target temperature of extra hot water (controller parameter 1146, firmware `ExtraDHW::temperatureSetpoint`): "
+     "while `extra_dhw` runs, the hot water target is raised to this value (limited to `dhw_max`). Set at the "
+     "control panel, read only here. Same register as `raw_10500`. New in 0.17.0 (proven).",
+     "Soll-Temperatur des Extra-Warmwassers (Reglerparameter 1146, Firmware `ExtraDHW::temperatureSetpoint`): "
+     "Solange `extra_dhw` läuft, wird das Warmwasser-Ziel auf diesen Wert angehoben (begrenzt auf `dhw_max`). Am "
+     "Bedienteil eingestellt, hier nur lesbar. Dasselbe Register wie `raw_10500`. Neu in 0.17.0 (belegt).", "FW")
+_add("extra_dhw_duration", "dhw_temps",
+     "Duration of extra hot water in minutes (controller parameter 1147, seconds divided by 60 on the wire): how "
+     "long the `extra_dhw` trigger runs. Same register as `raw_10501`. New in 0.17.0 (proven).",
+     "Dauer des Extra-Warmwassers in Minuten (Reglerparameter 1147, Sekunden geteilt durch 60 auf dem Bus): wie "
+     "lange der Trigger `extra_dhw` läuft. Dasselbe Register wie `raw_10501`. Neu in 0.17.0 (belegt).", "FW")
+_add("extra_dhw_remaining", "dhw_temps",
+     "Remaining time of a running extra hot water in minutes (firmware `ExtraDHW::timer`, counts down once per "
+     "second, seconds divided by 60 on the wire). 0 while none runs. Same register as `raw_10502`. New in 0.17.0 "
+     "(proven).",
+     "Restlaufzeit eines laufenden Extra-Warmwassers in Minuten (Firmware `ExtraDHW::timer`, zählt sekündlich "
+     "herunter, Sekunden geteilt durch 60 auf dem Bus). 0, solange keines läuft. Dasselbe Register wie "
+     "`raw_10502`. Neu in 0.17.0 (belegt).", "FW")
 
 # ------------------------------------------------------------------ cooling / pool
 _add("cooling_configured", "cooling_pool",
@@ -494,26 +583,42 @@ _add("cfg_power_limit_mode", "power_limit",
      "PV-Überschuss), harte Begrenzung (nur für §14a EnWG, kann den Komfort mindern). Braucht einen passenden "
      "Wert.", "PL")
 _add("cfg_power_limit", "power_limit",
-     "Maximum allowed electrical power of the heat pump in kW, effective according to the limit mode. Not "
-     "restored after a reset.",
-     "Höchste zulässige elektrische Leistung der Wärmepumpe in kW, wirksam gemäß Modus. Wird nach einem Reset "
-     "nicht wiederhergestellt.", "PL")
+     "Maximum allowed electrical power of the heat pump in kW, effective according to the limit mode. Firmware "
+     "range 0 … 30.0 kW, default after a reset 30.0 kW (proven). Not restored after a reset. Only while the "
+     "controller parameter *Enable SHI* is on.",
+     "Höchste zulässige elektrische Leistung der Wärmepumpe in kW, wirksam gemäß Modus. Firmware-Bereich 0 … "
+     "30,0 kW, Standardwert nach einem Reset 30,0 kW (belegt). Wird nach einem Reset nicht wiederhergestellt. Nur "
+     "wirksam, solange der Reglerparameter *Enable SHI* an ist.", "PL, FW")
 
 # ------------------------------------------------------------------ overall heating
 _add("cfg_overall_mode", "overall",
-     "Control mode of all heating functions at once (no setpoint available). Disabled by default; effect not "
-     "proven.",
-     "Betriebsart aller Heizfunktionen zugleich (kein Sollwert verfügbar). Standardmäßig deaktiviert; Wirkung "
-     "nicht belegt.", "PL, M")
+     "Control mode of the heating circuit **and** all mixing circuits at once (proven). While it is not `off`, the "
+     "modes `cfg_heating_mode` and `cfg_mk*_mode` are ignored: `offset` applies `cfg_overall_offset`, `level` "
+     "applies `cfg_overall_level`. **`setpoint` is not implemented** by the firmware for this group: it acts "
+     "like `off`, and the select refuses to write it (the option stays listed so a value another client wrote is "
+     "shown). Hot water is not affected. Disabled by default (owner decision: an active overall mode silently "
+     "overrides what an optimizer sets per circuit); not restored after a reset.",
+     "Betriebsart des Heizkreises **und** aller Mischkreise zugleich (belegt). Solange sie nicht `off` ist, "
+     "werden `cfg_heating_mode` und `cfg_mk*_mode` ignoriert: `offset` wendet `cfg_overall_offset` an, `level` "
+     "`cfg_overall_level`. **`setpoint` ist von der Firmware nicht umgesetzt** für diese Gruppe: Es wirkt wie "
+     "`off`, und das Select lehnt das Schreiben ab (die Option bleibt gelistet, damit ein von einem anderen "
+     "Client geschriebener Wert angezeigt wird). Warmwasser ist nicht betroffen. Standardmäßig deaktiviert "
+     "(Entscheidung des Eigentümers: Eine aktive Gesamt-Betriebsart überschreibt stillschweigend, was ein "
+     "Optimierer je Kreis setzt); nach einem Reset nicht wiederhergestellt.", "FW, PL, M")
 _add("cfg_overall_offset", "overall",
-     "Temperature correction in kelvin for all heating functions. Disabled by default; effect not proven.",
-     "Temperaturkorrektur in Kelvin für alle Heizfunktionen. Standardmäßig deaktiviert; Wirkung nicht belegt.",
-     "PL, M")
+     "Offset in kelvin for the heating circuit and all mixing circuits in overall mode `offset`. **Firmware range "
+     "-5.0 … 5.0 K** (python-luxtronik lists -20 … 20: a value beyond ±5 K would reset the register to 0, so the "
+     "range was narrowed in 0.17.0). Disabled by default.",
+     "Anhebung in Kelvin für den Heizkreis und alle Mischkreise in der Gesamt-Betriebsart `offset`. "
+     "**Firmware-Bereich -5,0 … 5,0 K** (python-luxtronik nennt -20 … 20: Ein Wert über ±5 K würde das Register "
+     "auf 0 zurücksetzen, deshalb wurde der Bereich in 0.17.0 verengt). Standardmäßig deaktiviert.", "FW, PL")
 _add("cfg_overall_level", "overall",
-     "Level for all heating functions. Disabled by default; effect not proven, and the effect of the levels is "
-     "open anyway.",
-     "Stufe für alle Heizfunktionen. Standardmäßig deaktiviert; Wirkung nicht belegt, und die Wirkung der "
-     "Stufen ist ohnehin ungeklärt.", "PL, M")
+     "Level for the heating circuit and all mixing circuits in overall mode `level` (proven): 1 and 2 raise by the "
+     "controller parameter *Erhöhung Hz. allg.*, 3 lowers by *Absenkung Hz. allg.* (parameters 1187/1188, set at "
+     "the control panel). Disabled by default.",
+     "Stufe für den Heizkreis und alle Mischkreise in der Gesamt-Betriebsart `level` (belegt): 1 und 2 erhöhen um "
+     "den Reglerparameter *Erhöhung Hz. allg.*, 3 senkt um *Absenkung Hz. allg.* (Parameter 1187/1188, am "
+     "Bedienteil eingestellt). Standardmäßig deaktiviert.", "FW, PL")
 
 # ------------------------------------------------------------------ system
 _add("buffer_type", "system",
@@ -538,11 +643,16 @@ _add("min_runtime_minutes", "system",
      "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20 (ein fester Wert, "
      "kein Messwert). Für neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _caps = {
-    "cap_heating": ("heating", "Heizen"),
-    "cap_hot_water": ("hot water", "Warmwasser"),
-    "cap_cooling": ("cooling", "Kühlen"),
-    "cap_pool": ("pool", "Pool"),
-    "cap_room_controller": ("a room controller", "ein Raumregler"),
+    "cap_heating": ("heating (equipped and its controller mode is not *off*)",
+                    "Heizen (vorhanden und Betriebsart am Regler nicht *Aus*)"),
+    "cap_hot_water": ("hot water (equipped and its controller mode is not *off*)",
+                      "Warmwasser (vorhanden und Betriebsart am Regler nicht *Aus*)"),
+    "cap_cooling": ("cooling (`cooling_configured`)", "Kühlen (`cooling_configured`)"),
+    "cap_pool": ("pool (`pool_configured`)", "Pool (`pool_configured`)"),
+    "cap_solar": ("a solar function (new in 0.17.0, pre-fills the *solar* option)",
+                  "eine Solarfunktion (neu in 0.17.0, belegt die Option *Solar* vor)"),
+    "cap_room_controller": ("a room controller (controller setting *RFV* = 4)",
+                            "ein Raumregler (Reglereinstellung *RFV* = 4)"),
     "cap_mk1_heating": ("heating of mixing circuit 1", "Heizen von Mischkreis 1"),
     "cap_mk1_cooling": ("cooling of mixing circuit 1", "Kühlen von Mischkreis 1"),
     "cap_mk2_heating": ("heating of mixing circuit 2", "Heizen von Mischkreis 2"),
@@ -552,10 +662,12 @@ _caps = {
 }
 for _k, (_en, _de) in _caps.items():
     _add(_k, "system",
-         f"Equipment flag: the installation has {_en}. Pre-selects the equipment in the setup dialog. Not in "
-         "python-luxtronik, backed by observation only.",
-         f"Ausstattungs-Flag: Die Anlage hat {_de}. Wählt die Ausstattung im Einrichtungsdialog vor. Nicht in "
-         "python-luxtronik, nur durch Beobachtung belegt.", "OBS")
+         f"Equipment flag (discrete input, function code 2): the installation has {_en}. Pre-selects the equipment "
+         "in the setup dialog. Not in python-luxtronik; the conditions are proven by the firmware (full analysis, "
+         "section 2.3): the mixing circuit flags follow the visibility of the circuit.",
+         f"Ausstattungs-Flag (Discrete Input, Funktionscode 2): Die Anlage hat {_de}. Wählt die Ausstattung im "
+         "Einrichtungsdialog vor. Nicht in python-luxtronik; die Bedingungen sind durch die Firmware belegt "
+         "(Vollanalyse, Abschnitt 2.3): Die Mischkreis-Flags folgen der Sichtbarkeit des Kreises.", "FW, OBS")
 
 # ------------------------------------------------------------------ mixing circuits (templates)
 for _n in (1, 2, 3):
@@ -576,57 +688,45 @@ for _n in (1, 2, 3):
          f"Control mode of mixing circuit {_n} heating. 0 does not switch the circuit off.",
          f"Betriebsart des Heizens von Mischkreis {_n}. 0 schaltet den Kreis nicht aus.", "PL")
     _add(f"cfg_{_k}_setpoint", "mixing",
-         f"Flow temperature setpoint of mixing circuit {_n}. Only in mode `setpoint`. The controller may limit it.",
-         f"Vorlauf-Sollwert von Mischkreis {_n}. Nur in der Betriebsart `setpoint`. Die Regelung kann ihn "
-         "begrenzen.", "PL")
+         f"Flow temperature setpoint of mixing circuit {_n}. Only in mode `setpoint` and while the overall mode is "
+         f"`off`. The firmware limits the result to `mk{_n}_flow_min` … `mk{_n}_flow_max`. Firmware range 20.0 … "
+         "65.0 °C, default after a reset 35.0 °C (proven).",
+         f"Vorlauf-Sollwert von Mischkreis {_n}. Nur in der Betriebsart `setpoint` und solange die "
+         f"Gesamt-Betriebsart `off` ist. Die Firmware begrenzt das Ergebnis auf `mk{_n}_flow_min` … "
+         f"`mk{_n}_flow_max`. Firmware-Bereich 20,0 … 65,0 °C, Standardwert nach einem Reset 35,0 °C (belegt).",
+         "FW, PL")
     _add(f"cfg_{_k}_offset", "mixing",
-         f"Offset in kelvin on the flow temperature of mixing circuit {_n}. Only in mode `offset`.",
-         f"Anhebung in Kelvin auf die Vorlauftemperatur von Mischkreis {_n}. Nur in der Betriebsart `offset`.", "PL")
+         f"Offset in kelvin on the flow target of mixing circuit {_n}. Only in mode `offset` and while the overall "
+         "mode is `off`. Firmware range -5.0 … 5.0 K (proven).",
+         f"Anhebung in Kelvin auf den Vorlauf-Sollwert von Mischkreis {_n}. Nur in der Betriebsart `offset` und "
+         "solange die Gesamt-Betriebsart `off` ist. Firmware-Bereich -5,0 … 5,0 K (belegt).", "FW, PL")
     _add(f"cfg_{_k}_level", "mixing",
-         f"Level correction of mixing circuit {_n}. 0 = normal; the effect of the other levels is **open**.",
-         f"Stufenkorrektur von Mischkreis {_n}. 0 = normal; die Wirkung der anderen Stufen ist **ungeklärt**.",
-         "PL")
+         f"Level correction of mixing circuit {_n} (proven): 1 and 2 raise the flow target by the controller "
+         f"parameter *Erhöhung MK{_n}*, 3 lowers it by *Absenkung MK{_n}* (menu *Offsets*). Only while the "
+         "overall mode is `off`.",
+         f"Stufenkorrektur von Mischkreis {_n} (belegt): 1 und 2 erhöhen den Vorlauf-Sollwert um den "
+         f"Reglerparameter *Erhöhung MK{_n}*, 3 senkt ihn um *Absenkung MK{_n}* (Menü *Offsets*). Nur solange "
+         "die Gesamt-Betriebsart `off` ist.", "FW, PL")
     _add(f"cfg_{_k}_cool_mode", "cooling_pool",
          f"Control mode of mixing circuit {_n} cooling. 0 does not switch cooling off. Needs the circuit and "
          "*cooling* in the equipment.",
          f"Betriebsart des Kühlens von Mischkreis {_n}. 0 schaltet das Kühlen nicht aus. Braucht den Kreis und "
          "*Kühlung* in der Ausstattung.", "PL")
     _add(f"cfg_{_k}_cool_setpoint", "cooling_pool",
-         f"Cooling flow temperature setpoint of mixing circuit {_n}. Only in mode `setpoint`.",
-         f"Kühl-Vorlauf-Sollwert von Mischkreis {_n}. Nur in der Betriebsart `setpoint`.", "PL")
+         f"Cooling flow temperature setpoint of mixing circuit {_n}. Only in mode `setpoint`. Firmware range 5.0 … "
+         "25.0 °C, default after a reset 20.0 °C (proven); the consumer in the firmware was not traced, the "
+         "effect is assumed analogous to heating (likely).",
+         f"Kühl-Vorlauf-Sollwert von Mischkreis {_n}. Nur in der Betriebsart `setpoint`. Firmware-Bereich 5,0 … "
+         "25,0 °C, Standardwert nach einem Reset 20,0 °C (belegt); der Verbraucher in der Firmware wurde nicht "
+         "verfolgt, die Wirkung gilt analog zum Heizen als wahrscheinlich.", "FW, PL")
     _add(f"cfg_{_k}_cool_offset", "cooling_pool",
-         f"Offset in kelvin on the cooling flow temperature of mixing circuit {_n}. Only in mode `offset`.",
+         f"Offset in kelvin on the cooling flow temperature of mixing circuit {_n}. Only in mode `offset`. Firmware "
+         "range -5.0 … 5.0 K (proven); effect analogous to heating (likely).",
          f"Anhebung in Kelvin auf die Kühl-Vorlauftemperatur von Mischkreis {_n}. Nur in der Betriebsart "
-         "`offset`.", "PL")
+         "`offset`. Firmware-Bereich -5,0 … 5,0 K (belegt); Wirkung analog zum Heizen (wahrscheinlich).", "FW, PL")
 
 # ------------------------------------------------------------------ raw values (template per address)
-RAW_TEXT: dict[int, tuple[str, str, str]] = {
-    10410: ("High word of a 32-bit counter with the divisor 3600 on the wire (an hour counter). Together with "
-            "10411. Meaning open.",
-            "Oberes Wort eines 32-Bit-Zählers mit dem Teiler 3600 (ein Stundenzähler). Zusammen mit 10411. "
-            "Bedeutung ungeklärt.", "FW"),
-    10411: ("Low word of the 32-bit counter that starts at 10410. Meaning open.",
-            "Unteres Wort des 32-Bit-Zählers, der bei 10410 beginnt. Bedeutung ungeklärt.", "FW"),
-    10412: ("High word of a 32-bit counter with the unusual divisor 7200; the unit is unclear (open). Together "
-            "with 10413.",
-            "Oberes Wort eines 32-Bit-Zählers mit dem ungewöhnlichen Teiler 7200; die Einheit ist unklar "
-            "(ungeklärt). Zusammen mit 10413.", "FW"),
-    10413: ("Low word of the 32-bit counter that starts at 10412. Meaning open.",
-            "Unteres Wort des 32-Bit-Zählers, der bei 10412 beginnt. Bedeutung ungeklärt.", "FW"),
-    10416: ("High word of a 32-bit counter with the divisor 3600 (an hour counter). Together with 10417. "
-            "Meaning open.",
-            "Oberes Wort eines 32-Bit-Zählers mit dem Teiler 3600 (ein Stundenzähler). Zusammen mit 10417. "
-            "Bedeutung ungeklärt.", "FW"),
-    10417: ("Low word of the 32-bit counter that starts at 10416. Meaning open.",
-            "Unteres Wort des 32-Bit-Zählers, der bei 10416 beginnt. Bedeutung ungeklärt.", "FW"),
-    10500: ("Time value, meaning open.", "Zeitwert, Bedeutung ungeklärt.", "FW"),
-    10501: ("Time value; the firmware divides seconds by 60, so the wire value is in minutes. Meaning open.",
-            "Zeitwert; die Firmware teilt Sekunden durch 60, der Wert auf dem Bus ist also in Minuten. Bedeutung "
-            "ungeklärt.", "FW"),
-    10502: ("Time value; the firmware divides seconds by 60, so the wire value is in minutes. Meaning open.",
-            "Zeitwert; die Firmware teilt Sekunden durch 60, der Wert auf dem Bus ist also in Minuten. Bedeutung "
-            "ungeklärt.", "FW"),
-}
+RAW_TEXT: dict[int, tuple[str, str, str]] = {}
 RAW_DEFAULT = (
     "Undocumented input register (python-luxtronik: function unknown). No vendor source for its meaning; a "
     "register source below, if any, is a derived observation, not a specification.",
@@ -640,14 +740,55 @@ RAW_DEFAULT = (
 # The keys stay ``raw_<address>`` and the entities stay disabled diagnostics; only the name, unit and scale changed.
 # Source for all of them: docs/firmware-3.92.3-register-meanings.md (firmware names, grades, measurements).
 _add("raw_10113", "raw",
-     "Calculated flow target of the heating in 0.1 degC (the wire value 253 means 25.3 degC): the return target plus "
-     "the moving average of the flow minus return spread. Proven by the firmware (the formula), the unit is "
-     "inferred from the return target 10101, which is also in 0.1 degC. Measured: 253 with a return target of 20.0 "
-     "and an average spread of 5.3 K. Disabled by default.",
-     "Berechneter Vorlauf-Sollwert des Heizens in 0,1 °C (der Rohwert 253 bedeutet 25,3 °C): Rücklauf-Sollwert plus "
-     "gleitender Mittelwert der Differenz Vorlauf minus Rücklauf. Von der Firmware belegt (die Formel), die Einheit "
-     "ist aus dem Rücklauf-Sollwert 10101 abgeleitet, der ebenfalls in 0,1 °C steht. Gemessen: 253 bei einem "
-     "Rücklauf-Sollwert von 20,0 und einer mittleren Spreizung von 5,3 K. Standardmäßig deaktiviert.", "FW, M")
+     "Firmware item *TVL calc max* (t0/0x67): the calculated maximum flow temperature, the return target plus the "
+     "moving average of the flow minus return spread, in 0.1 °C (wire value 253 = 25.3 °C). Proven by the firmware "
+     "(formula and text; up to 0.16.x named *heating target (calculated)*). Measured: 253 with a return target of "
+     "20.0 and an average spread of 5.3 K. Disabled by default.",
+     "Firmware-Item *TVL calc max* (t0/0x67): die berechnete maximale Vorlauftemperatur, Rücklauf-Sollwert plus "
+     "gleitender Mittelwert der Differenz Vorlauf minus Rücklauf, in 0,1 °C (Rohwert 253 = 25,3 °C). Von der "
+     "Firmware belegt (Formel und Text; bis 0.16.x *Vorlauf: Soll Heizen (berechnet)* genannt). Gemessen: 253 bei "
+     "einem Rücklauf-Sollwert von 20,0 und einer mittleren Spreizung von 5,3 K. Standardmäßig deaktiviert.", "FW, M")
+_HOURS_RAW_EN = ("{word} word of the 32-bit operating hour counter `{var}` (parameter {param}) that starts at {start}; "
+                 "the sensor `{sensor}` shows the hours. {extra}Disabled by default.")
+_HOURS_RAW_DE = ("{word} Wort des 32-Bit-Betriebsstundenzählers `{var}` (Parameter {param}), der bei {start} beginnt; "
+                 "der Sensor `{sensor}` zeigt die Stunden. {extra}Standardmäßig deaktiviert.")
+for _addr, _var, _param, _start, _sensor in (
+    (10410, "Zaehler_BetrZeitKue", 730, 10410, "hours_cooling"),
+    (10411, "Zaehler_BetrZeitKue", 730, 10410, "hours_cooling"),
+    (10416, "BSTD_Solar", 882, 10416, "hours_solar"),
+    (10417, "BSTD_Solar", 882, 10416, "hours_solar"),
+):
+    _add(f"raw_{_addr}", "raw",
+         _HOURS_RAW_EN.format(word="High" if _addr == _start else "Low", var=_var, param=_param, start=_start,
+                              sensor=_sensor, extra=""),
+         _HOURS_RAW_DE.format(word="Oberes" if _addr == _start else "Unteres", var=_var, param=_param,
+                              start=_start, sensor=_sensor, extra=""), "FW")
+_POOL_HOURS_EN = ("the 32-bit operating hour counter of the pool `Zaehler_BetrZeitSW` (parameter 859) that starts at "
+                  "10412. The SHI divides by **7200** instead of 3600 (the control panel shows the same counter with "
+                  "1/3600), so the wire value is most likely half the hours (likely, not measured: no pool on the "
+                  "reference installation). No hour sensor is derived until that is proven. Disabled by default.")
+_POOL_HOURS_DE = ("des 32-Bit-Betriebsstundenzählers des Schwimmbads `Zaehler_BetrZeitSW` (Parameter 859), der bei "
+                  "10412 beginnt. Die SHI teilt durch **7200** statt 3600 (das Bedienteil zeigt denselben Zähler mit "
+                  "1/3600), der Wert auf dem Bus ist also wahrscheinlich die halbe Stundenzahl (wahrscheinlich, nicht "
+                  "gemessen: kein Pool an der Referenzanlage). Bis das belegt ist, wird kein Stundensensor abgeleitet. "
+                  "Standardmäßig deaktiviert.")
+_add("raw_10412", "raw", "High word of " + _POOL_HOURS_EN, "Oberes Wort " + _POOL_HOURS_DE, "FW")
+_add("raw_10413", "raw", "Low word of " + _POOL_HOURS_EN, "Unteres Wort " + _POOL_HOURS_DE, "FW")
+_add("raw_10500", "raw",
+     "Extra hot water target temperature, 0.1 °C (parameter 1146); the sensor `extra_dhw_setpoint` shows it. "
+     "Proven. Disabled by default.",
+     "Soll-Temperatur des Extra-Warmwassers, 0,1 °C (Parameter 1146); der Sensor `extra_dhw_setpoint` zeigt sie. "
+     "Belegt. Standardmäßig deaktiviert.", "FW")
+_add("raw_10501", "raw",
+     "Extra hot water duration in minutes (parameter 1147, seconds divided by 60 on the wire); the sensor "
+     "`extra_dhw_duration` shows it. Proven. Disabled by default.",
+     "Dauer des Extra-Warmwassers in Minuten (Parameter 1147, Sekunden geteilt durch 60 auf dem Bus); der Sensor "
+     "`extra_dhw_duration` zeigt sie. Belegt. Standardmäßig deaktiviert.", "FW")
+_add("raw_10502", "raw",
+     "Remaining time of a running extra hot water in minutes (`ExtraDHW::timer`, seconds divided by 60 on the "
+     "wire); the sensor `extra_dhw_remaining` shows it. Proven. Disabled by default.",
+     "Restlaufzeit eines laufenden Extra-Warmwassers in Minuten (`ExtraDHW::timer`, Sekunden geteilt durch 60 auf "
+     "dem Bus); der Sensor `extra_dhw_remaining` zeigt sie. Belegt. Standardmäßig deaktiviert.", "FW")
 
 _OUT_EN = ("Digital output of the controller, 0 off and 1 on; firmware variable `{var}` (item `{item}`), proven by the "
            "firmware. {meas} Disabled by default.")

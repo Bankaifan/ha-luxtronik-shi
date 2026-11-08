@@ -84,7 +84,43 @@ INPUT = {
     10407: 1000,
     10408: 0,
     10409: 234,
+    # firmware 3.92.3: operating hours cooling / pool (divisor 7200) / solar, extra hot water setpoint, duration
+    # and remaining time (docs/firmware-3.92.3-shi-full-analysis.md)
+    10410: 0,
+    10411: 12,
+    10412: 0,
+    10413: 0,
+    10414: 0,
+    10415: 0,
+    10416: 0,
+    10417: 0,
+    10500: 550,
+    10501: 60,
+    10502: 0,
 }
+# Ranges and defaults of the writable holdings as the firmware 3.92.3 enforces them (full analysis, 2.1 and 3.4):
+# address -> (min, max, default). A write outside min ... max is acknowledged and the register is reset to its
+# default (not to the previous value). Mode selects accept 0 ... 3, blocks and triggers any word.
+HOLDING_RANGES: dict[int, tuple[int, int, int]] = {
+    10001: (150, 750, 350),
+    10002: (-200, 200, 0),
+    10003: (0, 3, 0),
+    10006: (300, 750, 400),
+    10007: (-200, 200, 0),
+    10008: (0, 3, 0),
+    10041: (0, 300, 300),
+    10066: (-50, 50, 0),
+    10067: (0, 3, 0),
+    **{base + 1: (200, 650, 350) for base in (10010, 10020, 10030)},
+    **{base + 2: (-50, 50, 0) for base in (10010, 10020, 10030)},
+    **{base + 3: (0, 3, 0) for base in (10010, 10020, 10030)},
+    **{base + 6: (50, 250, 200) for base in (10010, 10020, 10030)},
+    **{base + 7: (-50, 50, 0) for base in (10010, 10020, 10030)},
+    **{address: (0, 3, 0) for address in (10000, 10005, 10010, 10015, 10020, 10025, 10030, 10035, 10040, 10065)},
+}
+# Triggers the firmware sets back to 0 by itself (full analysis, 3.2 and 3.3): circulation (10070) once no run is
+# active, extra hot water (10071) when its timer ends.
+TRIGGERS = (10070, 10071)
 HOLDING = {
     10000: 0,
     10001: 220,
@@ -133,6 +169,7 @@ DISCRETE = {
     10001: True,
     10002: False,
     10003: False,
+    10004: False,  # solar
     10005: False,
     10006: True,
     10007: False,
@@ -176,6 +213,12 @@ class FakeSHI:
         # Addresses whose writes are accepted on the wire but silently not stored (the SHI does this while its
         # error 816 "multiple SHI write sources" is active; docs/firmware-3.92.3-shi-analysis.md).
         self.ignored_writes: set[int] = set()
+        # Firmware range check: a write outside HOLDING_RANGES is acknowledged and resets the register to its
+        # default (full analysis, 1.4). On by default, like the real device.
+        self.enforce_ranges = True
+        self.reverted: list[tuple[int, int]] = []  # (address, rejected value)
+        # Triggers that end at once in the simulator (the firmware writes 0 back when the run or timer ends).
+        self.instant_triggers: set[int] = set()
         self._server: asyncio.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
 
@@ -238,6 +281,17 @@ class FakeSHI:
                 return pdu[:5]
             if self.block_refuses_dhw_mode and address == 10005 and self.holding.get(10051) == 1:
                 return pdu[:5]  # accepted on the wire, but the controller keeps its value
+            if self.enforce_ranges and address in HOLDING_RANGES:
+                lo, hi, default = HOLDING_RANGES[address]
+                signed = value - 0x10000 if value >= 0x8000 else value
+                if not lo <= signed <= hi:
+                    self.reverted.append((address, value))
+                    self.pending.pop(address, None)
+                    self.holding[address] = default
+                    return pdu[:5]
+            if address in self.instant_triggers and address in TRIGGERS:
+                self.holding[address] = 0  # the run ended before the read-back
+                return pdu[:5]
             if address in self.deferred:
                 if value == self.holding[address]:
                     self.pending.pop(address, None)  # the current value cancels a pending write

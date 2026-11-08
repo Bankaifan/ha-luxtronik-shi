@@ -142,7 +142,13 @@ async def async_write_sequence(
             if raw not in BLOCK_VALUES:
                 raise ValueError(f"{reg.key}: {raw} is outside {BLOCK_VALUES}")
         for reg, raw in writes:
-            await coordinator.async_write(reg, raw)
+            try:
+                await coordinator.async_write(reg, raw)
+            except HomeAssistantError as err:
+                if err.translation_key != "write_reverted_to_default":
+                    raise
+                # The coordinator saw the default read back (the firmware reverted the block); for a sequence the
+                # message below says what else was not written.
             actual = (coordinator.data or {}).get(reg.key)
             if actual != raw:
                 raise HomeAssistantError(

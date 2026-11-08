@@ -42,7 +42,14 @@ async def async_setup_entry(
 
 
 class LuxtronikSwitch(LuxtronikEntity, SwitchEntity):
-    """A 0/1 holding register."""
+    """A 0/1 holding register.
+
+    The blocks stay as written. ``circulation`` and ``extra_dhw`` are triggers (const.TRIGGER_KEYS): the
+    firmware
+    sets them back to 0 when the run or the timer ends, so the switch goes off by itself; the coordinator does
+    not
+    treat that read-back as a failed write.
+    """
 
     @property
     def is_on(self) -> bool | None:

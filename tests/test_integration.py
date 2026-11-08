@@ -49,7 +49,9 @@ async def test_config_flow(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "equipment"
     defaults = {str(k): k.default() for k in result["data_schema"].schema}
-    assert defaults == {"mk1": True, "mk2": False, "mk3": False, "cooling": False, "pool": False, "room_unit": False}
+    assert defaults == {
+        "mk1": True, "mk2": False, "mk3": False, "cooling": False, "pool": False, "room_unit": False, "solar": False,
+    }
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], defaults)
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -315,7 +317,7 @@ async def test_equipment_off_and_on_keeps_entity_ids(hass: HomeAssistant, shi: F
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"scan_interval": 30, "mk1": True, "mk2": False, "mk3": False,
-                            "cooling": False, "pool": False, "room_unit": False}
+                            "cooling": False, "pool": False, "room_unit": False, "solar": False}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
@@ -328,7 +330,7 @@ async def test_equipment_off_and_on_keeps_entity_ids(hass: HomeAssistant, shi: F
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"scan_interval": 30, "mk1": True, "mk2": False, "mk3": False,
-                            "cooling": False, "pool": True, "room_unit": False}
+                            "cooling": False, "pool": True, "room_unit": False, "solar": False}
     )
     await hass.async_block_till_done()
     assert _entity_id(hass, entry, "switch", "pool_block") == pool_block
@@ -345,12 +347,18 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     contract = json.loads((pathlib.Path(__file__).parent / "fixtures" / "entity_contract.json").read_text())
     registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(registry, entry.entry_id)
-    from custom_components.luxtronik_shi.registers import _RAW_ADDED, ADDED_IN_0_4, OUTPUT_FLAGS, RENAMED_KEYS
+    from custom_components.luxtronik_shi.registers import (
+        _RAW_ADDED,
+        ADDED_IN_0_4,
+        OUTPUT_FLAGS,
+        RENAMED_KEYS,
+        RESOLVED_IN_0_17,
+    )
 
     # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2,
-    # output and input flags of 0.13.0).
+    # output and input flags of 0.13.0, the resolved sensors and the solar flag of 0.17.0).
     # Renamed keys stay in the contract but have no entity of their own any more (see tests/test_migration.py).
-    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED, *OUTPUT_FLAGS)}
+    added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED, *OUTPUT_FLAGS, *RESOLVED_IN_0_17)} | {"cap_solar"}
     assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added) - len(RENAMED_KEYS)
     assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
 
@@ -528,7 +536,7 @@ async def test_existing_entity_ids_survive_device_move(hass: HomeAssistant, shi:
         assert state is not None and state.state not in ("unavailable", "unknown"), entity_id
 
 
-# key, address, minimum, maximum (python-luxtronik holdings.py "range", raw 0.1 scale)
+# key, address, minimum, maximum (firmware V3.92.3 ranges, docs/firmware-3.92.3-shi-full-analysis.md; raw 0.1 scale)
 _WRITE_RANGES = (
     ("cfg_heating_setpoint", 10001, 15.0, 75.0),
     ("cfg_heating_offset", 10002, -20.0, 20.0),
@@ -538,7 +546,7 @@ _WRITE_RANGES = (
     ("cfg_mk1_offset", 10012, -5.0, 5.0),
     ("cfg_mk1_cool_setpoint", 10016, 5.0, 25.0),
     ("cfg_mk1_cool_offset", 10017, -5.0, 5.0),
-    ("cfg_overall_offset", 10066, -20.0, 20.0),
+    ("cfg_overall_offset", 10066, -5.0, 5.0),  # firmware V3.92.3: -50 ... 50 (0.1 K), not python-luxtronik's +-20
     ("cfg_room_setpoint", 10060, 20.0, 40.0),
 )
 

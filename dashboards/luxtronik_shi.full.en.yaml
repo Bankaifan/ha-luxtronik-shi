@@ -577,12 +577,12 @@ views:
         | Wärmepumpe Temperature: return limit | `return_limit` | `sensor.warmepumpe_temperature_return_limit` |
         | Wärmepumpe Temperature: return target minimum | `return_min_target` | `sensor.warmepumpe_temperature_return_target_minimum` |
         | Wärmepumpe Temperature: flow | `flow` | `sensor.warmepumpe_temperature_flow` |
-        | Wärmepumpe Heating Limit temperature | `heating_limit` | `sensor.warmepumpe_heating_limit_temperature` |
+        | Wärmepumpe Heating Demand border | `heating_limit` | `sensor.warmepumpe_heating_demand_border` |
         | Wärmepumpe Temperature: outside | `outside` | `sensor.warmepumpe_temperature_outside` |
         | Wärmepumpe Hot water Temperature | `dhw` | `sensor.warmepumpe_hot_water_temperature` |
         | Wärmepumpe Hot water Target | `dhw_target` | `sensor.warmepumpe_hot_water_target` |
         | Wärmepumpe Hot water Maximum | `dhw_max` | `sensor.warmepumpe_hot_water_maximum` |
-        | Wärmepumpe Hot water Limit temperature | `dhw_limit` | `sensor.warmepumpe_hot_water_limit_temperature` |
+        | Wärmepumpe Hot water Demand border | `dhw_limit` | `sensor.warmepumpe_hot_water_demand_border` |
         | Wärmepumpe Heating Mixing circuit 1: flow | `mk1_flow` | `sensor.warmepumpe_heating_mixing_circuit_1_flow` |
         | Wärmepumpe Heating Mixing circuit 1: flow target | `mk1_flow_target` | `sensor.warmepumpe_heating_mixing_circuit_1_flow_target` |
         | Wärmepumpe Heating Mixing circuit 1: flow minimum | `mk1_flow_min` | `sensor.warmepumpe_heating_mixing_circuit_1_flow_minimum` |
@@ -652,6 +652,11 @@ views:
         | Wärmepumpe Pool Energy: electric | `energy_el_pool` | `sensor.warmepumpe_pool_energy_electric` |
         | Wärmepumpe Cooling Energy: thermal | `energy_th_cooling` | `sensor.warmepumpe_cooling_energy_thermal` |
         | Wärmepumpe Pool Energy: thermal | `energy_th_pool` | `sensor.warmepumpe_pool_energy_thermal` |
+        | Wärmepumpe Cooling Operating hours | `hours_cooling` | `sensor.warmepumpe_cooling_operating_hours` |
+        | Wärmepumpe Operating hours: solar | `hours_solar` | `sensor.warmepumpe_operating_hours_solar` |
+        | Wärmepumpe Hot water Extra: setpoint | `extra_dhw_setpoint` | `sensor.warmepumpe_hot_water_extra_setpoint` |
+        | Wärmepumpe Hot water Extra: duration | `extra_dhw_duration` | `sensor.warmepumpe_hot_water_extra_duration` |
+        | Wärmepumpe Hot water Extra: remaining time | `extra_dhw_remaining` | `sensor.warmepumpe_hot_water_extra_remaining_time` |
         | Wärmepumpe Heating Pump: heating (HUP) | `pump_heating` | `binary_sensor.warmepumpe_heating_pump_heating_hup` |
         | Wärmepumpe Hot water Pump: hot water (BUP) | `pump_hot_water` | `binary_sensor.warmepumpe_hot_water_pump_hot_water_bup` |
         | Wärmepumpe Hot water Pump: circulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_hot_water_pump_circulation_zip` |
@@ -661,6 +666,7 @@ views:
         | Wärmepumpe Equipment: hot water | `cap_hot_water` | `binary_sensor.warmepumpe_equipment_hot_water` |
         | Wärmepumpe Equipment: cooling | `cap_cooling` | `binary_sensor.warmepumpe_equipment_cooling` |
         | Wärmepumpe Equipment: pool | `cap_pool` | `binary_sensor.warmepumpe_equipment_pool` |
+        | Wärmepumpe Equipment: solar | `cap_solar` | `binary_sensor.warmepumpe_equipment_solar` |
         | Wärmepumpe Equipment: room controller | `cap_room_controller` | `binary_sensor.warmepumpe_equipment_room_controller` |
         | Wärmepumpe Equipment: mixing circuit 1 heating | `cap_mk1_heating` | `binary_sensor.warmepumpe_equipment_mixing_circuit_1_heating` |
         | Wärmepumpe Equipment: mixing circuit 1 cooling | `cap_mk1_cooling` | `binary_sensor.warmepumpe_equipment_mixing_circuit_1_cooling` |

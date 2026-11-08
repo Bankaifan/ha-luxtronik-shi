@@ -13,7 +13,7 @@ from .block_views import MODE_BLOCKS, async_write_sequence, blocks, mode_for, wr
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
 from .entity import LuxtronikEntity
-from .registers import BLOCK_MODE_KEY, BLOCK_MODES, Register
+from .registers import BLOCK_MODE_KEY, BLOCK_MODES, OVERALL_MODE_KEY, Register
 
 # One write at a time per platform; the Modbus client serialises access to the SHI anyway.
 PARALLEL_UPDATES = 1
@@ -51,7 +51,18 @@ class LuxtronikSelect(LuxtronikEntity, SelectEntity):
         return self._reg.options[value]
 
     async def async_select_option(self, option: str) -> None:
-        """Write the index of the chosen option."""
+        """Write the index of the chosen option.
+
+        The overall mode (10065) has no setpoint: the firmware does not implement mode 1 there and treats it
+        like
+        0 (docs/firmware-3.92.3-shi-full-analysis.md, 3.1). Writing it would only look like a setting, so it
+        is
+        refused; the option stays in the list so that a value another client wrote is still shown.
+        """
+        if self._reg.key == OVERALL_MODE_KEY and option == "setpoint":
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="overall_setpoint_not_implemented"
+            )
         await self.coordinator.async_write(self._reg, self._reg.options.index(option))
 
 

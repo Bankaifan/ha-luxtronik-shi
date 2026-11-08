@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
 from . import LuxtronikConfigEntry
-from .const import CONF_FEATURES
+from .const import CONF_FEATURES, ENABLE_SHI_PARAMETER
 from .coordinator import plan_blocks
 from .registers import FEATURE_CAPABILITY, FEATURES, FIRMWARE_PARTS, Register, firmware_version
 
@@ -96,6 +96,19 @@ async def async_get_config_entry_diagnostics(
             "capability_flags": flags,
         },
         "firmware": {k: data.get(k) for k in FIRMWARE_PARTS} | {"version": firmware_version(data)},
+        # Not readable over Modbus: named here so that a support request checks it. While the controller
+        # parameter "Enable SHI" is 0, setpoints, offsets, levels and the power limit are read back but
+        # ignored;
+        # the blocks, circulation and extra hot water work regardless (docs/firmware-3.92.3-shi-full-
+        # analysis.md).
+        "controller_parameters_not_readable": {
+            "enable_shi": {
+                "parameter": ENABLE_SHI_PARAMETER,
+                "menu": "Enable SHI (Modbus TCP / myUplink / both)",
+                "hint": "If written setpoints or modes read back correctly but have no effect, check this "
+                "setting at the control panel.",
+            }
+        },
         "last_update_success": coordinator.last_update_success,
         # Raw values this integration wrote and would re-apply after a device reset (option on).
         "restore_after_reset": {

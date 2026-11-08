@@ -35,11 +35,19 @@ ISSUE_EXTERNAL_CHANGE = "values_changed_externally"
 # A polled value equal to a value this integration tried to write within this time counts as its own write
 # (covers a write that reached the device although its answer was lost).
 OWN_WRITE_WINDOW = 600  # seconds
-# Writable keys the controller changes by itself, so a change is no evidence of another writer. ``extra_dhw``
-# may be a one-shot that the controller resets (effect open, see const RESTORE_KEYS note). ``circulation`` may
-# follow a time schedule in the controller and is switched on by the controller itself while it heats hot
-# water (the second reason is the owner's observation on the reference installation, not measured here).
-EXTERNAL_CHANGE_EXCLUDED: frozenset[str] = frozenset({"extra_dhw", "circulation"})
+# Triggers: writable keys the firmware sets back to 0 by itself (docs/firmware-3.92.3-shi-full-analysis.md,
+# sections 3.2 and 3.3; proven). ``circulation`` (10070) starts a circulation run and reads 0 again once no
+# run is
+# active; ``extra_dhw`` (10071) starts extra hot water for the controller's duration (parameter 1147, sensor
+# ``extra_dhw_duration``) and reads 0 again when the timer ends (``extra_dhw_remaining`` counts down). A read-
+# back
+# of 0 is the normal end of the action, never a failed write, a device reset or another writer: they are not
+# restored after a reset, not compared for changes outside Home Assistant, and a default read-back after a
+# write
+# is not reported for them.
+TRIGGER_KEYS: frozenset[str] = frozenset({"extra_dhw", "circulation"})
+# Writable keys the controller changes by itself, so a change is no evidence of another writer: the triggers.
+EXTERNAL_CHANGE_EXCLUDED: frozenset[str] = TRIGGER_KEYS
 # Control keys compared before and after an outage (notice only, never written back), with issue text labels.
 OUTAGE_WATCH_KEYS = {
     "heating_block": "heating block",
@@ -49,23 +57,35 @@ OUTAGE_WATCH_KEYS = {
 }
 
 # Restore after a device reset (option, off by default). The SHI drops every value set over Modbus when the
-# controller reboots or its watchdog expires; the holding registers then read their reset value 0.
+# controller reboots or its watchdog expires; the holding registers then read their default
+# (``Register.reset_default``:
+# 0 for modes, levels, offsets, blocks and triggers; 350 / 400 / 200 for the setpoints, 300 for the power
+# limit).
 DEFAULT_RESTORE_AFTER_RESET = False
 STORE_VERSION = 1
-# SHI watchdog: without any Modbus access for this long the SHI discards every value set over it
-# (docs/firmware-3.92.3-shi-analysis.md, section "SHI watchdog"). A longer gap since the last successful poll,
-# e.g. a Home Assistant downtime, counts like an observed communication outage for the reset detection.
+# SHI watchdog: without any Modbus access (any function code, reads included) for this long the SHI reverts
+# every value set over it: t2 items (the SHI holdings) to their defaults, t1 parameters (10060) to their
+# persisted value. Expiry and the first access afterwards are written to the controller's event log (type
+# 0x10),
+# so both can be checked at the control panel (docs/firmware-3.92.3-shi-full-analysis.md, 4; proven). A longer
+# gap since the last successful poll, e.g. a Home Assistant downtime, counts like an observed communication
+# outage for the reset detection.
 SHI_WATCHDOG_TIMEOUT = 600  # seconds
 # The time of the last successful poll is persisted at most this often (no disk write on every poll). The gap
 # is compared against SHI_WATCHDOG_TIMEOUT plus this interval, so the throttling never fakes an outage.
 LAST_POLL_SAVE_INTERVAL = 60  # seconds
 # Only these keys are remembered and restored: the mode, level, offset and setpoint of each circuit, and the
-# room setpoint. Blocks (heating_block, dhw_block, cooling_block, pool_block), circulation, extra_dhw (effect
-# open, may be one-shot) and the power limit are deliberately left out: an optimizer such as the Heat Pump
-# Optimizer owns them live, and re-applying a block after a long downtime would invert the fail-safe of the
-# SHI watchdog (all values released). The overall group (cfg_overall_*, 10065-10067) is left out too: its
-# semantics are unproven (on the reference installation 10065 fell back to `off` about 2 s after a write, and
-# python-luxtronik gives the overall mode no setpoint). Edit this set to change what is restored.
+# room setpoint. Blocks (heating_block, dhw_block, cooling_block, pool_block), the triggers circulation and
+# extra_dhw (TRIGGER_KEYS: the firmware ends them itself) and the power limit are deliberately left out: an
+# optimizer such as the Heat Pump Optimizer owns them live, and re-applying a block after a long downtime
+# would
+# invert the fail-safe of the SHI watchdog (all values released). The overall group (cfg_overall_*,
+# 10065-10067)
+# is left out too: it is proven to override the heating and mixing circuit modes (full analysis, 3.1), so an
+# automatic re-apply could silently override what an optimizer sets per circuit (owner decision; on the
+# reference
+# installation 10065 once fell back to `off` about 2 s after a write). Edit this set to change what is
+# restored.
 RESTORE_KEYS: frozenset[str] = frozenset(
     {
         "cfg_heating_mode",
@@ -101,29 +121,45 @@ RESTORE_KEYS: frozenset[str] = frozenset(
     }
 )
 # The SHI answers 0x7FFF for a register that is not available (docs/firmware-3.92.3-shi-analysis.md,
-# dispatcher 0x000d9298). Never a reset value and never learned.
+# dispatcher 0x000d9298) and silently skips a write to it. Never a reset value and never learned. Which
+# equipment
+# makes a register available is listed per register in docs/firmware-3.92.3-shi-full-analysis.md (visibility).
 SHI_NOT_AVAILABLE = 0x7FFF
+# The controller parameter 1161 "Enable SHI" (menu, options Modbus TCP / myUplink / both) is not readable over
+# Modbus. While it is 0 the heating, hot water, mixing circuit and power limit registers are accepted and read
+# back but ignored by the controller; the blocks 10050-10053, circulation and extra hot water work regardless
+# (docs/firmware-3.92.3-shi-full-analysis.md, 5.6; proven). Named in the diagnostics download as a hint.
+ENABLE_SHI_PARAMETER = 1161
 # A re-established Modbus connection counts as an outage signal. ASSUMPTION, not measured on the reference
 # installation yet: the SHI keeps the TCP connection open between polls, so a reconnect means the controller
 # dropped it. If reconnects happen on at least RECONNECT_GUARD_COUNT of the last RECONNECT_GUARD_POLLS polls,
 # the assumption does not hold for this setup and the signal is switched off for the session.
 RECONNECT_GUARD_POLLS = 5
 RECONNECT_GUARD_COUNT = 3
-# Keys whose reset value is not 0: on watchdog expiry and at boot the controller reverts setpoints to their
-# persisted parameter or fixed default, while modes and levels read 0 (docs/firmware-3.92.3-shi-analysis.md,
-# "SHI watchdog"). After an outage such a key counts as reverted if it reads any non-zero value, or exactly
-# its learned value once one was observed in a confirmed reset. Offsets are *assumed* to revert to 0 (not
-# proven): if not, a reset with a non-zero offset remembered is not recognised and nothing is overwritten.
+# Keys whose reset value is not 0: on watchdog expiry, at boot and after a write outside the range the
+# controller
+# reverts the setpoints to their fixed defaults (350 / 400 / 200 in 0.1 degC, ``Register.reset_default``; the
+# room
+# setpoint 10060 to its persisted parameter), while modes, levels, offsets, blocks and triggers read 0
+# (docs/firmware-3.92.3-shi-full-analysis.md, 3.4 and 4; proven). After an outage such a key counts as
+# reverted if
+# it reads its proven default, any non-zero value while no reset was observed yet, or exactly its learned
+# value
+# once one was observed in a confirmed reset (the learned value covers a firmware that uses other defaults).
 RESET_TO_DEFAULT_SUFFIXES = ("_setpoint",)
 # Remembered values older than this (time since the last successful poll) are dropped at setup: an optimizer
 # such as the Heat Pump Optimizer rewrites modes and setpoints live, so a day-old value is no longer meant.
 RESTORE_MAX_GAP = 24 * 3600  # seconds
 # A device reset detected again within this time after a restore is not restored again (no write loops).
 RESTORE_COOLDOWN = 900  # seconds
-# Deferred writes of the hot water group (docs/firmware-3.92.3-shi-analysis.md, "Deferred writes of the hot
-# water group"): SHI writes to 10005-10008 go into a pending map and are committed after about 10 s; writing
-# the value currently stored cancels a pending write. A read-back that differs is checked again after
-# DEFERRED_RECHECK s (one extra read of that register), and nothing is written to the register meanwhile.
+# Deferred writes of the hot water group (docs/firmware-3.92.3-shi-full-analysis.md, 3.2; proven): SHI writes
+# to
+# exactly 10005-10008 (t2 items 5, 6, 7, 0x27) go into a pending map with a counter of 10 ticks and are
+# committed
+# by the 1 Hz tick about 10 s later; writing the value currently stored cancels a pending write. No other
+# holding
+# is deferred. A read-back that differs is checked again after DEFERRED_RECHECK s (one extra read of that
+# register), and nothing is written to the register meanwhile.
 DEFERRED_KEYS: frozenset[str] = frozenset(
     {"cfg_dhw_mode", "cfg_dhw_setpoint", "cfg_dhw_offset", "cfg_dhw_level"}
 )
