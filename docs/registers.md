@@ -28,7 +28,7 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `return_min_target` | 10104 | input | int16 | 0.1 | °C | - | proven: firmware parameter 979; lower clamp of the heating setpoint and target while heating is blocked |
 | `flow` | 10105 | input | uint16 | 0.1 | °C | - | open |
 | `room` | 10106 | input | int16 | 0.1 | °C | - | open |
-| `heating_limit` | 10107 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x57 'Heating demand border' (effective target minus hysteresis) |
+| `heating_demand_border` | 10107 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x57 'Heating demand border' (effective target minus hysteresis) |
 | `outside` | 10108 | input | int16 | 0.1 | °C | - | open |
 | `outside_temp_average` | 10109 | input | int16 | 0.1 | °C | - | open |
 | `heat_source_input` | 10110 | input | int16 | 0.1 | °C | - | open |
@@ -39,7 +39,7 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `dhw_target` | 10121 | input | uint16 | 0.1 | °C | - | open |
 | `dhw_min` | 10122 | input | int16 | 0.1 | °C | - | open |
 | `dhw_max` | 10123 | input | int16 | 0.1 | °C | - | proven: firmware parameter 973 Einst_BW_max; upper limit of every hot water target |
-| `dhw_limit` | 10124 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x58 'DHW Demand border' (effective target minus hysteresis) |
+| `dhw_demand_border` | 10124 | input | int16 | 0.1 | °C | - | proven: firmware t0/0x58 'DHW Demand border' (effective target minus hysteresis) |
 | `mk1_flow` | 10140 | input | int16 | 0.1 | °C | - | open |
 | `mk1_flow_target` | 10141 | input | int16 | 0.1 | °C | - | open |
 | `mk1_flow_min` | 10142 | input | int16 | 0.1 | °C | - | open |
@@ -73,23 +73,14 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `energy_th_cooling` | 10326 | input | int32 | 0.1 | kWh | - | open |
 | `energy_th_pool` | 10328 | input | int32 | 0.1 | kWh | - | open |
 | `output_vbo` | 10350 | input | uint16 | 1 | - | - | proven: firmware VBOout (t0/0x45); measured: runs with the compressor |
-| `raw_10350` | 10350 | input | uint16 | 1 | - | - | proven: firmware VBOout (t0/0x45); measured: runs with the compressor |
 | `output_fp1` | 10351 | input | uint16 | 1 | - | - | proven: firmware FP1out (t0/0x6d); measured: follows the heating pump |
-| `raw_10351` | 10351 | input | uint16 | 1 | - | - | proven: firmware FP1out (t0/0x6d); measured: follows the heating pump |
 | `output_fp2` | 10352 | input | uint16 | 1 | - | - | proven: firmware FP2out (t0/0x4c); not measured (no second circuit) |
-| `raw_10352` | 10352 | input | uint16 | 1 | - | - | proven: firmware FP2out (t0/0x4c); not measured (no second circuit) |
 | `output_fp3` | 10353 | input | uint16 | 1 | - | - | proven: firmware FP3out (t0/0x4d); not measured (no third circuit) |
-| `raw_10353` | 10353 | input | uint16 | 1 | - | - | proven: firmware FP3out (t0/0x4d); not measured (no third circuit) |
 | `pump_heating` | 10354 | input | uint16 | 1 | - | - | proven: firmware HUPout (t0/0x20); measured |
-| `raw_10354` | 10354 | input | uint16 | 1 | - | - | proven: firmware HUPout (t0/0x20); measured |
 | `pump_hot_water` | 10355 | input | uint16 | 1 | - | - | proven: firmware BUPout (t0/0x44); measured |
-| `raw_10355` | 10355 | input | uint16 | 1 | - | - | proven: firmware BUPout (t0/0x44); measured |
 | `pump_circulation` | 10356 | input | uint16 | 1 | - | - | proven: firmware ZIPout (t0/0x48); measured |
-| `raw_10356` | 10356 | input | uint16 | 1 | - | - | proven: firmware ZIPout (t0/0x48); measured |
 | `input_evu` | 10360 | input | uint16 | 1 | - | - | proven: firmware EVUin (t0/0x2a); measured: 1 while the utility lock is released |
-| `raw_10360` | 10360 | input | uint16 | 1 | - | - | proven: firmware EVUin (t0/0x2a); measured: 1 while the utility lock is released |
 | `input_evu2` | 10361 | input | uint16 | 1 | - | - | proven: firmware EVU2in (t0/0x2b); measured: 0 on the reference installation |
-| `raw_10361` | 10361 | input | uint16 | 1 | - | - | proven: firmware EVU2in (t0/0x2b); measured: 0 on the reference installation |
 | `fw_version_major` | 10400 | input | uint16 | 1 | - | - | open |
 | `fw_version_minor` | 10401 | input | uint16 | 1 | - | - | open |
 | `fw_version_patch` | 10402 | input | uint16 | 1 | - | - | open |

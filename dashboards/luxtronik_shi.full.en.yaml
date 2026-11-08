@@ -293,7 +293,9 @@ views:
     - type: tile
       entity: button.warmepumpe_hot_water_circulation_start_run
     - type: tile
-      entity: binary_sensor.warmepumpe_hot_water_circulation_run_active
+      entity: button.warmepumpe_hot_water_circulation_end
+    - type: tile
+      entity: binary_sensor.warmepumpe_hot_water_pump_circulation_zip
     - type: tile
       entity: button.warmepumpe_hot_water_extra_start
     - type: tile
@@ -585,12 +587,12 @@ views:
         | Wärmepumpe Temperature: return limit | `return_limit` | `sensor.warmepumpe_temperature_return_limit` |
         | Wärmepumpe Temperature: return target minimum | `return_min_target` | `sensor.warmepumpe_temperature_return_target_minimum` |
         | Wärmepumpe Temperature: flow | `flow` | `sensor.warmepumpe_temperature_flow` |
-        | Wärmepumpe Heating Demand border | `heating_limit` | `sensor.warmepumpe_heating_demand_border` |
+        | Wärmepumpe Heating Demand border | `heating_demand_border` | `sensor.warmepumpe_heating_demand_border` |
         | Wärmepumpe Temperature: outside | `outside` | `sensor.warmepumpe_temperature_outside` |
         | Wärmepumpe Hot water Temperature | `dhw` | `sensor.warmepumpe_hot_water_temperature` |
         | Wärmepumpe Hot water Target | `dhw_target` | `sensor.warmepumpe_hot_water_target` |
         | Wärmepumpe Hot water Maximum | `dhw_max` | `sensor.warmepumpe_hot_water_maximum` |
-        | Wärmepumpe Hot water Demand border | `dhw_limit` | `sensor.warmepumpe_hot_water_demand_border` |
+        | Wärmepumpe Hot water Demand border | `dhw_demand_border` | `sensor.warmepumpe_hot_water_demand_border` |
         | Wärmepumpe Heating Mixing circuit 1: flow | `mk1_flow` | `sensor.warmepumpe_heating_mixing_circuit_1_flow` |
         | Wärmepumpe Heating Mixing circuit 1: flow target | `mk1_flow_target` | `sensor.warmepumpe_heating_mixing_circuit_1_flow_target` |
         | Wärmepumpe Heating Mixing circuit 1: flow minimum | `mk1_flow_min` | `sensor.warmepumpe_heating_mixing_circuit_1_flow_minimum` |
@@ -692,7 +694,6 @@ views:
         | Wärmepumpe Heating Running | `heating_running` | `binary_sensor.warmepumpe_heating_running` |
         | Wärmepumpe Hot water Running | `dhw_running` | `binary_sensor.warmepumpe_hot_water_running` |
         | Wärmepumpe Power limit: mode set | `power_limit_configured` | `binary_sensor.warmepumpe_power_limit_mode_set` |
-        | Wärmepumpe Hot water Circulation: run active | `circulation_running` | `binary_sensor.warmepumpe_hot_water_circulation_run_active` |
         | Wärmepumpe Hot water Extra: running | `extra_dhw_running` | `binary_sensor.warmepumpe_hot_water_extra_running` |
         | Wärmepumpe Firmware version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
         | Wärmepumpe Status: compressor 1 running | `compressor_1` | `binary_sensor.warmepumpe_status_compressor_1_running` |
@@ -704,6 +705,7 @@ views:
         | Wärmepumpe Hot water | `water_heater_dhw` | `water_heater.warmepumpe_hot_water` |
         | Wärmepumpe Operating mode (blocks) | `block_mode` | `select.warmepumpe_operating_mode_blocks` |
         | Wärmepumpe On/off (blocks) | `block_power` | `switch.warmepumpe_on_off_blocks` |
+        | Wärmepumpe Hot water Circulation: end | `circulation_stop` | `button.warmepumpe_hot_water_circulation_end` |
         | Wärmepumpe Hot water Extra: end | `extra_dhw_stop` | `button.warmepumpe_hot_water_extra_end` |
   - type: grid
     cards:

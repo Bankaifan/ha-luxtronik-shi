@@ -108,7 +108,7 @@
       "room": {
         "name": "Temperatur: Raum (Raumeinheit)"
       },
-      "heating_limit": {
+      "heating_demand_border": {
         "name": "Anforderungsgrenze"
       },
       "outside": {
@@ -126,7 +126,7 @@
       "dhw_max": {
         "name": "Maximum"
       },
-      "dhw_limit": {
+      "dhw_demand_border": {
         "name": "Anforderungsgrenze"
       },
       "mk1_flow": {
@@ -360,33 +360,6 @@
       "extra_dhw_remaining": {
         "name": "Extra: Restlaufzeit"
       },
-      "raw_10350": {
-        "name": "Ausgang: VBO"
-      },
-      "raw_10351": {
-        "name": "Ausgang: FP1"
-      },
-      "raw_10354": {
-        "name": "Ausgang: Heizungsumwälzpumpe (HUP)"
-      },
-      "raw_10355": {
-        "name": "Ausgang: Brauchwasserumwälzpumpe (BUP)"
-      },
-      "raw_10356": {
-        "name": "Ausgang: Zirkulationspumpe (ZIP)"
-      },
-      "raw_10360": {
-        "name": "Eingang: EVU"
-      },
-      "raw_10361": {
-        "name": "Eingang: EVU 2"
-      },
-      "raw_10352": {
-        "name": "Ausgang: FP2"
-      },
-      "raw_10353": {
-        "name": "Ausgang: FP3"
-      },
       "raw_10412": {
         "name": "Betriebsstunden Schwimmbad: Wort 1 (Teiler 7200)"
       },
@@ -500,9 +473,6 @@
       "power_limit_configured": {
         "name": "Leistungsbegrenzung: Modus eingestellt"
       },
-      "circulation_running": {
-        "name": "Zirkulation: Lauf aktiv"
-      },
       "extra_dhw_running": {
         "name": "Extra: läuft"
       },
@@ -554,6 +524,9 @@
       },
       "extra_dhw": {
         "name": "Extra: starten"
+      },
+      "circulation_stop": {
+        "name": "Zirkulation: beenden"
       },
       "extra_dhw_stop": {
         "name": "Extra: beenden"

@@ -108,7 +108,7 @@
       "room": {
         "name": "Temperature: room (room unit)"
       },
-      "heating_limit": {
+      "heating_demand_border": {
         "name": "Demand border"
       },
       "outside": {
@@ -126,7 +126,7 @@
       "dhw_max": {
         "name": "Maximum"
       },
-      "dhw_limit": {
+      "dhw_demand_border": {
         "name": "Demand border"
       },
       "mk1_flow": {
@@ -360,33 +360,6 @@
       "extra_dhw_remaining": {
         "name": "Extra: remaining time"
       },
-      "raw_10350": {
-        "name": "Output: VBO"
-      },
-      "raw_10351": {
-        "name": "Output: FP1"
-      },
-      "raw_10354": {
-        "name": "Output: heating circulation pump (HUP)"
-      },
-      "raw_10355": {
-        "name": "Output: DHW pump (BUP)"
-      },
-      "raw_10356": {
-        "name": "Output: circulation pump (ZIP)"
-      },
-      "raw_10360": {
-        "name": "Input: EVU"
-      },
-      "raw_10361": {
-        "name": "Input: EVU 2"
-      },
-      "raw_10352": {
-        "name": "Output: FP2"
-      },
-      "raw_10353": {
-        "name": "Output: FP3"
-      },
       "raw_10412": {
         "name": "Operating hours pool: word 1 (divisor 7200)"
       },
@@ -500,9 +473,6 @@
       "power_limit_configured": {
         "name": "Power limit: mode set"
       },
-      "circulation_running": {
-        "name": "Circulation: run active"
-      },
       "extra_dhw_running": {
         "name": "Extra: running"
       },
@@ -554,6 +524,9 @@
       },
       "extra_dhw": {
         "name": "Extra: start"
+      },
+      "circulation_stop": {
+        "name": "Circulation: end"
       },
       "extra_dhw_stop": {
         "name": "Extra: end"

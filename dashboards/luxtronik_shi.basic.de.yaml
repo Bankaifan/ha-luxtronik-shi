@@ -282,7 +282,9 @@ views:
     - type: tile
       entity: button.warmepumpe_warmwasser_zirkulation_lauf_starten
     - type: tile
-      entity: binary_sensor.warmepumpe_warmwasser_zirkulation_lauf_aktiv
+      entity: button.warmepumpe_warmwasser_zirkulation_beenden
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip
     - type: tile
       entity: button.warmepumpe_warmwasser_extra_starten
     - type: tile
@@ -505,12 +507,12 @@ views:
         | Wärmepumpe Temperatur: Rücklauf-Begrenzung | `return_limit` | `sensor.warmepumpe_temperatur_rucklauf_begrenzung` |
         | Wärmepumpe Temperatur: Rücklauf-Soll Minimum | `return_min_target` | `sensor.warmepumpe_temperatur_rucklauf_soll_minimum` |
         | Wärmepumpe Temperatur: Vorlauf | `flow` | `sensor.warmepumpe_temperatur_vorlauf` |
-        | Wärmepumpe Heizung Anforderungsgrenze | `heating_limit` | `sensor.warmepumpe_heizung_anforderungsgrenze` |
+        | Wärmepumpe Heizung Anforderungsgrenze | `heating_demand_border` | `sensor.warmepumpe_heizung_anforderungsgrenze` |
         | Wärmepumpe Temperatur: Außen | `outside` | `sensor.warmepumpe_temperatur_aussen` |
         | Wärmepumpe Warmwasser Temperatur | `dhw` | `sensor.warmepumpe_warmwasser_temperatur` |
         | Wärmepumpe Warmwasser Soll | `dhw_target` | `sensor.warmepumpe_warmwasser_soll` |
         | Wärmepumpe Warmwasser Maximum | `dhw_max` | `sensor.warmepumpe_warmwasser_maximum` |
-        | Wärmepumpe Warmwasser Anforderungsgrenze | `dhw_limit` | `sensor.warmepumpe_warmwasser_anforderungsgrenze` |
+        | Wärmepumpe Warmwasser Anforderungsgrenze | `dhw_demand_border` | `sensor.warmepumpe_warmwasser_anforderungsgrenze` |
         | Wärmepumpe Status: Fehlernummer | `error_number` | `sensor.warmepumpe_status_fehlernummer` |
         | Wärmepumpe Anlage: Puffertyp | `buffer_type` | `sensor.warmepumpe_anlage_puffertyp` |
         | Wärmepumpe Kühlen: konfiguriert | `cooling_configured` | `binary_sensor.warmepumpe_kuhlen_konfiguriert` |
@@ -579,7 +581,6 @@ views:
         | Wärmepumpe Heizung Läuft | `heating_running` | `binary_sensor.warmepumpe_heizung_lauft` |
         | Wärmepumpe Warmwasser Läuft | `dhw_running` | `binary_sensor.warmepumpe_warmwasser_lauft` |
         | Wärmepumpe Leistungsbegrenzung: Modus eingestellt | `power_limit_configured` | `binary_sensor.warmepumpe_leistungsbegrenzung_modus_eingestellt` |
-        | Wärmepumpe Warmwasser Zirkulation: Lauf aktiv | `circulation_running` | `binary_sensor.warmepumpe_warmwasser_zirkulation_lauf_aktiv` |
         | Wärmepumpe Warmwasser Extra: läuft | `extra_dhw_running` | `binary_sensor.warmepumpe_warmwasser_extra_lauft` |
         | Wärmepumpe Firmware-Version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
         | Wärmepumpe Status: Verdichter 1 läuft | `compressor_1` | `binary_sensor.warmepumpe_status_verdichter_1_lauft` |
@@ -591,6 +592,7 @@ views:
         | Wärmepumpe Warmwasser | `water_heater_dhw` | `water_heater.warmepumpe_warmwasser` |
         | Wärmepumpe Betriebsart (Sperren) | `block_mode` | `select.warmepumpe_betriebsart_sperren` |
         | Wärmepumpe Ein/Aus (Sperren) | `block_power` | `switch.warmepumpe_ein_aus_sperren` |
+        | Wärmepumpe Warmwasser Zirkulation: beenden | `circulation_stop` | `button.warmepumpe_warmwasser_zirkulation_beenden` |
         | Wärmepumpe Warmwasser Extra: beenden | `extra_dhw_stop` | `button.warmepumpe_warmwasser_extra_beenden` |
   - type: grid
     cards:

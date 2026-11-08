@@ -118,13 +118,6 @@
       "input_evu2": {
         "default": "mdi:transmission-tower"
       },
-      "circulation_running": {
-        "default": "mdi:sync-off",
-        "state": {
-          "on": "mdi:sync",
-          "off": "mdi:sync-off"
-        }
-      },
       "extra_dhw_running": {
         "default": "mdi:water-boiler-off",
         "state": {
@@ -139,6 +132,9 @@
       },
       "extra_dhw": {
         "default": "mdi:water-boiler"
+      },
+      "circulation_stop": {
+        "default": "mdi:sync-off"
       },
       "extra_dhw_stop": {
         "default": "mdi:stop-circle-outline"

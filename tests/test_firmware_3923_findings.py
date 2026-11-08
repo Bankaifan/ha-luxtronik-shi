@@ -234,11 +234,21 @@ def test_triggers_are_buttons_with_running_flags() -> None:
     for key in TRIGGER_KEYS:
         assert BY_KEY[key].platform == "button" and BY_KEY[key].reset_default == 0
         assert "trigger" in BY_KEY[key].source
-        running = flags[f"{key}_running"]
-        assert running.source == key and running.on_values is None and running.device_class == "running"
+    running = flags["extra_dhw_running"]
+    assert running.source == "extra_dhw" and running.on_values is None and running.device_class == "running"
+    # circulation: the running indicator is the pump output ZIP (also runs of the time program), no derived flag
+    assert "circulation_running" not in flags and "circulation_running" not in BY_KEY
+    assert BY_KEY["pump_circulation"].address == 10356 and BY_KEY["pump_circulation"].device_class == "running"
     assert ("switch", "circulation") in REMOVED_ENTITIES and ("switch", "extra_dhw") in REMOVED_ENTITIES
-    assert TRIGGER_ACTIONS == (TriggerAction("extra_dhw_stop", "Extra: beenden", "Extra: end", "extra_dhw", 0),)
+    assert TRIGGER_ACTIONS == (
+        TriggerAction("circulation_stop", "Zirkulation: beenden", "Circulation: end", "circulation", 0),
+        TriggerAction("extra_dhw_stop", "Extra: beenden", "Extra: end", "extra_dhw", 0),
+    )
     assert TRIGGER_REQUIRES == {"circulation": "cap_hot_water"}
+
+
+# Running indicator per trigger read from the trigger register (circulation: the pump output pump_circulation).
+RUNNING = {"extra_dhw": "extra_dhw_running"}
 
 
 @pytest.mark.parametrize("key", sorted(TRIGGER_KEYS))
@@ -248,17 +258,20 @@ async def test_pressing_the_button_starts_the_trigger_and_the_flag_follows(
     entry = await _setup(hass, shi)
     address = BY_KEY[key].address
     button = _entity_id(hass, entry, "button", key)
-    running = _entity_id(hass, entry, "binary_sensor", f"{key}_running")
-    assert hass.states.get(running).state == "off"
+    running = _entity_id(hass, entry, "binary_sensor", RUNNING[key]) if key in RUNNING else None
+    if running:
+        assert hass.states.get(running).state == "off"
     with caplog.at_level(logging.WARNING):
         await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
     assert _writes(shi, address) == [(6, address, 1)]
     assert shi.holding[address] == 1
-    assert hass.states.get(running).state == "on"  # the read-back of the write feeds the flag
+    if running:
+        assert hass.states.get(running).state == "on"  # the read-back of the write feeds the flag
     assert "was not taken" not in caplog.text
     shi.holding[address] = 0  # the firmware ended the run / the timer
     await _polls(entry, 3)
-    assert hass.states.get(running).state == "off"
+    if running:
+        assert hass.states.get(running).state == "off"
 
 
 @pytest.mark.parametrize("key", sorted(TRIGGER_KEYS))
@@ -273,7 +286,8 @@ async def test_trigger_ending_at_once_is_not_an_error(
     with caplog.at_level(logging.WARNING):
         await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
     assert _writes(shi, address) == [(6, address, 1)]
-    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", f"{key}_running")).state == "off"
+    if key in RUNNING:
+        assert hass.states.get(_entity_id(hass, entry, "binary_sensor", RUNNING[key])).state == "off"
     assert "was not taken" not in caplog.text and "reset the register" not in caplog.text
 
 
@@ -290,6 +304,42 @@ async def test_extra_dhw_stop_ends_the_timer(hass: HomeAssistant, shi: FakeSHI) 
     assert _writes(shi, 10071) == [(6, 10071, 1), (6, 10071, 0)]
     assert shi.holding[10071] == 0
     assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "extra_dhw_running")).state == "off"
+
+
+async def test_circulation_stop_ends_the_run(hass: HomeAssistant, shi: FakeSHI, caplog) -> None:
+    """Writing 0 to 10070 ends a circulation run (firmware V3.92.3, FUN_00275f94 / FUN_0028a4a0; proven): the
+    request flag is 0, the ZIP output stops at once unless the time program requests circulation itself."""
+    entry = await _setup(hass, shi)
+    await hass.services.async_call(
+        "button", "press", {"entity_id": _entity_id(hass, entry, "button", "circulation")}, blocking=True
+    )
+    assert shi.holding[10070] == 1
+    with caplog.at_level(logging.WARNING):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": _entity_id(hass, entry, "button", "circulation_stop")}, blocking=True
+        )
+    assert _writes(shi, 10070) == [(6, 10070, 1), (6, 10070, 0)]
+    assert shi.holding[10070] == 0
+    assert entry.runtime_data.data["circulation"] == 0  # read-back 0 accepted
+    assert "was not taken" not in caplog.text and "reset the register" not in caplog.text
+
+
+async def test_circulation_stop_is_blocked_like_the_start_button(hass: HomeAssistant, shi: FakeSHI) -> None:
+    shi.discrete[10001] = False
+    entry = await _setup(hass, shi)
+    stop = _entity_id(hass, entry, "button", "circulation_stop")
+    assert hass.states.get(stop).state == "unavailable"
+    from custom_components.luxtronik_shi.button import LuxtronikTriggerButton
+
+    action = next(a for a in TRIGGER_ACTIONS if a.key == "circulation_stop")
+    with pytest.raises(ServiceValidationError) as err:
+        await LuxtronikTriggerButton(entry.runtime_data, BY_KEY["circulation"], action).async_press()
+    assert err.value.translation_key == "trigger_blocked"
+    assert _writes(shi, 10070) == []
+    shi.discrete[10001] = True
+    entry.runtime_data._tick = 0
+    await _polls(entry, 1)
+    assert hass.states.get(stop).state != "unavailable"
 
 
 async def test_circulation_button_is_unavailable_while_hot_water_is_off(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -324,7 +374,6 @@ async def test_circulation_blocked_by_holiday_is_silent(hass: HomeAssistant, shi
             "button", "press", {"entity_id": _entity_id(hass, entry, "button", "circulation")}, blocking=True
         )
     assert shi.holding[10070] == 0 and "was not taken" not in caplog.text
-    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "circulation_running")).state == "off"
 
 
 async def test_trigger_not_available_makes_button_and_flag_unavailable(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -332,7 +381,7 @@ async def test_trigger_not_available_makes_button_and_flag_unavailable(hass: Hom
     shi.holding[10070] = 0x7FFF
     entry = await _setup(hass, shi)
     assert hass.states.get(_entity_id(hass, entry, "button", "circulation")).state == "unavailable"
-    assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "circulation_running")).state == "unavailable"
+    assert hass.states.get(_entity_id(hass, entry, "button", "circulation_stop")).state == "unavailable"
     assert hass.states.get(_entity_id(hass, entry, "button", "extra_dhw")).state != "unavailable"
 
 
@@ -351,7 +400,7 @@ async def test_trigger_running_then_ended_by_the_firmware_is_no_external_change(
 
 
 async def test_old_trigger_switches_are_removed_from_the_registry(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """0.16.x created switch entities for the triggers; their registry entries are orphans and are deleted."""
+    """0.17.x created switch entities for the triggers; their registry entries are orphans and are deleted."""
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     entry = MockConfigEntry(
@@ -503,7 +552,11 @@ def test_resolved_registers_follow_the_firmware_table() -> None:
     calc = BY_KEY["flow_calc_max"]
     assert (calc.address, calc.dtype, calc.scale, calc.device_class) == (10113, "int16", 0.1, "temperature")
     assert calc.name_en.startswith("Flow: calculated maximum") and not calc.enabled_default and calc.diagnostic
-    assert BY_KEY["heating_limit"].name_en == "Demand border" and BY_KEY["dhw_limit"].name_en == "Demand border"
+    assert BY_KEY["heating_demand_border"].name_en == "Demand border"
+    assert BY_KEY["dhw_demand_border"].name_en == "Demand border"
+    # 0.18.0: keys named after what they are; the registry entries move over, the entity IDs stay
+    assert RENAMED_KEYS["heating_limit"] == "heating_demand_border" and RENAMED_KEYS["dhw_limit"] == "dhw_demand_border"
+    assert "heating_limit" not in BY_KEY and "dhw_limit" not in BY_KEY
 
 
 def test_heat_quantity_counters_are_signed_32_bit() -> None:

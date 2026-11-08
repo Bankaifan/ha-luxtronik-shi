@@ -2,7 +2,7 @@
 
 A block (10050 ... 10053) is a state the writer holds: it stays as written until it is changed or the SHI
 watchdog releases it (docs/firmware-3.92.3-shi-full-analysis.md, 3.3 and 4; proven), so a switch is the right
-model. The triggers circulation and extra hot water are buttons (button.py), not switches, since 0.17.0.
+model. The triggers circulation and extra hot water are buttons (button.py), not switches, since 0.18.0.
 """
 
 from __future__ import annotations

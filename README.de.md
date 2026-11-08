@@ -160,7 +160,7 @@ nichts. Die Auswahlen zeigen:
 | 2 | `offset` | Anhebung (Sollwert der Regelung plus Anhebung) |
 | 3 | `level` | Stufe (Sollwert der Regelung, um die Stufe korrigiert) |
 
-**Geändert in 0.17.0:** Der Options-Schlüssel von Rohwert 0 heißt `no_influence` (vorher `off`, was er nicht ist).
+**Geändert in 0.18.0:** Der Options-Schlüssel von Rohwert 0 heißt `no_influence` (vorher `off`, was er nicht ist).
 Automationen und Optimizer-Konfigurationen, die auf einer Betriebsart-Auswahl `off` wählen oder vergleichen, müssen
 `no_influence` verwenden; der Water Heater nutzte den Schlüssel schon. Der Sensor Betriebsart zeigt für Rohwert 5
 entsprechend `no_request` statt `off`.
@@ -203,7 +203,7 @@ stillschweigend überschreibt, was ein Optimierer je Kreis schreibt.
 
 **Stufen** (`cfg_*_level`): Die Firmware nutzt für Rohwert 1 und 2 denselben Reglerparameter *Erhöhung*, beide sind
 deshalb eine Option `increased` (geschrieben als 1; eine von einem anderen Client geschriebene 2 zeigt ebenfalls
-`increased`). Rohwert 3 ist `decreased` (*Absenkung*). Die Option `increased2` aus 0.16.x gibt es nicht mehr.
+`increased`). Rohwert 3 ist `decreased` (*Absenkung*). Die Option `increased2` aus 0.17.x gibt es nicht mehr.
 
 ### Trigger: Zirkulationslauf und Extra-Warmwasser
 
@@ -211,20 +211,23 @@ Die Register 10070 (Zirkulation) und 10071 (Extra-Warmwasser) sind **Trigger**, 
 Schreiben von 1 startet die Aktion, und die Firmware setzt das Register selbst auf 0, wenn die Aktion vorbei ist
 (Zirkulation: sobald kein Lauf mit den Lauf- und Pausenzeiten der Regelung mehr aktiv ist; Extra-Warmwasser: wenn der
 Timer von `extra_dhw_duration` Minuten abläuft). Ein Trigger ist kein Zustand, den der Nutzer hält, deshalb ist seit
-0.17.0 jeder ein **Taster** plus ein **Binärsensor** im Gerät *Warmwasser*:
+0.18.0 jeder ein Start-**Taster** plus ein Stopp-**Taster** im Gerät *Warmwasser*, dazu ein Binärsensor, der zeigt, ob
+er läuft:
 
 | Schlüssel | Plattform | Wirkung |
 |---|---|---|
 | `circulation` | button | *Zirkulation: Lauf starten*: schreibt 1 nach 10070 |
-| `circulation_running` | binary_sensor | *Zirkulation: Lauf aktiv*: 10070 liest 1 (der Lauf der Reglerlogik, nicht der Pumpenausgang: der ist `pump_circulation`, ZIP) |
+| `circulation_stop` | button | *Zirkulation: beenden*: schreibt 0 nach 10070, die Pumpe stoppt sofort (außer das eigene Zeitprogramm der Regelung fordert gleichzeitig Zirkulation an) |
+| `pump_circulation` | binary_sensor | *Pumpe: Zirkulation (ZIP)*: der echte Pumpenausgang 10356; an bei Läufen von hier und bei Läufen des Zeitprogramms |
 | `extra_dhw` | button | *Extra: starten*: schreibt 1 nach 10071, das Warmwasser-Ziel wird für `extra_dhw_duration` auf `extra_dhw_setpoint` angehoben |
 | `extra_dhw_stop` | button | *Extra: beenden*: schreibt 0 nach 10071, was den Timer auf 0 setzt |
 | `extra_dhw_running` | binary_sensor | *Extra: läuft*: 10071 liest 1; `extra_dhw_remaining` zeigt die verbleibenden Minuten |
 
-Bis 0.16.x waren beide Trigger **Schalter** (`switch.<name>_zirkulation…`, `switch.<name>_extra…`). Diese Entitäten
-werden beim Start von 0.17.0 entfernt (die Registry-Einträge werden gelöscht, sonst blieben sie als tote Entitäten
+Bis 0.17.x waren beide Trigger **Schalter** (`switch.<name>_zirkulation…`, `switch.<name>_extra…`). Diese Entitäten
+werden beim Start von 0.18.0 entfernt (die Registry-Einträge werden gelöscht, sonst blieben sie als tote Entitäten
 stehen); die Taster bekommen neue Entity-IDs. **Automationen und der Heat Pump Optimizer müssen `button.press` auf dem
-neuen Taster aufrufen statt `switch.turn_on`** und den laufenden Zustand aus dem Binärsensor lesen. Ein Rücklesen von 0
+neuen Taster aufrufen statt `switch.turn_on`** (und `circulation_stop` / `extra_dhw_stop` statt `switch.turn_off`)
+und den laufenden Zustand aus `pump_circulation` und `extra_dhw_running` lesen. Ein Rücklesen von 0
 direkt nach dem Druck ist das normale Ende (oder die Regelung hat den Trigger nicht angenommen) und kein Fehler. Der
 Zirkulations-Trigger wird nicht angenommen, solange die Warmwasser-Betriebsart der Regelung *Ferien* oder *Aus* ist:
 *Aus* löscht auch das Ausstattungs-Flag `cap_hot_water`, der Taster ist dann nicht verfügbar; *Ferien* ist über die SHI
@@ -601,7 +604,7 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   python-luxtronik ab Firmware 3.90.1.
 * **Umbenannte Rohwerte (10109, 10110, 10112, 10113):** `raw_10109` heißt jetzt `outside_temp_average` (Außen
   Mittelwert, °C), `raw_10110` heißt jetzt `heat_source_input` (Wärmequelle Eintritt, °C), `raw_10112` heißt
-  `max_flow_temp` (Vorlauf Maximum, °C, standardmäßig deaktiviert) und seit 0.17.0 `raw_10113` `flow_calc_max` (*TVL
+  `max_flow_temp` (Vorlauf Maximum, °C, standardmäßig deaktiviert) und seit 0.18.0 `raw_10113` `flow_calc_max` (*TVL
   calc max*, der berechnete maximale Vorlauf, °C, standardmäßig deaktiviert). Die Integration überträgt die vorhandenen
   Entitäten beim Start, Entity-IDs, Verlauf und Einstellungen bleiben erhalten. Es ändert sich nur das Ende der
   Unique-ID; Verweise auf die alte `raw_*`-Unique-ID müssen angepasst werden.
@@ -609,12 +612,18 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   führt. Die aufgelösten haben richtige Sensoren: `hours_cooling` (10410, braucht *Kühlung*), `hours_solar` (10416,
   braucht die Ausstattungs-Option *Solar*, vorbelegt aus dem Flag `cap_solar` = Discrete Input 10004),
   `extra_dhw_setpoint`, `extra_dhw_duration` und `extra_dhw_remaining` (10500–10502) sowie `flow_calc_max` (10113).
-  **Seit 0.17.0 gibt es die Rohwort-Sensoren dieser Adressen (`raw_10410`, `raw_10411`, `raw_10416`, `raw_10417`,
+  **Seit 0.18.0 gibt es die Rohwort-Sensoren dieser Adressen (`raw_10410`, `raw_10411`, `raw_10416`, `raw_10417`,
   `raw_10500`, `raw_10501`, `raw_10502`) nicht mehr**; ihre Registry-Einträge werden beim Start gelöscht. Weiterhin
-  roh (deaktivierte Diagnose, nur gelesen, selten abgefragt): die Aus- und Eingänge 10350–10361 neben ihren
-  Binärsensoren und die Pool-Betriebsstunden 10412/10413 (die Firmware teilt sie durch 7200 statt 3600, der Faktor 2
-  ist nur wahrscheinlich, nicht gemessen). `heating_limit`/`dhw_limit` heißen *Anforderungsgrenze* (Sollwert minus
-  Hysterese); ihre Schlüssel sind unverändert.
+  roh (deaktivierte Diagnose, nur gelesen, selten abgefragt): die Pool-Betriebsstunden 10412/10413 (die Firmware teilt
+  sie durch 7200 statt 3600, der Faktor 2 ist nur wahrscheinlich, nicht gemessen). **Seit 0.18.0 gibt es auch die
+  Rohwert-Zwillinge der belegten Aus- und Eingänge (`raw_10350` … `raw_10356`, `raw_10360`, `raw_10361`) nicht mehr**;
+  die Binärsensoren `output_vbo`, `output_fp1` … `output_fp3`, `pump_heating`, `pump_hot_water`, `pump_circulation`,
+  `input_evu`, `input_evu2` lesen diese Register (gleiches Abfrageintervall), die Registry-Einträge der Rohwerte werden
+  beim Start gelöscht.
+* **Anforderungsgrenzen umbenannt (0.18.0):** `heating_limit` heißt jetzt `heating_demand_border` und `dhw_limit`
+  jetzt `dhw_demand_border` (*Anforderungsgrenze*: Sollwert minus Hysterese, von der Firmware nachgeführt, kein
+  Parameter). Die Integration überträgt die Registry-Einträge, Entity-IDs, Verlauf und Einstellungen bleiben erhalten;
+  es ändert sich nur das Ende der Unique-ID.
 * **Pool-Sperre und Leistungsbegrenzung:** Der Schalter für die Pool-Sperre (Register 10053) existiert nur mit gewähltem
   Pool. Die Leistungsbegrenzung besteht aus einer Auswahl für den Modus (keine / weich / hart, Register 10040) und einer
   Zahl für den Wert (0–30 kW, Register 10041).

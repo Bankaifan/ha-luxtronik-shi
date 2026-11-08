@@ -2,16 +2,18 @@
 
 Both registers are triggers (docs/firmware-3.92.3-shi-full-analysis.md, 3.2 and 3.3; proven): a write of 1
 starts the action, and the firmware sets the register back to 0 by itself when the action is over
-(circulation: once no run is active; extra hot water: when its timer ends). A trigger is not a state the user
-holds, so it is a button, and the running state is a binary sensor on the same register
-(``registers.DERIVED_FLAGS``: ``circulation_running``, ``extra_dhw_running``). The write goes through the
-coordinator like every other write (own-write bookkeeping, read-back); a read-back of 0 is the normal end and
-is not reported (``const.TRIGGER_KEYS``).
+(circulation: once no run is active; extra hot water: when its timer ends). A trigger is not a state the
+user holds, so it is a button. The running state is the binary sensor ``extra_dhw_running`` on 10071 and, for
+circulation, the pump output ``pump_circulation`` (ZIP, 10356), which also covers runs of the controller's
+time program. The write goes through the coordinator like every other write (own-write bookkeeping,
+read-back); a read-back of 0 is the normal end and is not reported (``const.TRIGGER_KEYS``).
 
-``extra_dhw_stop`` writes 0 to 10071, which sets the extra hot water timer to 0 (proven). The circulation
+``extra_dhw_stop`` writes 0 to 10071, which sets the extra hot water timer to 0 (proven). ``circulation_stop``
+writes 0 to 10070, which ends a circulation run at once unless the time program requests circulation at the
+same time (firmware V3.92.3, FUN_00275f94; proven; see ``registers.TRIGGER_ACTIONS``). The circulation
 trigger is not accepted while the controller's hot water operating mode is "off" or "holiday"; "off" is
-visible as the equipment flag ``cap_hot_water`` (``registers.TRIGGER_REQUIRES``), so the button is unavailable
-then.
+visible as the equipment flag ``cap_hot_water`` (``registers.TRIGGER_REQUIRES``), so both circulation buttons
+are unavailable then.
 """
 
 from __future__ import annotations

@@ -78,7 +78,7 @@ def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> N
 
     ``REMOVED_KEYS``: keys without any entity (on every platform). ``REMOVED_ENTITIES``: keys that moved to
     another platform; only the entry of the old platform goes (the switches ``circulation`` and ``extra_dhw``
-    of 0.16.x, which are buttons since 0.17.0). Without this, a dead entity would stay in the registry
+    of 0.17.x, which are buttons since 0.18.0). Without this, a dead entity would stay in the registry
     forever.
     """
     registry = er.async_get(hass)

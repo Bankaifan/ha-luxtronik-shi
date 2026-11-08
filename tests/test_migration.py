@@ -22,8 +22,11 @@ OLD_ENTITY_IDS = {
     "raw_10109": "sensor.waermepumpe_temperatur_aussen_mittelwert",
     "raw_10110": "sensor.waermepumpe_temperatur_waermequelle_eintritt",
     "raw_10112": "sensor.waermepumpe_rohwert_vorlauf_maximum_10112",
-    # the reference installation's entity ID of the raw value 10113 (0.9 ... 0.16.x)
+    # the reference installation's entity ID of the raw value 10113 (0.9 ... 0.17.x)
     "raw_10113": "sensor.warmepumpe_diagnose_rohwert_10113",
+    # the demand borders of the reference installation (keys renamed in 0.18.0)
+    "heating_limit": "sensor.warmepumpe_heizung_anforderungsgrenze",
+    "dhw_limit": "sensor.warmepumpe_warmwasser_anforderungsgrenze",
 }
 
 
@@ -144,8 +147,9 @@ async def test_new_installation_has_only_the_new_keys(hass: HomeAssistant, shi: 
 def test_added_raw_registers_come_from_python_luxtronik() -> None:
     """Addresses of the ``unknown_input_*`` definitions that still have no proper entity (10060 became
     cfg_room_setpoint; 10410/10411, 10416/10417 and 10500-10502 became hours_cooling, hours_solar and the
-    extra_dhw_* sensors in 0.17.0, their raw twins are gone)."""
-    assert RAW_INPUT_ADDRESSES_ADDED == (10352, 10353, 10412, 10413)
+    extra_dhw_* sensors, their raw twins are gone; 10352/10353 are only the binary sensors output_fp2/output_fp3
+    since 0.18.0)."""
+    assert RAW_INPUT_ADDRESSES_ADDED == (10412, 10413)
     assert RAW_HOLDING_ADDRESSES_ADDED == ()
     by_key = {reg.key: reg for reg in ALL_REGISTERS}
     for address in RAW_INPUT_ADDRESSES_ADDED:
@@ -170,16 +174,16 @@ async def test_added_raw_registers_are_read_and_disabled(hass: HomeAssistant, sh
     await _setup(hass, entry)
 
     registry = er.async_get(hass)
-    assert "raw_10352" not in entry.runtime_data.data  # disabled by default: not polled
-    for address in (10352, 10412):
+    assert "raw_10412" not in entry.runtime_data.data  # disabled by default: not polled
+    for address in (10412, 10413):
         registry.async_update_entity(
             registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"), disabled_by=None
         )
     await hass.async_block_till_done()
     data = entry.runtime_data.data
-    assert data["raw_10352"] == 52
     assert data["raw_10412"] == 12
-    for address in (10352, 10412):
+    assert data["raw_10413"] == 13
+    for address in (10412, 10413):
         registry.async_update_entity(
             registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"),
             disabled_by=er.RegistryEntryDisabler.INTEGRATION,

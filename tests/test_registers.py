@@ -2,7 +2,6 @@
 
 from custom_components.luxtronik_shi.coordinator import MAX_BLOCK, plan_blocks
 from custom_components.luxtronik_shi.registers import (
-    ALIAS_OF,
     ALL_REGISTERS,
     BY_KEY,
     LEVEL_OPTIONS,
@@ -16,9 +15,7 @@ def test_keys_and_addresses_are_unique():
     seen = set()
     for reg in ALL_REGISTERS:
         ident = (reg.kind, reg.address)
-        if reg.key in ALIAS_OF:
-            continue  # shares the register of a raw value, checked below
-        assert ident not in seen, ident
+        assert ident not in seen, ident  # a register has one entity (0.18.0: no raw twin of an output flag)
         seen.add(ident)
 
 
@@ -26,21 +23,25 @@ def test_no_word_of_a_32_bit_register_has_a_second_entity():
     """A proven value has one entity: no raw word sensor next to a counter or an extra hot water value."""
     wide = {reg.address + i for reg in ALL_REGISTERS if reg.width == 2 for i in range(2)}
     for reg in ALL_REGISTERS:
-        if reg.width == 1 and reg.kind == "input" and reg.key not in ALIAS_OF:
+        if reg.width == 1 and reg.kind == "input":
             assert reg.address not in wide, reg.key
 
 
-def test_aliases_share_their_register():
-    """A binary sensor for a proven output or input reads the register of its raw twin, nothing else."""
-    assert ALIAS_OF
-    for key, raw_key in ALIAS_OF.items():
-        alias, raw = BY_KEY[key], BY_KEY[raw_key]
-        assert alias.platform == "binary_sensor" and raw.platform == "sensor"
-        assert (alias.kind, alias.address, alias.dtype, alias.scale, alias.every) == (
-            raw.kind, raw.address, raw.dtype, raw.scale, raw.every
-        )
-        assert alias.source and alias.source == raw.source  # same proof as the raw value
-        assert not raw.enabled_default  # the raw twin stays as it was (disabled diagnostics)
+def test_output_flags_are_standalone_registers():
+    """The proven outputs and inputs are binary sensors of their own (0.18.0): same address and poll interval as
+    the removed raw twins, the firmware proof as source, and the raw keys are deleted from the registry."""
+    from custom_components.luxtronik_shi.registers import REMOVED_KEYS
+
+    expected = {
+        "output_vbo": (10350, 4), "output_fp1": (10351, 4), "output_fp2": (10352, 30), "output_fp3": (10353, 30),
+        "pump_heating": (10354, 4), "pump_hot_water": (10355, 4), "pump_circulation": (10356, 4),
+        "input_evu": (10360, 4), "input_evu2": (10361, 4),
+    }
+    for key, (address, every) in expected.items():
+        reg = BY_KEY[key]
+        assert (reg.platform, reg.kind, reg.address, reg.every) == ("binary_sensor", "input", address, every), key
+        assert reg.source and reg.source.startswith("proven: firmware"), key
+        assert f"raw_{address}" not in BY_KEY and f"raw_{address}" in REMOVED_KEYS
 
 
 def test_decode():
@@ -107,7 +108,7 @@ def test_raw_meanings_keep_key_and_stay_disabled():
         assert reg.name_de == meaning["name_de"] and reg.name_en == meaning["name_en"]
         assert not reg.enabled_default and reg.diagnostic
         assert reg.key not in RAW_KEYS
-    # 10113 is the proper sensor flow_calc_max since 0.17.0 (was raw_10113)
+    # 10113 is the proper sensor flow_calc_max since 0.18.0 (was raw_10113)
     assert "raw_10113" not in BY_KEY
     assert BY_KEY["flow_calc_max"].scale == 0.1 and BY_KEY["flow_calc_max"].dtype == "int16"
     assert decode(BY_KEY["flow_calc_max"], [253]) == 25.3
@@ -115,5 +116,5 @@ def test_raw_meanings_keep_key_and_stay_disabled():
     # have proper sensors and no raw twin
     assert BY_KEY["raw_10412"].source.startswith("proven:") and "likely" in BY_KEY["raw_10412"].source
     assert not {"raw_10410", "raw_10416", "raw_10500", "raw_10501", "raw_10502"} & set(BY_KEY)
-    # the remaining raw values without a meaning: outputs/inputs with binary sensor twins only
+    # no raw value without a meaning is left (the outputs/inputs are binary sensors only since 0.18.0)
     assert RAW_KEYS == set()

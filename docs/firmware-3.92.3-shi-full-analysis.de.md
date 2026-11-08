@@ -260,6 +260,22 @@ Stufen-Parameter (Tabelle `DAT_007e3ef0`, registriert in `FUN_0008a990`, Range �
 
 Mischkreise: `FUN_002084d0` (MK-Vorlaufsoll) → `FUN_00207eb4`, identische Logik mit den t2-IDs aus dem MK-Objekt (+0x48 Modus, +0x50 Sollwert, +0x4c Offset, +0x60 Stufe, +0x64/+0x68 Stufen-Parameter). Gesamt-Modus gilt auch hier. Ergebnis wird auf MK-Min/Max (Params 1072–1077) begrenzt, zuletzt + `Einst_WK_akt`. Kühl-Register 10015–10017 etc.: Grenzen 50..250 (5–25 °C) und −50..50 belegt; Konsument nicht einzeln verfolgt (**wahrscheinlich** analog).
 
+#### Heizkurve (belegt)
+
+Die Funktion `0x0020752c` berechnet die Heizkurve aus dem Endpunkt *E* und dem Parameter *Parallelverschiebung* *F*;
+*F* wird auf 5,0–35,0 °C begrenzt. Mit der Außentemperatur *T*<sub>außen</sub>:
+
+Soll = F + (E − 20) · (F − T<sub>außen</sub>) / (20 − (T<sub>außen</sub> − F) / 2)
+
+Das Ergebnis wird unten auf 15,0 °C begrenzt und danach vom Aufrufer auf Minimum und Maximum des Kreises (Mischkreise:
+`FUN_002084d0`, Parameter 1072–1077, danach + `Einst_WK_akt`). Ist E = 20,0, ist das Soll die Konstante *F*.
+
+Folgen: *F* ist der Punkt, an dem Außentemperatur und Soll gleich sind, und eine Änderung von *F* ändert die Steigung
+der Kurve; trotz des Namens ist es keine Parallelverschiebung. *E* ist das Soll bei −20 °C außen nur, wenn F = 20.
+
+An der Referenzanlage nachgerechnet: Heizkreis E/F 30/22 bei etwa 6 °C außen → 27,7 °C (Regelung 27,7); MK1 45/30 bei
+6,1 °C → 48,8 °C, auf das Maximum 45 begrenzt (Regelung 45,0); MK1 45/20 bei 5,8 °C → 33,1 °C (Regelung 33,0).
+
 ### 3.2 Warmwasser (10005–10008, 10051, 10071) – belegt
 
 * `FUN_00206d2c` wählt analog (nur mit „Enable SHI“; **kein** Gesamt-Einfluss): Modus 1 → Soll = 10006; 2 → Soll = normaler WW-Soll + 10007; 3 → + Parameter 0x4ae (Stufe 1/2, Erhöhung) bzw. 0x4ad (Stufe 3, Absenkung).
@@ -275,6 +291,7 @@ Mischkreise: `FUN_002084d0` (MK-Vorlaufsoll) → `FUN_00207eb4`, identische Logi
 * **10052 Sperre Kühlung** (t2/0x1c): `FUN_001a3a84`, `FUN_001ed6f8` (== 1 → Kühlung passiv/aktiv blockiert). **10053 Sperre Pool** (t2/0x1d): `FUN_001ef980`.
 * **10050 Sperre Heizung**: s. 3.1 Punkt 3; zusätzlich `FUN_002f9c0c` (Heizung gesperrt oder Kühlfreigabe) in das LPC-Zustandsobjekt.
 * **10070 Zirkulation** (t2/0x28, Visibility 8 = `ID_Visi_Zirkulation`): `FUN_00275f94` startet die ZIP-Logik (`DAT_00a17c7c`), Laufzeiten aus `Einst_Zirk_Ein/Aus_akt` × 60; wenn das Bit gesetzt ist, aber kein Lauf mehr aktiv, **setzt die Firmware 10070 auf 0** (über `FUN_00427538`). Gesperrt wenn Ba_Bw ∈ {3,4}.
+* **Beenden eines Laufs durch Schreiben von 0 in 10070** (belegt): `FUN_00275f94` bildet die Zirkulationsanforderung in jedem 1-s-Zyklus als *(10070 ≠ 0) ODER die Anforderung des eigenen Zirkulations-Zeitprogramms der Regelung* (`FUN_00252f54`) und übergibt sie an die ZIP-Zustandsmaschine (Objekt bei `DAT_00a17c7c`): Der Setter `FUN_00276488` speichert das Anforderungs-Flag, und `FUN_0028a5d4` meldet „läuft“ nur, wenn die Maschine freigegeben **und** `FUN_0028a4a0` wahr ist. `FUN_0028a4a0` liefert sofort falsch, solange das Anforderungs-Flag 0 ist; der Pumpenausgang (ZIP, Input 10356) stoppt also sofort. Der Laufzähler wird nicht zurückgesetzt, sondern eingefroren: Der nächste Start setzt die restliche Laufzeit fort statt einer vollen. Schreiben von 0 während eines Laufs beendet ihn also, außer das Zeitprogramm fordert gleichzeitig Zirkulation an. Die Integration bietet das als Taster `circulation_stop` an; ob die Pumpe läuft, zeigt der Binärsensor `pump_circulation` (10356), der auch Läufe des Zeitprogramms abdeckt.
 * **10060 Raumsollwert** (`RBE_RoomTemperatureSetpointRegister`, `FUN_000dd478`): bindet **direkt t1/0x47c = Parameter 1148 `RBE_Raumtemperatur_Soll`** (UINT16, 0,1 °C). Schreiben setzt den Parameter mit Quelle SHI; `avail()` (`FUN_000dfce4`) = Visibility(0x176) ∧ `FUN_000e3c34`: RBE vorhanden, verbunden **und `RBE_Einflussfaktor_RT_akt` > 0**. Grenzen: kein Range-Objekt im SHI-Register selbst, aber der Parameter trägt seine eigenen Bounds (Registrierung `FUN_000889e4`-Pfad in `FUN_00099a78`, Format „%.01f°C“); konkrete Min/Max im Dump nicht als Zahlen sichtbar → **offen**. Da es ein t1-Parameter ist, wird er beim Wächterablauf auf den **persistierten Wert** zurückgesetzt (typ 1 in `FUN_000881e0`).
 * **t2/0 „Schnellladung“** (Text 4, `FUN_0009bab4`): internes SHI-Item, das von `FUN_00216a3c`/`FUN_0031f6f0`/`FUN_0031fb78` (WW-Schnellladung über Bedienteil) gesetzt wird; **kein SHI-Register bindet t2/0** → über Modbus nicht erreichbar.
 
@@ -311,7 +328,7 @@ Mischkreise: `FUN_002084d0` (MK-Vorlaufsoll) → `FUN_00207eb4`, identische Logi
    * `unknown_input_404..417` = Betriebsstunden WP/Heizung/WW/**Kühlung**/**Schwimmbad (Divisor 7200!)**/**Solar**, UINT32.
    * `unknown_input_500/501/502` = Extra-WW Soll (0,1 °C), Dauer (min), Restzeit (min).
    * `unknown_holding_60` = **schreibbarer** RBE-Raumsollwert (Parameter 1148), 0,1 °C, nur mit RBE + Einflussfaktor > 0 verfügbar.
-   * `heating_limit`(10107)/`dhw_limit`(10124) sind die dynamischen Anforderungsgrenzen (Soll − Hysterese), keine Parameter.
+   * `heating_limit`(10107)/`dhw_limit`(10124) sind die dynamischen Anforderungsgrenzen (Soll − Hysterese), keine Parameter; seit 0.18.0 heißen die Schlüssel `heating_demand_border`/`dhw_demand_border`.
    * `max_flow_temp`(10112) = „Vorlauf max.“ – bestätigt.
 2. **Gesamt-Modus 10065–10067** (bisher ohne Beleg, Entities deaktiviert): belegt – überschreibt die Heizkreis- **und** Mischkreis-Modi, Modus 1 (Sollwert) ist dort wirkungslos; Offset −50..+50 (nicht −200..200 wie bei 10002!), Stufe über Parameter „Hz. allg.“ 0x4a3/0x4a4.
 3. **Stufen-Semantik** (`_LEVELS`): 0 Normal, 1 Erhöhung, 2 Erhöhung (identisch zu 1), 3 Absenkung. Die Beträge sind die Geräte-Parameter 1187–1198 (Menü „Offsets“, ±20 K in 0,5-K-Schritten). python-luxtroniks `LevelMode` („Increased2“) ist in der Firmware kein eigener Wert.

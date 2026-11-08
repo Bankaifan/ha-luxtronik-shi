@@ -429,7 +429,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     offset = reg.address - block.start
                     self._store(reg, words[offset : offset + reg.width], poll=True)
                 return
-        shared: dict[int, list[Register]] = {}  # entities that share a register (ALIAS_OF) are read once
+        shared: dict[int, list[Register]] = {}  # entities that share a register are read once
         for reg in block.registers:
             shared.setdefault(reg.address, []).append(reg)
         for regs in shared.values():

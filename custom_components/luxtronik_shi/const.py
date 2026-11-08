@@ -39,8 +39,9 @@ OWN_WRITE_WINDOW = 600  # seconds
 # sections 3.2 and 3.3; proven). ``circulation`` (10070) starts a circulation run and reads 0 again once no
 # run is active; ``extra_dhw`` (10071) starts extra hot water for the controller's duration (parameter 1147,
 # sensor ``extra_dhw_duration``) and reads 0 again when the timer ends (``extra_dhw_remaining`` counts
-# down). They are buttons (press = write 1; ``extra_dhw_stop`` writes 0) with a "running" binary sensor on
-# the same register (``registers.DERIVED_FLAGS``), not switches (0.16.x): a read-back of 0 is the normal end
+# down). They are buttons (press = write 1; ``circulation_stop`` and ``extra_dhw_stop`` write 0), not switches
+# (0.17.x); the running state is ``extra_dhw_running`` and the pump output ``pump_circulation``: a read-back
+# of 0 is the normal end
 # of the action, never a failed write, a device reset or another writer, so they are not restored after a
 # reset, not compared for changes outside Home Assistant, and a default read-back after a write is not
 # reported for them.

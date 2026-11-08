@@ -54,16 +54,17 @@ _add("room", "temps",
      "needs the *room unit* selected in the equipment and is disabled by default.",
      "Raumtemperatur, gemessen von der Raumeinheit (RBE+). Nur mit einer solchen Einheit vorhanden; die "
      "Entität braucht die gewählte *Raumeinheit* in der Ausstattung und ist standardmäßig deaktiviert.", "PL")
-_add("heating_limit", "temps",
+_add("heating_demand_border", "temps",
      "Demand border of heating (firmware item *Heating demand border*). **Not the outside heating limit "
      "(Heizgrenze) and not a parameter:** the firmware tracks it as the effective return target minus the heating "
      "hysteresis (in mode `setpoint` it follows the SHI setpoint). Below it heating is requested; python-luxtronik "
-     "adds that the soft power limit is ignored below it. Key unchanged, name changed in 0.17.0 (proven).",
+     "adds that the soft power limit is ignored below it. Name changed in 0.17.0, key `heating_limit` renamed in "
+     "0.18.0 (the entity ID stays) (proven).",
      "Anforderungsgrenze des Heizens (Firmware-Item *Heating demand border*). **Nicht die Heizgrenze "
      "(Außentemperatur) und kein Parameter:** Die Firmware führt sie als wirksamen Rücklauf-Sollwert minus "
      "Heiz-Hysterese nach (in der Betriebsart `setpoint` folgt sie dem SHI-Sollwert). Darunter wird Heizen "
-     "angefordert; laut python-luxtronik wird darunter die weiche Leistungsbegrenzung ignoriert. Schlüssel "
-     "unverändert, Name seit 0.17.0 geändert (belegt).", "FW, PL")
+     "angefordert; laut python-luxtronik wird darunter die weiche Leistungsbegrenzung ignoriert. Name seit 0.17.0 "
+     "geändert, Schlüssel `heating_limit` in 0.18.0 umbenannt (die Entity-ID bleibt) (belegt).", "FW, PL")
 _add("outside", "temps",
      "Measured outside (outdoor) temperature. It drives the heating curve.",
      "Gemessene Außentemperatur. Sie bestimmt die Heizkurve.", "PL, WEB")
@@ -110,14 +111,15 @@ _add("dhw_max", "dhw_temps",
      "Maximale Warmwassertemperatur (Reglerparameter *Einst_BW_max*). Jedes Warmwasser-Ziel wird darauf begrenzt, "
      "auch der SHI-Sollwert: Ein Sollwert darüber wird angenommen, wirkt aber nur bis zu diesem Wert (belegt).",
      "PL, FW")
-_add("dhw_limit", "dhw_temps",
+_add("dhw_demand_border", "dhw_temps",
      "Demand border of hot water (firmware item *DHW Demand border*): the effective hot water target minus the "
      "hysteresis, tracked by the firmware, not a parameter. Below it hot water is requested; python-luxtronik adds "
-     "that the soft power limit is ignored below it. Key unchanged, name changed in 0.17.0 (proven).",
+     "that the soft power limit is ignored below it. Name changed in 0.17.0, key `dhw_limit` renamed in 0.18.0 (the "
+     "entity ID stays) (proven).",
      "Anforderungsgrenze des Warmwassers (Firmware-Item *DHW Demand border*): der wirksame Warmwasser-Sollwert "
      "minus Hysterese, von der Firmware nachgeführt, kein Parameter. Darunter wird Warmwasser angefordert; laut "
-     "python-luxtronik wird darunter die weiche Leistungsbegrenzung ignoriert. Schlüssel unverändert, Name seit "
-     "0.17.0 geändert (belegt).", "FW, PL")
+     "python-luxtronik wird darunter die weiche Leistungsbegrenzung ignoriert. Name seit 0.17.0 geändert, "
+     "Schlüssel `dhw_limit` in 0.18.0 umbenannt (die Entity-ID bleibt) (belegt).", "FW, PL")
 
 # ------------------------------------------------------------------ power
 _add("compressor_thermal_power", "power",
@@ -521,41 +523,47 @@ _add("cfg_dhw_level", "hot_water",
 _add("circulation", "hot_water",
      "**Button** that starts a hot water circulation run (register 10070, a trigger; proven). The run follows the "
      "controller's run and pause times (*Einst_Zirk_Ein/Aus*); once no run is active any more the firmware sets "
-     "the register back to 0 itself. `circulation_running` shows whether a run is active. Not accepted while the "
+     "the register back to 0 itself; `circulation_stop` ends it early. Whether the pump runs (also for runs of the "
+     "controller's own time program) is `pump_circulation` (ZIP output). Not accepted while the "
      "hot water operating mode of the controller is *holiday* or *off*: *off* also clears the equipment flag "
      "`cap_hot_water`, so the button is unavailable then; *holiday* cannot be read over the SHI, a press is then "
      "silently without effect. Needs firmware 3.92.0 or later. One of the keys the Heat Pump Optimizer depends on "
-     "(**since 0.17.0 a button, up to 0.16.x a switch**: call `button.press` instead of `switch.turn_on`). The "
+     "(**since 0.18.0 a button, up to 0.17.x a switch**: call `button.press` instead of `switch.turn_on`). The "
      "heating circulation pumps cannot be controlled through the SHI. Because the controller ends the run itself, "
      "a read-back of 0 is not a failed write and not a change outside Home Assistant, and it is not restored after "
      "a reset. The *Enable SHI* parameter does not apply to it.",
      "**Taster**, der einen Zirkulationslauf des Warmwassers startet (Register 10070, ein Trigger; belegt). Der "
      "Lauf folgt den Lauf- und Pausenzeiten der Regelung (*Einst_Zirk_Ein/Aus*); sobald kein Lauf mehr aktiv ist, "
-     "setzt die Firmware das Register selbst auf 0. `circulation_running` zeigt, ob ein Lauf aktiv ist. Nicht "
+     "setzt die Firmware das Register selbst auf 0; `circulation_stop` beendet ihn vorzeitig. Ob die Pumpe läuft "
+     "(auch bei Läufen des eigenen Zeitprogramms der Regelung), zeigt `pump_circulation` (ZIP-Ausgang). Nicht "
      "angenommen, solange die Warmwasser-Betriebsart der Regelung *Ferien* oder *Aus* ist: *Aus* löscht auch das "
      "Ausstattungs-Flag `cap_hot_water`, der Taster ist dann nicht verfügbar; *Ferien* ist über die SHI nicht "
      "lesbar, ein Druck bleibt dann stillschweigend ohne Wirkung. Braucht Firmware 3.92.0 oder neuer. Einer der "
-     "Schlüssel, auf die der Heat Pump Optimizer angewiesen ist (**seit 0.17.0 ein Taster, bis 0.16.x ein "
+     "Schlüssel, auf die der Heat Pump Optimizer angewiesen ist (**seit 0.18.0 ein Taster, bis 0.17.x ein "
      "Schalter**: `button.press` statt `switch.turn_on` aufrufen). Die Heizungs-Umwälzpumpen lassen sich über die "
      "SHI nicht steuern. Weil die Regelung den Lauf selbst beendet, ist ein Rücklesen von 0 kein fehlgeschlagener "
      "Schreibzugriff und keine Änderung außerhalb von Home Assistant, und er wird nach einem Reset nicht "
      "wiederhergestellt. Der Parameter *Enable SHI* gilt für ihn nicht.", "FW, PL")
-_add("circulation_running", "hot_water",
-     "On while a circulation run started over the SHI is active: register 10070 reads 1 until the firmware sets it "
-     "back to 0 (proven). This is the run of the controller logic with its run and pause times, not the pump "
-     "output itself; the pump output is `pump_circulation` (ZIP). Unavailable when the register reads *not "
-     "available* (no circulation pump in this installation). Same register as the `circulation` button, read once.",
-     "An, solange ein über die SHI gestarteter Zirkulationslauf aktiv ist: Register 10070 liest 1, bis die Firmware "
-     "es selbst auf 0 setzt (belegt). Das ist der Lauf der Reglerlogik mit ihren Lauf- und Pausenzeiten, nicht der "
-     "Pumpenausgang selbst; der ist `pump_circulation` (ZIP). Nicht verfügbar, wenn das Register *nicht "
-     "verfügbar* liest (keine Zirkulationspumpe in dieser Anlage). Dasselbe Register wie der Taster `circulation`, "
-     "nur einmal gelesen.", "FW")
+_add("circulation_stop", "hot_water",
+     "**Button** that ends a running circulation run: writes 0 to register 10070 (proven from firmware V3.92.3). The "
+     "circulation logic computes its request every second as *register 10070 is not 0* **or** *the controller's own "
+     "circulation time program requests a run*; with the request at 0 the pump output (`pump_circulation`) stops at "
+     "once. The run counter is frozen, not reset: the next start resumes the remaining on-time instead of a full "
+     "one. While the time program requests circulation at the same time, the pump keeps running. Unavailable like "
+     "the `circulation` button (hot water *off*, no circulation pump). Harmless while no run is active.",
+     "**Taster**, der einen laufenden Zirkulationslauf beendet: schreibt 0 in Register 10070 (aus der Firmware "
+     "V3.92.3 belegt). Die Zirkulationslogik bildet ihre Anforderung jede Sekunde als *Register 10070 ist nicht 0* "
+     "**oder** *das eigene Zirkulations-Zeitprogramm der Regelung fordert einen Lauf*; ist die Anforderung 0, stoppt "
+     "der Pumpenausgang (`pump_circulation`) sofort. Der Laufzähler wird eingefroren, nicht zurückgesetzt: Der "
+     "nächste Start setzt die restliche Laufzeit fort statt einer vollen. Fordert das Zeitprogramm gleichzeitig "
+     "Zirkulation an, läuft die Pumpe weiter. Nicht verfügbar wie der Taster `circulation` (Warmwasser *Aus*, keine "
+     "Zirkulationspumpe). Ohne laufenden Lauf wirkungslos.", "FW")
 _add("extra_dhw", "hot_water",
      "**Button** that starts extra hot water (register 10071, a trigger; proven): the controller's extra hot water "
      "timer starts with the duration `extra_dhw_duration` (parameter 1147); while it runs the hot water target is "
      "raised to `extra_dhw_setpoint` (parameter 1146, limited to `dhw_max`), `extra_dhw_running` is on and "
      "`extra_dhw_remaining` counts down. When the timer ends the firmware sets the register back to 0 by itself; "
-     "`extra_dhw_stop` ends it early. Needs firmware 3.92.0 or later. **Since 0.17.0 a button, up to 0.16.x a "
+     "`extra_dhw_stop` ends it early. Needs firmware 3.92.0 or later. **Since 0.18.0 a button, up to 0.17.x a "
      "switch** (`button.press` instead of `switch.turn_on`). A read-back of 0 is the normal end, so it is not "
      "restored after a reset and not counted as an external change. The *Enable SHI* parameter does not apply to "
      "it.",
@@ -564,15 +572,15 @@ _add("extra_dhw", "hot_water",
      "Warmwasser-Ziel auf `extra_dhw_setpoint` (Parameter 1146, begrenzt auf `dhw_max`) angehoben, "
      "`extra_dhw_running` ist an und `extra_dhw_remaining` zählt herunter. Läuft der Timer ab, setzt die Firmware "
      "das Register selbst auf 0; `extra_dhw_stop` beendet ihn vorzeitig. Braucht Firmware 3.92.0 oder neuer. "
-     "**Seit 0.17.0 ein Taster, bis 0.16.x ein Schalter** (`button.press` statt `switch.turn_on`). Ein Rücklesen "
+     "**Seit 0.18.0 ein Taster, bis 0.17.x ein Schalter** (`button.press` statt `switch.turn_on`). Ein Rücklesen "
      "von 0 ist das normale Ende, deshalb wird er nach einem Reset nicht wiederhergestellt und nicht als externe "
      "Änderung gezählt. Der Parameter *Enable SHI* gilt für ihn nicht.", "FW, PL")
 _add("extra_dhw_stop", "hot_water",
      "**Button** that ends a running extra hot water early: writes 0 to register 10071, which sets the controller's "
-     "extra hot water timer to 0 (proven). Harmless while none runs. Replaces turning the 0.16.x switch off.",
+     "extra hot water timer to 0 (proven). Harmless while none runs. Replaces turning the 0.17.x switch off.",
      "**Taster**, der ein laufendes Extra-Warmwasser vorzeitig beendet: schreibt 0 in Register 10071, was den "
      "Extra-Warmwasser-Timer der Regelung auf 0 setzt (belegt). Ohne laufendes Extra-Warmwasser wirkungslos. "
-     "Ersetzt das Ausschalten des Schalters von 0.16.x.", "FW")
+     "Ersetzt das Ausschalten des Schalters von 0.17.x.", "FW")
 _add("extra_dhw_running", "hot_water",
      "On while extra hot water started over the SHI runs: register 10071 reads 1 until the timer ends and the "
      "firmware sets it back to 0 (proven); `extra_dhw_remaining` shows the minutes left. Same register as the "
@@ -629,14 +637,14 @@ _add("cfg_overall_mode", "overall",
      "Control mode of the heating circuit **and** all mixing circuits at once (proven). While it is not "
      "`no_influence`, the modes `cfg_heating_mode` and `cfg_mk*_mode` are ignored: `offset` applies "
      "`cfg_overall_offset`, `level` applies `cfg_overall_level`. **Raw 1 (setpoint) is not implemented** by the "
-     "firmware for this group, it acts like `no_influence`: since 0.17.0 the select offers only `no_influence`, "
+     "firmware for this group, it acts like `no_influence`: since 0.18.0 the select offers only `no_influence`, "
      "`offset` and `level`; a raw 1 another client wrote shows as *unknown* (the raw value is in the diagnostics "
      "and in the change notice). Hot water is not affected. Disabled by default (owner decision: an active "
      "overall mode silently overrides what an optimizer sets per circuit); not restored after a reset.",
      "Betriebsart des Heizkreises **und** aller Mischkreise zugleich (belegt). Solange sie nicht `no_influence` "
      "ist, werden `cfg_heating_mode` und `cfg_mk*_mode` ignoriert: `offset` wendet `cfg_overall_offset` an, "
      "`level` `cfg_overall_level`. **Roh 1 (Sollwert) ist von der Firmware nicht umgesetzt** für diese Gruppe, "
-     "es wirkt wie `no_influence`: Seit 0.17.0 bietet das Select nur `no_influence`, `offset` und `level` an; "
+     "es wirkt wie `no_influence`: Seit 0.18.0 bietet das Select nur `no_influence`, `offset` und `level` an; "
      "eine von einem anderen Client geschriebene 1 zeigt *unbekannt* (der Rohwert steht in der Diagnose und im "
      "Änderungshinweis). Warmwasser ist nicht betroffen. Standardmäßig deaktiviert (Entscheidung des "
      "Eigentümers: Eine aktive Gesamt-Betriebsart überschreibt stillschweigend, was ein Optimierer je Kreis "
@@ -779,13 +787,13 @@ _add("flow_calc_max", "temps",
      "Firmware item *TVL calc max* (t0/0x67): the calculated maximum flow temperature, the return target plus the "
      "moving average of the flow minus return spread, in 0.1 °C (wire value 253 = 25.3 °C). Proven by the firmware "
      "(formula and text); whether the controller uses it as a setpoint or as an upper limit is open. Measured: 253 "
-     "with a return target of 20.0 and an average spread of 5.3 K. Was `raw_10113` up to 0.16.x (named *heating "
+     "with a return target of 20.0 and an average spread of 5.3 K. Was `raw_10113` up to 0.17.x (named *heating "
      "target (calculated)* before 0.17.0); the entity ID stays. Disabled by default.",
      "Firmware-Item *TVL calc max* (t0/0x67): die berechnete maximale Vorlauftemperatur, Rücklauf-Sollwert plus "
      "gleitender Mittelwert der Differenz Vorlauf minus Rücklauf, in 0,1 °C (Rohwert 253 = 25,3 °C). Von der "
      "Firmware belegt (Formel und Text); ob die Regelung ihn als Sollwert oder als Obergrenze nutzt, ist "
      "ungeklärt. Gemessen: 253 bei einem Rücklauf-Sollwert von 20,0 und einer mittleren Spreizung von 5,3 K. War "
-     "bis 0.16.x `raw_10113` (davor *Vorlauf: Soll Heizen (berechnet)* genannt); die Entity-ID bleibt. "
+     "bis 0.17.x `raw_10113` (davor *Vorlauf: Soll Heizen (berechnet)* genannt); die Entity-ID bleibt. "
      "Standardmäßig deaktiviert.", "FW, M")
 _POOL_HOURS_EN = ("the 32-bit operating hour counter of the pool `Zaehler_BetrZeitSW` (parameter 859) that starts at "
                   "10412. The SHI divides by **7200** instead of 3600 (the control panel shows the same counter with "
@@ -798,67 +806,33 @@ _POOL_HOURS_DE = ("des 32-Bit-Betriebsstundenzählers des Schwimmbads `Zaehler_B
                   "Standardmäßig deaktiviert.")
 _add("raw_10412", "raw", "High word of " + _POOL_HOURS_EN, "Oberes Wort " + _POOL_HOURS_DE, "FW")
 _add("raw_10413", "raw", "Low word of " + _POOL_HOURS_EN, "Unteres Wort " + _POOL_HOURS_DE, "FW")
-_OUT_EN = ("Digital output of the controller, 0 off and 1 on; firmware variable `{var}` (item `{item}`), proven by the "
-           "firmware. {meas} Disabled by default.")
-_OUT_DE = ("Digitaler Ausgang der Regelung, 0 aus und 1 an; Firmware-Variable `{var}` (Item `{item}`), von der "
-           "Firmware belegt. {meas} Standardmäßig deaktiviert.")
-for _addr, _var, _item, _en, _de in (
-    (10350, "VBOout", "t0/0x45", "Measured: coincides with the compressor runs.",
-     "Gemessen: deckt sich mit den Verdichterläufen."),
-    (10351, "FP1out", "t0/0x6d", "Measured: follows the heating circulation pump.",
-     "Gemessen: folgt der Heizungsumwälzpumpe."),
-    (10352, "FP2out", "t0/0x4c", "Not measured (the reference installation has no second circuit).",
-     "Nicht gemessen (die Referenzanlage hat keinen zweiten Kreis)."),
-    (10353, "FP3out", "t0/0x4d", "Not measured (the reference installation has no third circuit).",
-     "Nicht gemessen (die Referenzanlage hat keinen dritten Kreis)."),
-    (10354, "HUPout", "t0/0x20", "Heating circulation pump (HUP). Measured; identical to 10351 on the reference "
-     "installation.", "Heizungsumwälzpumpe (HUP). Gemessen; an der Referenzanlage identisch mit 10351."),
-    (10355, "BUPout", "t0/0x44", "DHW pump (BUP). Measured.", "Brauchwasserumwälzpumpe (BUP). Gemessen."),
-    (10356, "ZIPout", "t0/0x48", "Circulation pump (ZIP). Measured: pulses of 2 minutes.",
-     "Zirkulationspumpe (ZIP). Gemessen: Pulse von 2 Minuten."),
-):
-    _add(f"raw_{_addr}", "raw", _OUT_EN.format(var=_var, item=_item, meas=_en),
-         _OUT_DE.format(var=_var, item=_item, meas=_de), "FW, M")
-    del _en, _de
-_add("raw_10360", "raw",
-     "Digital input EVU (utility lock), 0 or 1; firmware variable `EVUin` (item `t0/0x2a`), the name is proven. "
-     "Measured: constant 1 while the native `evu_unlocked` of the Luxtronik integration is on, so 1 most likely means "
-     "released (inferred from that single state). Disabled by default.",
-     "Digitaler Eingang EVU (EVU-Sperre), 0 oder 1; Firmware-Variable `EVUin` (Item `t0/0x2a`), der Name ist "
-     "belegt. Gemessen: konstant 1, solange das native `evu_unlocked` der Luxtronik-Integration an ist; 1 heißt "
-     "also wahrscheinlich freigegeben (aus diesem einen Zustand abgeleitet). Standardmäßig deaktiviert.", "FW, M")
-_add("raw_10361", "raw",
-     "Digital input EVU 2, 0 or 1; firmware variable `EVU2in` (item `t0/0x2b`), the name is proven. Measured: "
-     "constant 0 on the reference installation (the native `evu2` is off), so no statement about the other state. "
-     "Disabled by default.",
-     "Digitaler Eingang EVU 2, 0 oder 1; Firmware-Variable `EVU2in` (Item `t0/0x2b`), der Name ist belegt. "
-     "Gemessen: konstant 0 an der Referenzanlage (das native `evu2` ist aus), über den anderen Zustand ist also "
-     "nichts bekannt. Standardmäßig deaktiviert.", "FW, M")
-
-# ------------------------------------------------------------------ outputs and inputs (binary sensors on proven raw values)
-# Same registers as the raw sensors above (read once, not twice); the raw sensors keep their keys.
-_FLAG_EN = (" Same register as the `{raw}` sensor (disabled by default), read once. Proven by the firmware "
+# ------------------------------------------------------------------ outputs and inputs (binary sensors on proven registers)
+# Up to 0.17.x each of these registers also had a disabled raw sensor `raw_<address>`; since 0.18.0 the binary sensor
+# is the only entity of its register.
+_FLAG_EN = (" Register {raw}; up to 0.17.x also the raw sensor `raw_{raw}`, removed in 0.18.0. Proven by the firmware "
             "(`{var}`, item `{item}`). {meas}")
-_FLAG_DE = (" Dasselbe Register wie der Sensor `{raw}` (standardmäßig deaktiviert), nur einmal gelesen. Von der "
+_FLAG_DE = (" Register {raw}; bis 0.17.x zusätzlich der Rohwert-Sensor `raw_{raw}`, in 0.18.0 entfernt. Von der "
             "Firmware belegt (`{var}`, Item `{item}`). {meas}")
 for _key, _raw, _var, _item, _en, _de, _meas_en, _meas_de in (
-    ("pump_heating", "raw_10354", "HUPout", "t0/0x20", "Heating circulation pump (HUP) runs.",
+    ("pump_heating", "10354", "HUPout", "t0/0x20", "Heating circulation pump (HUP) runs.",
      "Heizungsumwälzpumpe (HUP) läuft.", "Measured.", "Gemessen."),
-    ("pump_hot_water", "raw_10355", "BUPout", "t0/0x44", "Hot water pump (BUP) runs.",
+    ("pump_hot_water", "10355", "BUPout", "t0/0x44", "Hot water pump (BUP) runs.",
      "Brauchwasserpumpe (BUP) läuft.", "Measured.", "Gemessen."),
-    ("pump_circulation", "raw_10356", "ZIPout", "t0/0x48", "Circulation pump (ZIP) runs.",
-     "Zirkulationspumpe (ZIP) läuft.", "Measured: pulses of 2 minutes.", "Gemessen: Pulse von 2 Minuten."),
-    ("output_vbo", "raw_10350", "VBOout", "t0/0x45", "Digital output VBO is on. What it switches is not "
+    ("pump_circulation", "10356", "ZIPout", "t0/0x48", "Circulation pump (ZIP) runs: the running indicator of "
+     "circulation, for runs started with the `circulation` button and runs of the controller's time program alike.",
+     "Zirkulationspumpe (ZIP) läuft: die Laufanzeige der Zirkulation, für Läufe über den Taster `circulation` "
+     "ebenso wie für Läufe des Zeitprogramms der Regelung.", "Measured: pulses of 2 minutes.", "Gemessen: Pulse von 2 Minuten."),
+    ("output_vbo", "10350", "VBOout", "t0/0x45", "Digital output VBO is on. What it switches is not "
      "documented (open).", "Digitaler Ausgang VBO ist an. Was er schaltet, ist nicht dokumentiert (ungeklärt).",
      "Measured: coincides with the compressor runs.", "Gemessen: deckt sich mit den Verdichterläufen."),
-    ("output_fp1", "raw_10351", "FP1out", "t0/0x6d", "Digital output FP1 is on.",
+    ("output_fp1", "10351", "FP1out", "t0/0x6d", "Digital output FP1 is on.",
      "Digitaler Ausgang FP1 ist an.", "Measured: follows the heating circulation pump.",
      "Gemessen: folgt der Heizungsumwälzpumpe."),
-    ("output_fp2", "raw_10352", "FP2out", "t0/0x4c", "Digital output FP2 is on. Disabled by default.",
+    ("output_fp2", "10352", "FP2out", "t0/0x4c", "Digital output FP2 is on. Disabled by default.",
      "Digitaler Ausgang FP2 ist an. Standardmäßig deaktiviert.",
      "Not measured (the reference installation has no second circuit).",
      "Nicht gemessen (die Referenzanlage hat keinen zweiten Kreis)."),
-    ("output_fp3", "raw_10353", "FP3out", "t0/0x4d", "Digital output FP3 is on. Disabled by default.",
+    ("output_fp3", "10353", "FP3out", "t0/0x4d", "Digital output FP3 is on. Disabled by default.",
      "Digitaler Ausgang FP3 ist an. Standardmäßig deaktiviert.",
      "Not measured (the reference installation has no third circuit).",
      "Nicht gemessen (die Referenzanlage hat keinen dritten Kreis)."),
@@ -869,22 +843,22 @@ _add("input_evu", "status",
      "Level of the digital input EVU (utility lock): on = level 1. **Which level means a lock is not proven.** "
      "Measured: constant 1 while the native `evu_unlocked` of the Luxtronik integration is on, so 1 most likely "
      "means released; that is inferred from one state only, a real lock has not been measured. Use the operating "
-     "mode *Utility lockout* for the lock itself. Same register as `raw_10360` (disabled by default), read once; "
-     "disabled by default.",
+     "mode *Utility lockout* for the lock itself. Register 10360 (up to 0.17.x also the raw "
+     "sensor `raw_10360`, removed in 0.18.0); disabled by default.",
      "Pegel des digitalen Eingangs EVU (EVU-Sperre): an = Pegel 1. **Welcher Pegel eine Sperre bedeutet, ist nicht "
      "belegt.** Gemessen: konstant 1, solange das native `evu_unlocked` der Luxtronik-Integration an ist; 1 heißt "
      "also wahrscheinlich freigegeben, aus diesem einen Zustand abgeleitet, eine echte Sperre wurde nicht "
-     "gemessen. Für die Sperre selbst die Betriebsart *EVU-Sperre* verwenden. Dasselbe Register wie `raw_10360` "
-     "(standardmäßig deaktiviert), nur einmal gelesen; standardmäßig deaktiviert.", "FW, M")
+     "gemessen. Für die Sperre selbst die Betriebsart *EVU-Sperre* verwenden. Register 10360 (bis 0.17.x "
+     "zusätzlich der Rohwert-Sensor `raw_10360`, in 0.18.0 entfernt); standardmäßig deaktiviert.", "FW, M")
 _add("input_evu2", "status",
      "Level of the digital input EVU 2: on = level 1. The name is proven by the firmware (`EVU2in`, item "
      "`t0/0x2b`); the meaning of the levels is not. Measured: constant 0 on the reference installation (the native "
-     "`evu2` is off), so nothing is known about the other state. Same register as `raw_10361`, read once; disabled "
-     "by default.",
+     "`evu2` is off), so nothing is known about the other state. Register 10361 (up to 0.17.x also "
+     "`raw_10361`, removed in 0.18.0); disabled by default.",
      "Pegel des digitalen Eingangs EVU 2: an = Pegel 1. Der Name ist von der Firmware belegt (`EVU2in`, Item "
      "`t0/0x2b`), die Bedeutung der Pegel nicht. Gemessen: konstant 0 an der Referenzanlage (das native `evu2` "
-     "ist aus), über den anderen Zustand ist also nichts bekannt. Dasselbe Register wie `raw_10361`, nur einmal "
-     "gelesen; standardmäßig deaktiviert.", "FW, M")
+     "ist aus), über den anderen Zustand ist also nichts bekannt. Register 10361 (bis 0.17.x "
+     "zusätzlich `raw_10361`, in 0.18.0 entfernt); standardmäßig deaktiviert.", "FW, M")
 
 _add("firmware_version", "system",
      "Firmware version of the controller as text, for example `3.92.3`, composed of the registers 10400, 10401 and "

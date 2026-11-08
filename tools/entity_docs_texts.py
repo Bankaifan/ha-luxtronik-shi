@@ -249,7 +249,7 @@ SECTIONS: tuple[Section, ...] = (
         "counts:\n\n"
         "| Raw | Key | Effect |\n|---|---|---|\n"
         "| 0 | `no_influence` | **No influence**: the controller uses its own values. This does **not** switch the "
-        "circuit off, heating goes on (up to 0.16.x the option key was `off`). |\n"
+        "circuit off, heating goes on (up to 0.17.x the option key was `off`). |\n"
         "| 1 | `setpoint` | The *setpoint* number replaces the controller's target. |\n"
         "| 2 | `offset` | The controller's target plus the *offset* in kelvin. |\n"
         "| 3 | `level` | The controller's target corrected by the *level*. |\n\n"
@@ -270,7 +270,7 @@ SECTIONS: tuple[Section, ...] = (
         "zugehörigen Werte zählt:\n\n"
         "| Roh | Schlüssel | Wirkung |\n|---|---|---|\n"
         "| 0 | `no_influence` | **Keine Vorgabe**: Die Regelung nutzt ihre eigenen Werte. Das schaltet den Kreis "
-        "**nicht** ab, es wird weiter geheizt (bis 0.16.x hieß der Optionsschlüssel `off`). |\n"
+        "**nicht** ab, es wird weiter geheizt (bis 0.17.x hieß der Optionsschlüssel `off`). |\n"
         "| 1 | `setpoint` | Die Zahl *Sollwert* ersetzt den Sollwert der Regelung. |\n"
         "| 2 | `offset` | Der Sollwert der Regelung plus die *Anhebung* in Kelvin. |\n"
         "| 3 | `level` | Der Sollwert der Regelung, um die *Stufe* korrigiert. |\n\n"
@@ -625,7 +625,7 @@ PITFALLS = {
         "controller ignores it. The setpoint numbers still write in every mode; climate and water heater refuse. "
         "Check `setpoint_active` and `effective_target`.\n"
         "4. **Mode `no_influence` (raw 0) is not off.** The controller uses its own values and the circuit keeps "
-        "running. To stop heating use the heating block; to stop hot water the hot water block. (Up to 0.16.x the "
+        "running. To stop heating use the heating block; to stop hot water the hot water block. (Up to 0.17.x the "
         "option was called `off`.)\n"
         "5. **Hot water writes are committed late** (about 10 s) and not while the hot water block is on, see "
         "[hot water control](#9-hot-water-control).\n"
@@ -660,7 +660,7 @@ PITFALLS = {
         "by several update intervals.\n"
         "13. **Circulation and extra hot water are triggers**, not states: a button press writes 1, the firmware "
         "sets the register back to 0 when the run or the timer ends, and the `*_running` binary sensors show the "
-        "state. Up to 0.16.x they were switches (`switch.turn_on`); since 0.17.0 call `button.press`."
+        "state. Up to 0.17.x they were switches (`switch.turn_on`); since 0.18.0 call `button.press`."
     ),
     "de": (
         "1. **Über die SHI gesetzte Werte sind flüchtig.** Die Regelung verwirft jeden über Modbus gesetzten Wert, "
@@ -684,7 +684,7 @@ PITFALLS = {
         "Water Heater lehnen ab. Prüfe `setpoint_active` und `effective_target`.\n"
         "4. **Die Betriebsart `no_influence` (roh 0) ist nicht aus.** Die Regelung nutzt ihre eigenen Werte, der "
         "Kreis läuft weiter. Zum Stoppen des Heizens nimm die Heizungs-Sperre, für das Warmwasser die "
-        "Warmwasser-Sperre. (Bis 0.16.x hieß die Option `off`.)\n"
+        "Warmwasser-Sperre. (Bis 0.17.x hieß die Option `off`.)\n"
         "5. **Warmwasser-Schreibzugriffe werden spät übernommen** (etwa 10 s) und nicht, solange die "
         "Warmwasser-Sperre an ist, siehe [Warmwasser-Steuerung](#9-warmwasser-steuerung).\n"
         "6. **Zwei Schreiber überschreiben sich.** Heat Pump Optimizer, OpenEMS, die native "
@@ -721,7 +721,7 @@ PITFALLS = {
         "und können deshalb mehrere Aktualisierungsintervalle hinterherhinken.\n"
         "13. **Zirkulation und Extra-Warmwasser sind Trigger**, keine Zustände: Ein Tastendruck schreibt 1, die "
         "Firmware setzt das Register beim Ende des Laufs oder des Timers selbst auf 0, und die Binärsensoren "
-        "`*_running` zeigen den Zustand. Bis 0.16.x waren es Schalter (`switch.turn_on`); seit 0.17.0 "
+        "`*_running` zeigen den Zustand. Bis 0.17.x waren es Schalter (`switch.turn_on`); seit 0.18.0 "
         "`button.press` aufrufen."
     ),
 }

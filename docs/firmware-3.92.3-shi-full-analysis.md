@@ -255,6 +255,23 @@ Level parameters (table `DAT_007e3ef0`, registered in `FUN_0008a990`, range −2
 
 Mixing circuits: `FUN_002084d0` (MC flow setpoint) → `FUN_00207eb4`, identical logic with the t2 IDs from the MC object (+0x48 mode, +0x50 setpoint, +0x4c offset, +0x60 level, +0x64/+0x68 level parameters). The overall mode applies here as well. The result is limited to MC min/max (parameters 1072–1077), finally + `Einst_WK_akt`. Cooling registers 10015–10017 etc.: limits 50..250 (5–25 °C) and −50..50 proven; consumer not followed individually (**likely** analogous).
 
+#### Heating curve (proven)
+
+Function `0x0020752c` computes the heating curve from the end point *E* and the parameter *Parallelverschiebung*
+(parallel shift) *F*; *F* is clamped to 5.0–35.0 °C. With the outdoor temperature *T*<sub>out</sub>:
+
+target = F + (E − 20) · (F − T<sub>out</sub>) / (20 − (T<sub>out</sub> − F) / 2)
+
+The result is clamped below at 15.0 °C and then by the caller to the circuit minimum and maximum (mixing circuits:
+`FUN_002084d0`, parameters 1072–1077, then + `Einst_WK_akt`). If E = 20.0 the target is the constant *F*.
+
+Consequences: *F* is the point where outdoor temperature and target are equal, and changing it changes the slope of
+the curve; despite its name it is not a parallel shift. *E* is the target at −20 °C outdoors only when F = 20.
+
+Verified on the reference installation: heating circuit E/F 30/22 at about 6 °C outdoors → 27.7 °C (controller
+27.7); MK1 45/30 at 6.1 °C → 48.8 °C, clamped to the maximum 45 (controller 45.0); MK1 45/20 at 5.8 °C → 33.1 °C
+(controller 33.0).
+
 ### 3.2 DHW (10005–10008, 10051, 10071) – proven
 
 * `FUN_00206d2c` selects analogously (only with "Enable SHI"; **no** overall influence): mode 1 → setpoint = 10006; 2 → setpoint = normal DHW setpoint + 10007; 3 → + parameter 0x4ae (level 1/2, increase) or 0x4ad (level 3, decrease).
@@ -270,6 +287,7 @@ Mixing circuits: `FUN_002084d0` (MC flow setpoint) → `FUN_00207eb4`, identical
 * **10052 cooling block** (t2/0x1c): `FUN_001a3a84`, `FUN_001ed6f8` (== 1 → cooling passive/active blocked). **10053 pool block** (t2/0x1d): `FUN_001ef980`.
 * **10050 heating block**: see 3.1 point 3; additionally `FUN_002f9c0c` (heating blocked or cooling release) into the LPC state object.
 * **10070 circulation** (t2/0x28, visibility 8 = `ID_Visi_Zirkulation`): `FUN_00275f94` starts the ZIP logic (`DAT_00a17c7c`), run times from `Einst_Zirk_Ein/Aus_akt` × 60; if the bit is set but no run is active any more, **the firmware sets 10070 to 0** (through `FUN_00427538`). Blocked when Ba_Bw ∈ {3,4}.
+* **Ending a run by writing 0 to 10070** (proven): `FUN_00275f94` computes the circulation request in every 1 s cycle as *(10070 ≠ 0) OR the request of the controller's own circulation time program* (`FUN_00252f54`) and passes it to the ZIP state machine (object at `DAT_00a17c7c`): the setter `FUN_00276488` stores the request flag, and `FUN_0028a5d4` reports "running" only if the machine is enabled **and** `FUN_0028a4a0` is true. `FUN_0028a4a0` returns false at once while the request flag is 0, so the pump output (ZIP, input 10356) stops immediately. The run counter is not reset but frozen, so the next start resumes the remaining on-time instead of a full one. Writing 0 during a run therefore ends it, unless the time program requests circulation at the same time. The integration offers this as the button `circulation_stop`; whether the pump runs is the binary sensor `pump_circulation` (10356), which also covers runs of the time program.
 * **10060 room setpoint** (`RBE_RoomTemperatureSetpointRegister`, `FUN_000dd478`): binds **t1/0x47c = parameter 1148 `RBE_Raumtemperatur_Soll` directly** (UINT16, 0.1 °C). Writing sets the parameter with source SHI; `avail()` (`FUN_000dfce4`) = visibility (0x176) ∧ `FUN_000e3c34`: RBE present, connected **and `RBE_Einflussfaktor_RT_akt` > 0**. Limits: no Range object in the SHI register itself, but the parameter carries its own bounds (registration path `FUN_000889e4` in `FUN_00099a78`, format "%.01f°C"); concrete min/max are not visible as numbers in the dump → **open**. As it is a t1 parameter, it is reset to the **persisted value** when the watchdog expires (type 1 in `FUN_000881e0`).
 * **t2/0 "Schnellladung"** (quick charge; text 4, `FUN_0009bab4`): internal SHI item set by `FUN_00216a3c`/`FUN_0031f6f0`/`FUN_0031fb78` (DHW quick charge from the control unit); **no SHI register binds t2/0** → not reachable over Modbus.
 
@@ -306,7 +324,7 @@ Mixing circuits: `FUN_002084d0` (MC flow setpoint) → `FUN_00207eb4`, identical
    * `unknown_input_404..417` = operating hours heat pump/heating/DHW/**cooling**/**pool (divisor 7200!)**/**solar**, UINT32.
    * `unknown_input_500/501/502` = extra DHW target (0.1 °C), duration (min), remaining time (min).
    * `unknown_holding_60` = **writable** RBE room setpoint (parameter 1148), 0.1 °C, available only with RBE + influence factor > 0.
-   * `heating_limit`(10107)/`dhw_limit`(10124) are the dynamic demand borders (setpoint − hysteresis), not parameters.
+   * `heating_limit`(10107)/`dhw_limit`(10124) are the dynamic demand borders (setpoint − hysteresis), not parameters; since 0.18.0 the keys are `heating_demand_border`/`dhw_demand_border`.
    * `max_flow_temp`(10112) = "Vorlauf max." – confirmed.
 2. **Overall mode 10065–10067** (previously without evidence, entities disabled): proven – overrides the heating-circuit **and** mixing-circuit modes, mode 1 (setpoint) has no effect there; offset −50..+50 (not −200..200 as with 10002!), level through the parameters "Hz. allg." 0x4a3/0x4a4.
 3. **Level semantics** (`_LEVELS`): 0 normal, 1 increase, 2 increase (identical to 1), 3 decrease. The amounts are the device parameters 1187–1198 (menu "Offsets", ±20 K in 0.5 K steps). python-luxtronik's `LevelMode` ("Increased2") is not a separate value in the firmware.

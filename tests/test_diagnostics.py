@@ -70,7 +70,7 @@ async def test_diagnostics_polling_section(hass: HomeAssistant, shi: FakeSHI) ->
     assert polling["polls"] == 1 and polling["failed_polls"] == 0
     assert polling["last_poll_seconds"] is not None and polling["last_poll_seconds"] >= 0
     assert polling["last_success"] is not None and polling["last_failure"] is None
-    assert "raw_10354" in polling["registers_not_polled"]  # disabled by default
+    assert "max_flow_temp" in polling["registers_not_polled"]  # disabled by default
     assert polling["registers_polled"] == len(coordinator.polled_registers)
 
     outage = Outage(coordinator)

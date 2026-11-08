@@ -151,7 +151,7 @@ mode select and the setpoint number of their circuit. They write the same regist
 | 2 | `offset` | Offset (controller's target plus offset) |
 | 3 | `level` | Level (controller's target corrected by the level) |
 
-**Changed in 0.17.0:** the option key of raw 0 is `no_influence` (it was `off`, which it is not). Automations and
+**Changed in 0.18.0:** the option key of raw 0 is `no_influence` (it was `off`, which it is not). Automations and
 optimizer configurations that select or compare `off` on a mode select must use `no_influence`; the water heater
 already used that key. The operating mode sensor likewise shows `no_request` for raw 5 instead of `off`.
 
@@ -190,28 +190,30 @@ an active overall mode silently overrides what an optimizer writes per circuit.
 
 **Levels** (`cfg_*_level`): the firmware uses the same controller parameter *Erhöhung* for raw 1 and raw 2, so both are
 one option `increased` (written as raw 1; a raw 2 another client wrote shows as `increased` too). Raw 3 is `decreased`
-(*Absenkung*). The option `increased2` of 0.16.x is gone.
+(*Absenkung*). The option `increased2` of 0.17.x is gone.
 
 ### Triggers: circulation run and extra hot water
 
 Registers 10070 (circulation) and 10071 (extra hot water) are **triggers**, proven by the firmware analysis: a write of
 1 starts the action, and the firmware sets the register back to 0 itself when the action is over (circulation: once no
 run with the controller's run and pause times is active any more; extra hot water: when its timer of
-`extra_dhw_duration` minutes ends). A trigger is not a state the user holds, so since 0.17.0 each one is a **button**
-plus a **binary sensor**, in the *Hot water* device:
+`extra_dhw_duration` minutes ends). A trigger is not a state the user holds, so since 0.18.0 each one is a start
+**button** plus a stop **button**, in the *Hot water* device, with a binary sensor that shows whether it runs:
 
 | Key | Platform | What it does |
 |---|---|---|
 | `circulation` | button | *Circulation: start run*: writes 1 to 10070 |
-| `circulation_running` | binary_sensor | *Circulation: run active*: 10070 reads 1 (the run of the controller logic, not the pump output: that is `pump_circulation`, ZIP) |
+| `circulation_stop` | button | *Circulation: end*: writes 0 to 10070, the pump stops at once (unless the controller's own time program requests circulation at the same time) |
+| `pump_circulation` | binary_sensor | *Pump: circulation (ZIP)*: the real pump output 10356; on for runs started here and for runs of the time program |
 | `extra_dhw` | button | *Extra: start*: writes 1 to 10071, the hot water target is raised to `extra_dhw_setpoint` for `extra_dhw_duration` |
 | `extra_dhw_stop` | button | *Extra: end*: writes 0 to 10071, which sets the timer to 0 |
 | `extra_dhw_running` | binary_sensor | *Extra: running*: 10071 reads 1; `extra_dhw_remaining` shows the minutes left |
 
-Up to 0.16.x both triggers were **switches** (`switch.<name>_circulation…`, `switch.<name>_extra…`). Those entities are
-removed when 0.17.0 starts (the registry entries are deleted, they would otherwise stay as dead entities); the buttons
+Up to 0.17.x both triggers were **switches** (`switch.<name>_circulation…`, `switch.<name>_extra…`). Those entities are
+removed when 0.18.0 starts (the registry entries are deleted, they would otherwise stay as dead entities); the buttons
 get new entity IDs. **Automations and the Heat Pump Optimizer must call `button.press` on the new button instead of
-`switch.turn_on`**, and read the running state from the binary sensor. A read-back of 0 right after the press is the
+`switch.turn_on`** (and `circulation_stop` / `extra_dhw_stop` instead of `switch.turn_off`), and read the running
+state from `pump_circulation` and `extra_dhw_running`. A read-back of 0 right after the press is the
 normal end (or the controller did not accept the trigger) and is not an error. The circulation trigger is not accepted
 while the controller's hot water operating mode is *holiday* or *off*: *off* also clears the equipment flag
 `cap_hot_water`, so the button is unavailable then; *holiday* cannot be read over the SHI. The *Enable SHI* parameter
@@ -554,19 +556,25 @@ those who deliberately stay on YAML, no longer used in production and not tested
   (per python-luxtronik).
 * **Renamed raw values (10109, 10110, 10112, 10113):** `raw_10109` is now `outside_temp_average` (outside average,
   °C), `raw_10110` is now `heat_source_input` (heat source inlet, °C), `raw_10112` is `max_flow_temp` (flow maximum,
-  °C, disabled by default) and, since 0.17.0, `raw_10113` is `flow_calc_max` (*TVL calc max*, the calculated maximum
+  °C, disabled by default) and, since 0.18.0, `raw_10113` is `flow_calc_max` (*TVL calc max*, the calculated maximum
   flow, °C, disabled by default). The integration moves the existing entities over when it starts, so their entity
   IDs, history and settings stay. Only the unique ID suffix changes; adjust anything that matches on the old `raw_*`
   unique ID.
 * **Raw values:** the firmware analysis resolved most of the registers python-luxtronik lists with unknown function.
   The resolved ones have proper sensors: `hours_cooling` (10410, needs *cooling*), `hours_solar` (10416, needs the
   equipment option *solar*, pre-filled from the flag `cap_solar` = discrete input 10004), `extra_dhw_setpoint`,
-  `extra_dhw_duration` and `extra_dhw_remaining` (10500–10502) and `flow_calc_max` (10113). **Since 0.17.0 the raw
+  `extra_dhw_duration` and `extra_dhw_remaining` (10500–10502) and `flow_calc_max` (10113). **Since 0.18.0 the raw
   word sensors of those addresses (`raw_10410`, `raw_10411`, `raw_10416`, `raw_10417`, `raw_10500`, `raw_10501`,
   `raw_10502`) no longer exist**; their registry entries are deleted at start. Still raw (disabled diagnostics, read
-  only, polled rarely): the outputs and inputs 10350–10361 next to their binary sensors, and the pool operating hours
-  10412/10413 (the firmware divides them by 7200 instead of 3600, only likely a factor 2, not measured).
-  `heating_limit`/`dhw_limit` are named *demand border* (setpoint minus hysteresis); their keys are unchanged.
+  only, polled rarely): the pool operating hours 10412/10413 (the firmware divides them by 7200 instead of 3600, only
+  likely a factor 2, not measured). **Since 0.18.0 the raw twins of the proven outputs and inputs (`raw_10350` …
+  `raw_10356`, `raw_10360`, `raw_10361`) no longer exist** either; the binary sensors `output_vbo`, `output_fp1` …
+  `output_fp3`, `pump_heating`, `pump_hot_water`, `pump_circulation`, `input_evu`, `input_evu2` read those registers
+  (same poll interval), and the raw registry entries are deleted at start.
+* **Demand borders renamed (0.18.0):** `heating_limit` is now `heating_demand_border` and `dhw_limit` is now
+  `dhw_demand_border` (*demand border*: setpoint minus hysteresis, tracked by the firmware, not a parameter). The
+  integration moves the registry entries over, so entity IDs, history and settings stay; only the unique ID suffix
+  changes.
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve
