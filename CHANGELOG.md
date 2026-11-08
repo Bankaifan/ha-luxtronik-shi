@@ -11,6 +11,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Documentation
+- Added the full analysis of the Luxtronik firmware V3.92.3 (all SHI registers with evidence, value ranges, boot
+  defaults, discrete inputs, write path and watchdog) in English and German, plus the register table as CSV in both
+  languages (`docs/firmware-3.92.3-shi-full-analysis*.md`, `docs/firmware-3.92.3-registers*.csv`). The two earlier
+  firmware notes got short update lines where the new analysis refines them. Linked from both READMEs and from
+  `docs/registers.md`. No code change, no release.
+
 ## [0.16.1] – 2026-11-08
 
 ### Fixed

@@ -434,6 +434,10 @@ those who deliberately stay on YAML, no longer used in production and not tested
   the interpretation of 10404/10406/10408 as operating hours.
 * Every entity explained (generated from the code): [docs/entities.md](docs/entities.md).
 * Complete table of all registers (type, address, data type, scale, unit, range): [docs/registers.md](docs/registers.md).
+* Firmware 3.92.3 analysis (independent, for interoperability): [full analysis](docs/firmware-3.92.3-shi-full-analysis.md)
+  ([German](docs/firmware-3.92.3-shi-full-analysis.de.md)) with the register table as
+  [CSV](docs/firmware-3.92.3-registers.csv); earlier notes: [SHI mechanics](docs/firmware-3.92.3-shi-analysis.md) and
+  [register meanings](docs/firmware-3.92.3-register-meanings.md) (English).
 
 ## Notes and limitations
 

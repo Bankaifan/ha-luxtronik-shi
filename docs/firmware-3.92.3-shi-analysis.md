@@ -10,6 +10,12 @@ Only facts are recorded here (addresses, data types, scaling, effect, code locat
 reproduced. The analysis was done for interoperability of this independent program (§ 69e UrhG). Code
 locations are given as function addresses (`0x…`) in the binary so the findings are reproducible.
 
+> **Update 2026-11-08:** the [full analysis of V3.92.3](firmware-3.92.3-shi-full-analysis.md) (German:
+> [firmware-3.92.3-shi-full-analysis.de.md](firmware-3.92.3-shi-full-analysis.de.md); register table as
+> [CSV](firmware-3.92.3-registers.csv)) extends this note: all holding and input registers, value ranges, boot
+> defaults, discrete inputs and the write path. Statements below stay valid; where the full analysis refines or
+> answers one, a short *Update* line says so.
+
 ## How the SHI works (verified)
 
 The `SmartHomeInterface` constructor `0x000dc298` sets the Modbus base offset **10000**
@@ -89,6 +95,9 @@ Recorded from the reverse engineering of 2026-11-07 (function addresses only, no
   device.
 - **Open:** the exact default of each individual setpoint register, and whether a given setpoint reverts to a
   persisted parameter (type 1) or a fixed default (type 2).
+  *Update 2026-11-08:* answered by the full analysis (§3.4 and §4): every t2 setpoint reverts to a fixed default
+  (10001 = 350, 10006 = 400, 10011/10021/10031 = 350, 10016/10026/10036 = 200, 10041 = 300; modes, offsets, levels,
+  blocks and switches = 0), the t1 parameter 10060 to its persisted value.
 
 The integration uses these facts for the optional *restore after a device reset*: `SHI_WATCHDOG_TIMEOUT` in
 `const.py` is the 600 s above.
@@ -148,16 +157,24 @@ data, *inferred* = reasoned).
    table is not in the static image. `_LEVELS` now follows `python-luxtronik` `LevelMode`
    (`0 Normal, 1 Increased, 2 Increased2, 3 Decreased`); the effect of the non-normal levels is still open there
    and here.
+   *Update 2026-11-08:* the full analysis (§3.1, §5 item 3) reads the effect from the code: levels 1 and 2 use the same
+   *increase* parameter, level 3 the *decrease* parameter, level 0 adds nothing; "Increased2" is not a separate value
+   in the firmware.
 2. **10060 is a writable room-temperature setpoint**, not an unknown read-only value. The firmware instantiates
    it as `RBE_RoomTemperatureSetpointRegister` (`0x000dd478`, target `RBE_RT_Soll`), `uint16`, °C/10, in the
    *holdings* (writable) array. It is currently exposed as `raw_10060` (read-only). Promoting it to a real
    writable setpoint needs a value range (not derivable from the static image → a measurement on the device)
    and a contract migration — owner decision.
+   *Update 2026-11-08:* the full analysis (§3.3, §6) adds the availability condition (RBE present, connected, influence
+   factor greater than 0); the value range stays open.
 3. **Raw hour/time counters.** `10410`/`10416` are further `uint32` operating-hour counters (divisor 3600),
    `10500`/`10501`/`10502` are time values (`10501`/`10502` divisor 60, seconds→minutes). These are currently
    `raw_*`; they could become named sensors once their exact meaning is confirmed.
 4. **10412 has an unusual divisor 7200** (not 3600) — a `uint32` counter whose unit is unclear (possibly
    2-hour units or an average). Keep as raw until confirmed.
+   *Update 2026-11-08:* the full analysis (§2.2, §6) identifies the counter as the pool operating hours and reads
+   the divisor 7200 as a deviation of the SHI code (the firmware display uses 3600), so the wire value is likely
+   hours/2; not measurable without a pool.
 
 ## Reproduction
 

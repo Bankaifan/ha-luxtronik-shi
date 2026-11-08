@@ -472,6 +472,10 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   überein) und die Deutung von 10404/10406/10408 als Betriebsstunden.
 * Jede Entität erklärt (aus dem Code erzeugt): [docs/entities.de.md](docs/entities.de.md).
 * Vollständige Tabelle aller Register (Typ, Adresse, Datentyp, Skalierung, Einheit, Bereich): [docs/registers.md](docs/registers.md).
+* Firmware-Analyse 3.92.3 (unabhängig, zur Interoperabilität): [Vollanalyse](docs/firmware-3.92.3-shi-full-analysis.de.md)
+  ([englisch](docs/firmware-3.92.3-shi-full-analysis.md)) mit der Registertabelle als
+  [CSV](docs/firmware-3.92.3-registers.de.csv); frühere Notizen: [SHI-Mechanik](docs/firmware-3.92.3-shi-analysis.md) und
+  [Registerbedeutungen](docs/firmware-3.92.3-register-meanings.md) (englisch).
 
 ## Hinweise und Grenzen
 
