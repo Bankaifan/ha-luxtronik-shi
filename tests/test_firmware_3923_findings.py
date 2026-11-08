@@ -402,3 +402,30 @@ async def test_watchdog_outage_reverts_to_proven_defaults(hass: HomeAssistant, s
     outage.up()
     await _polls(entry)
     assert (shi.holding[10000], shi.holding[10001], shi.holding[10002]) == (1, 300, 0x10000 - 20)
+
+
+_WRITABLE_WITH_DEFAULT = sorted(
+    reg.key for reg in ALL_REGISTERS if reg.kind == "holding" and reg.reset_default is not None
+)
+
+
+@pytest.mark.parametrize("key", _WRITABLE_WITH_DEFAULT)
+async def test_writing_exactly_the_default_is_never_reported_as_reverted(
+    hass: HomeAssistant, shi: FakeSHI, caplog: pytest.LogCaptureFixture, key: str
+) -> None:
+    """A legitimate write of the firmware default (DHW 40.0 degC, heating 35.0 degC, cooling 20.0 degC, power
+    limit 30.0 kW, any mode/offset/level/block/switch 0) reads back the default and must not raise; neither when
+    the write is ignored (error 816: the previous value stays) nor while the hot water group defers it."""
+    reg = BY_KEY[key]
+    entry = await _setup(hass, shi)
+    other = reg.reset_default + 1 if reg.platform != "number" else encode_int16(reg.max_value, reg.scale)
+    for case in ("taken", "ignored", "deferred"):
+        shi.ignored_writes = {reg.address} if case == "ignored" else set()
+        shi.deferred = {reg.address} if case == "deferred" and key in DEFERRED_KEYS else set()
+        shi.pending.pop(reg.address, None)
+        shi.holding[reg.address] = other
+        with caplog.at_level(logging.WARNING):
+            await _write(entry, key, reg.reset_default)  # never raises
+        assert "reset the register to its default" not in caplog.text
+        if case == "taken":
+            assert shi.holding[reg.address] == reg.reset_default
