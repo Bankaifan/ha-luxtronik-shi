@@ -76,13 +76,14 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 | Bereich | Entitäten |
 |---|---|
 | Temperaturen | Vorlauf, Rücklauf, Wärmequelle Ein-/Austritt, Außen-Mittelwert, Rücklauf-Soll/-Begrenzung/-Minimum, Rücklauf extern, Außen, Raum (nur mit Raumeinheit), Grenztemperaturen Heizen/Warmwasser, Warmwasser (Ist, Soll, Min, Max), Mischkreise 1–3 (Vorlauf, Soll, Min, Max; bei Mischkreis 2 und 3 standardmäßig deaktiviert) |
-| Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser, Kühlen, Pool), Betriebsstunden |
+| Leistung & Energie | elektrische und thermische Leistung, minimale Stromaufnahme, Zähler Strom/Wärme (gesamt, Heizen, Warmwasser, Kühlen, Pool), Betriebsstunden (Verdichter, Heizen, Warmwasser; **Kühlen** und **Solar** mit passender Ausstattung) |
 | Berechneter COP | **COP (10 min)** (Energieverhältnis der letzten 10 Minuten aus thermischer und elektrischer Leistung, Gerät der Wärmepumpe; unbekannt, solange weniger als 60 Wh elektrische Energie im Fenster liegen, also bei stehendem oder gerade gestartetem Verdichter) und **COP gesamt** für Heizen, Warmwasser und alle Betriebsarten zusammen (thermische / elektrische Energiezähler, im Gerät *Heizung* / *Warmwasser* und im Gerät der Wärmepumpe; ein Langzeit-Durchschnitt, nicht der 10-Minuten-Wert und keine Jahresarbeitszahl); unbekannt statt einer Zahl bei fehlenden, negativen oder unplausiblen Werten oder nach einem Zählerreset |
 | Status | Betriebsart als Klartext (Heizen, Warmwasser, Schwimmbad / Solar, EVU-Sperre, Abtauen, Keine Anforderung, Heizen über externe Quelle, Kühlen), **Verdichter 1/2 läuft**, **Zusatzheizung (ZWE) 1/2 aktiv** (zusätzliche Statusbits für VD2, ZWE2 und ZWE3 sind standardmäßig deaktiviert), Fehlernummer, Status Heizen/Warmwasser/Kühlung/Pool als Text (deaktiviert, keine Anforderung, angefordert, läuft; andere Werte als *Unbekannt (n)*), Verbindung. Aus ohnehin gelesenen Registern berechnet (keine zusätzliche Abfrage): **Störung** (Fehlernummer ungleich 0), **Abtauung läuft**, **Heizen läuft** / **Warmwasser läuft** (Status ist *läuft*), **Leistungsbegrenzung: Modus eingestellt** (der eingestellte Modus ist soft oder hard; das heißt nicht, dass die Begrenzung die Leistung gerade senkt) und die **Differenz Vorlauf/Rücklauf** in K (Vorlauf minus Rücklauf, kann negativ sein) |
 | **Climate / Water Heater** | Heizkreis (Auto / Heizen, Sollwert 15–75 °C) und Warmwasser (Keine Vorgabe / Sollwert / Anhebung / Stufe, Sollwert 30–75 °C), siehe unten |
-| **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
-| **Schreiben: Auswahl** | Betriebsart (Keine Vorgabe / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt); Modus der Leistungsbegrenzung (keine / weich / hart) |
-| **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser*; dazu die Sperren-Sichten *Betriebsart (Sperren)* (Select) und *Ein/Aus (Sperren)* (Schalter), siehe [unten](#sperren-sichten-für-den-heat-pump-optimizer) |
+| **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung (−5 … +5 K), Wert der Leistungsbegrenzung (0–30 kW). Alle Bereiche sind die der Firmware, siehe [Schreibbereiche](#schreibbereiche-und-standardwerte-firmware) |
+| **Schreiben: Auswahl** | Betriebsart (Keine Vorgabe / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung (dort ohne Sollwert); Stufe (Normal / Erhöht / Erhöht Stufe 2 = Stufe 1 / Abgesenkt, die Beträge sind die *Offsets*-Parameter der Regelung); Modus der Leistungsbegrenzung (keine / weich / hart) |
+| **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe** und *Extra-Warmwasser* (beides Trigger, die die Firmware selbst wieder ausschaltet); dazu die Sperren-Sichten *Betriebsart (Sperren)* (Select) und *Ein/Aus (Sperren)* (Schalter), siehe [unten](#sperren-sichten-für-den-heat-pump-optimizer) |
+| Extra-Warmwasser | **Sollwert**, **Dauer** und **Restlaufzeit** des Extra-Warmwassers (Reglerparameter 1146/1147 und der laufende Timer; Firmware-Analyse 3.92.3), im Gerät *Warmwasser* |
 | Pumpen und Ein-/Ausgänge | **Pumpe Heizung (HUP), Warmwasser (BUP), Zirkulation (ZIP)** läuft, Ausgänge **VBO** und **FP1** (FP2 und FP3 standardmäßig deaktiviert; nicht gemessen), Eingänge **EVU** und **EVU 2** als Pegel (standardmäßig deaktiviert). Gelesen aus denselben Registern wie die passenden `raw_`-Sensoren, die unverändert bleiben. Bei EVU ist nur der Name durch die Firmware-Analyse belegt; dass Pegel 1 *freigegeben* heißt, ist aus einem gemessenen Zustand abgeleitet, die Sensoren zeigen deshalb den Pegel, nicht „gesperrt“. Die Betriebsart *EVU-Sperre* meldet die Sperre selbst |
 | Diagnose | Puffertyp, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert). Schaltspielsperre, Mindestlaufzeit und minimale Warmwassertemperatur sind feste Firmware-Konstanten und für neue Installationen standardmäßig deaktiviert |
 
@@ -91,14 +92,56 @@ Entität nach Thema mit Schlüssel, Einheit, Wertebereich, Bedeutung und Fallstr
 Funktionsweise von Wärmepumpen.
 
 Mischkreis 2 und 3 haben dieselben schreibbaren Entitäten wie Mischkreis 1 (Betriebsart, Sollwert, Anhebung, Stufe sowie
-Betriebsart, Sollwert und Anhebung für Kühlen). Alle Schreibbereiche folgen python-luxtronik (holdings.py): Heizen
-Sollwert 20–65 °C und Anhebung −5 … +5 K, Kühlen Sollwert 5–25 °C und Anhebung −5 … +5 K. Mischkreis 1 hat dieselben Bereiche. Sie existieren nur, wenn der Mischkreis in der [Ausstattung](#ausstattung-der-anlage) gewählt ist (die
-Kühl-Entitäten brauchen zusätzlich Kühlung).
+Betriebsart, Sollwert und Anhebung für Kühlen), mit den Bereichen der Firmware: Heizen Sollwert 20–65 °C und Anhebung
+−5 … +5 K, Kühlen Sollwert 5–25 °C und Anhebung −5 … +5 K. Mischkreis 1 hat dieselben Bereiche. Sie existieren nur,
+wenn der Mischkreis in der [Ausstattung](#ausstattung-der-anlage) gewählt ist (die Kühl-Entitäten brauchen zusätzlich
+Kühlung).
 
 Die Einstellungen (Zahlen und Auswahl) liegen in der Kategorie *Konfiguration* der Geräteseite. Schreibzugriffe verwenden
 dieselben Register wie die Smart-Home-Schnittstelle selbst; die Wärmepumpe erzwingt dabei ihre eigenen Grenzen. Nach jedem
 Schreibzugriff wird der Wert zurückgelesen, die Oberfläche zeigt also immer den echten Gerätezustand. Negative Werte
 (Heizkurven-Anhebung) werden korrekt als 16-bit-Zweierkomplement geschrieben.
+
+### Schreibbereiche und Standardwerte (Firmware)
+
+Die Vollanalyse der Firmware V3.92.3 ([docs/firmware-3.92.3-shi-full-analysis.de.md](docs/firmware-3.92.3-shi-full-analysis.de.md),
+englisch: [docs/firmware-3.92.3-shi-full-analysis.md](docs/firmware-3.92.3-shi-full-analysis.md)) belegt den Bereich
+jedes schreibbaren Registers und was die Firmware mit einem Wert außerhalb macht: Sie **bestätigt den Schreibzugriff
+und setzt das Register auf seinen Standardwert zurück** (Sollwerte Heizung und Mischkreise 35,0 °C, Warmwasser-Sollwert
+40,0 °C, Kühl-Sollwerte 20,0 °C, Leistungsbegrenzung 30,0 kW, alles andere 0). Der vorherige Wert ist weg, nicht
+erhalten. Die Integration schickt deshalb nie einen Wert außerhalb des Bereichs: Die Zahlen-Entitäten tragen die
+Firmware-Grenzen, Climate, Water Heater, Dienste und die Wiederherstellung lehnen solche Werte mit einer Fehlermeldung
+ab. Liest ein Register direkt nach dem Schreiben seinen Standardwert, schlägt der Schreibzugriff mit einer Fehlermeldung
+fehl, die die wahrscheinlichen Ursachen nennt (Fehler 816 *Mehrere SHI-Schreibquellen*, Ablauf des Wächters). Dieselben
+Standardwerte sind die Werte, auf die jedes Register nach einem Neustart der Regelung oder einem Wächterablauf
+zurückfällt.
+
+| Register | Bereich | Standardwert |
+|---|---|---|
+| Heizen Sollwert 10001 | 15,0 … 75,0 °C | 35,0 °C |
+| Heizen Anhebung 10002, Warmwasser Anhebung 10007 | −20,0 … +20,0 K | 0 |
+| Warmwasser Sollwert 10006 | 30,0 … 75,0 °C | 40,0 °C |
+| Mischkreis-Sollwerte 10011/10021/10031 | 20,0 … 65,0 °C | 35,0 °C |
+| Mischkreis-Anhebungen 10012/10022/10032, Kühl-Anhebungen, **Gesamt-Anhebung 10066** | −5,0 … +5,0 K | 0 |
+| Kühl-Sollwerte 10016/10026/10036 | 5,0 … 25,0 °C | 20,0 °C |
+| Leistungsbegrenzung 10041 | 0 … 30,0 kW | 30,0 kW |
+| Betriebsarten, Stufen (0 … 3), Sperren, Trigger | Aufzählungen | 0 |
+| Raum-Sollwert 10060 | offen (Reglerparameter 1148; 20 … 40 °C ist die Wahl des Eigentümers) | gespeicherter Wert |
+
+Die Regelung begrenzt zusätzlich die **Wirkung**: Der Heizen-Sollwert wird auf [Rücklauf-Soll Minimum,
+Rücklauf-Begrenzung] begrenzt (bei gesperrtem Heizen gilt ohnehin das Minimum), das Warmwasser-Ziel auf die maximale
+Warmwassertemperatur; Extra-Warmwasser und thermische Desinfektion haben Vorrang. Geändert in 0.17.0: Die
+Gesamt-Anhebung erlaubte bisher −20 … +20 K (python-luxtronik); die Firmware setzt alles über ±5 K auf 0 zurück.
+
+**Stufen** (Heizung, Warmwasser, Mischkreise, Gesamt): 0 = normal; 1 und 2 **erhöhen** den Sollwert beide um den
+Reglerparameter *Erhöhung* des Kreises (derselbe Parameter, Stufe 2 ist also gleich Stufe 1); 3 **senkt** ihn um
+*Absenkung*. Die Beträge stehen im Reglermenü *Offsets* (Parameter 1187–1198, −20 … +20 K in 0,5-K-Schritten) und sind
+über die SHI weder lesbar noch schreibbar.
+
+**Enable SHI.** Der Reglerparameter *Enable SHI* (1161, Optionen Modbus TCP / myUplink / beides) lässt sich über Modbus
+nicht lesen. Steht er aus, werden Sollwerte, Anhebungen, Stufen und die Leistungsbegrenzung angenommen und korrekt
+zurückgelesen, wirken aber nicht; Sperren, Zirkulationspumpe und Extra-Warmwasser funktionieren trotzdem. Der
+Diagnose-Download nennt ihn. Wirken geschriebene Werte nicht, prüfe diese Einstellung am Bedienteil.
 
 ### Climate und Water Heater
 
@@ -145,8 +188,13 @@ sie standardmäßig deaktiviert (in den Entitäts-Einstellungen aktivierbar).
 Wer von 0.9 oder älter kommt: `hvac_mode: auto` statt `off` (oder den Schalter *Heizung sperren*, um das Heizen zu
 stoppen) und beim Water Heater `no_influence` statt der Betriebsart `off`.
 
-**Gesamt-Heizung** (Betriebsart, Anhebung und Stufe, 10065–10067) ist standardmäßig deaktiviert: Ihre Wirkung ist
-nicht belegt, und sie übersteuert die Einstellungen der einzelnen Kreise.
+**Gesamt-Heizung** (Betriebsart, Anhebung und Stufe, 10065–10067) ist standardmäßig deaktiviert. Die Firmware-Analyse
+belegt ihre Wirkung: Solange ihre Betriebsart nicht *Keine Vorgabe* ist, werden die Betriebsarten des Heizkreises
+**und** aller Mischkreise ignoriert, und Gesamt-Anhebung oder Gesamt-Stufe gelten für sie (Warmwasser ist nicht
+betroffen). Ihre Betriebsart *Sollwert* ist von der Firmware **nicht umgesetzt** und wirkt wie *Keine Vorgabe*; das
+Select lehnt das Schreiben ab (die Option bleibt gelistet, damit ein von einem anderen Client geschriebener Wert
+angezeigt wird). Die Stufe nutzt die Reglerparameter *Hz. allg.* (1187/1188). Sie bleibt standardmäßig deaktiviert,
+weil eine aktive Gesamt-Betriebsart stillschweigend überschreibt, was ein Optimierer je Kreis schreibt.
 
 ### Sperren-Sichten für den Heat Pump Optimizer
 
@@ -292,11 +340,14 @@ Integration solche Werte zurückschreibt:
   Integration (Number, Select, Climate, Water Heater) geschrieben und unverändert zurückgelesen wurde. Gemerkt werden
   nur **Betriebsart, Stufe, Offset und Sollwert** jedes Kreises (Heizung, Warmwasser, Mischkreise 1–3 Heizen und
   Kühlen) und der Raum-Sollwert (`RESTORE_KEYS` in `const.py`). Die Gesamt-Gruppe (`cfg_overall_*`, 10065–10067)
-  bleibt außen vor: Ihre Bedeutung ist nicht belegt (an der Referenzanlage fiel 10065 etwa 2 s nach einem Schreiben auf
-  `aus` zurück, und python-luxtronik kennt für die Gesamt-Betriebsart keinen Sollwert). Sperren (Heizung, Warmwasser, Kühlung, Pool),
-  Zirkulation, Warmwasser-Extra und die Leistungsbegrenzung werden **nie** wiederhergestellt: Die gehören live einem
-  Optimierer wie dem Heat Pump Optimizer, und eine Sperre nach langem Stillstand wieder zu setzen, würde die
-  Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Die Betriebsarten und Sollwerte der Liste (etwa
+  bleibt außen vor: Sie hat belegt Vorrang vor den Betriebsarten von Heizkreis und Mischkreisen, ein automatisches
+  Zurückschreiben könnte also stillschweigend überschreiben, was ein Optimierer je Kreis setzt (an der Referenzanlage
+  fiel 10065 einmal etwa 2 s nach einem Schreiben auf `aus` zurück). Sperren (Heizung, Warmwasser, Kühlung, Pool), die
+  Trigger Zirkulation und Extra-Warmwasser (die Firmware schaltet sie selbst aus) und die Leistungsbegrenzung werden
+  **nie** wiederhergestellt: Die gehören live einem Optimierer wie dem Heat Pump Optimizer, und eine Sperre nach langem
+  Stillstand wieder zu setzen, würde die Rückfallebene des Watchdogs (alles freigegeben) aushebeln. Ein gemerkter Wert
+  außerhalb des Firmware-Bereichs wird nie geschrieben (er würde das Register auf den Standardwert zurücksetzen). Die
+  belegten Standardwerte (35,0 / 40,0 / 20,0 °C, 30,0 kW, 0) gelten als Reset-Werte. Die Betriebsarten und Sollwerte der Liste (etwa
   `cfg_heating_mode`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`) werden auch dann wiederhergestellt, wenn ein
   Optimierer sie schreibt; dessen nächster Schreibzugriff gewinnt. Ein fehlgeschlagenes Schreiben oder
   ein abweichender Rücklesewert löscht den Schlüssel. Die Werte liegen je Eintrag im Speicher von Home Assistant
@@ -467,9 +518,18 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
 * Messungen an der Referenzanlage (LWDV 91-1/3, Firmware 3.92.3), siehe unten.
 * Die DHCP-Erkennungsmerkmale (MAC-Präfixe, Hostname `wp-novelan`) stammen aus
   [BenPru/luxtronik](https://github.com/BenPru/luxtronik) (MIT).
-* Nicht in python-luxtronik enthalten und daher nur durch Beobachtung belegt: die Ausstattungs-Register
-  (Discrete Inputs 10000–10011), Firmware-Haupt-/Nebenversion (10401/10402, stimmt mit der Anzeige der Regelung
-  überein) und die Deutung von 10404/10406/10408 als Betriebsstunden.
+* Vollanalyse der Firmware V3.92.3 (`bin/Controller`, Interoperabilität nach § 69e UrhG):
+  [docs/firmware-3.92.3-shi-full-analysis.de.md](docs/firmware-3.92.3-shi-full-analysis.de.md) (deutsch) und
+  [docs/firmware-3.92.3-shi-full-analysis.md](docs/firmware-3.92.3-shi-full-analysis.md) (englisch): jedes Register
+  mit Firmware-Item, Variable, Text, Sichtbarkeitsbedingung, Bereich, Standardwert und Beleggrad (belegt /
+  wahrscheinlich / offen). Sie belegt die Ausstattungs-Register (Discrete Inputs 10000–10011, 10004 = Solar; 10000/10001
+  = vorhanden **und** Betriebsart am Regler nicht *Aus*), die Firmware-Versionsregister, die Betriebsstundenzähler
+  10404–10416, die Extra-Warmwasser-Register 10500–10502, 10113 (*TVL calc max*) und die Anforderungsgrenzen
+  10107/10124 (Sollwert minus Hysterese, keine Parameter). Einziger Rohwert ohne eigenen Sensor bleibt der
+  Pool-Stundenzähler 10412 (Teiler 7200 statt 3600, der Buswert ist also wahrscheinlich die halbe Stundenzahl; nicht
+  gemessen). Die Firmware legt 32-Bit-Werte mit dem **oberen Wort an der niedrigeren Adresse** ab; die
+  Stromzähler sind vorzeichenlos, die Wärmemengenzähler vorzeichenbehaftet (die Integration liest sie seit 0.17.0 so).
+  Discrete Inputs gibt es (Funktionscode 2), Coils nicht.
 * Jede Entität erklärt (aus dem Code erzeugt): [docs/entities.de.md](docs/entities.de.md).
 * Vollständige Tabelle aller Register (Typ, Adresse, Datentyp, Skalierung, Einheit, Bereich): [docs/registers.md](docs/registers.md).
 * Firmware-Analyse 3.92.3 (unabhängig, zur Interoperabilität): [Vollanalyse](docs/firmware-3.92.3-shi-full-analysis.de.md)
@@ -494,8 +554,13 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
 * **Heizung sperren:** `switch.<name>_heating_block` sperrt nur das Heizen; Warmwasser läuft weiter. Wer die Heizung von einem
   Planer (z. B. Heat Pump Optimizer) steuern lässt, kann bei geplanten 0 W sperren und bei Ausfall des Planers oder zu kaltem
   Raum wieder freigeben.
-* Die *Stufe*-Optionen (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt) folgen python-luxtronik `LevelMode`; dort ist
-  die Wirkung der Stufen außer *Normal* noch als nicht analysiert vermerkt. Zirkulationspumpe und Extra-Warmwasser gibt es erst ab Firmware 3.92.0.
+* Die *Stufe*-Optionen behalten die Schlüssel von python-luxtronik `LevelMode` (normal / increased / increased2 /
+  decreased); die Firmware belegt, dass 1 und 2 um denselben Reglerparameter erhöhen und 3 absenkt (siehe
+  [Schreibbereiche und Standardwerte](#schreibbereiche-und-standardwerte-firmware)). Zirkulationspumpe und
+  Extra-Warmwasser gibt es erst ab Firmware 3.92.0 und sind **Trigger**: Die Firmware setzt sie auf 0 zurück, wenn der
+  Zirkulationslauf oder der Extra-Warmwasser-Timer endet, der Schalter geht also von allein aus; das ist weder ein
+  fehlgeschlagener Schreibzugriff noch eine Änderung außerhalb von Home Assistant. Der Zirkulations-Trigger wird nicht
+  angenommen, solange die Warmwasser-Betriebsart der Regelung *Ferien* oder *Aus* ist.
 * **Statusbits VD2, ZWE2, ZWE3:** Die Binärsensoren `heatpump_vd2_status`, `heatpump_zwe2_status` und
   `heatpump_zwe3_status` stammen aus python-luxtronik (Bit 1, 3 und 4 von Register 10000) und sind standardmäßig
   deaktiviert. VD2 und ZWE2 zeigen dieselben Bits wie *Verdichter 2* und *Zusatzheizung 2*; ZWE3 gibt es laut
@@ -506,9 +571,14 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   vorhandenen Entitäten beim Start, Entity-IDs, Verlauf und Einstellungen bleiben erhalten. Es ändern sich nur das Ende
   der Unique-ID und der Name; Verweise auf die alte `raw_*`-Unique-ID müssen angepasst werden. Langzeitstatistik gibt es
   für 10112 erst ab jetzt (vorher ohne Einheit).
-* **Undokumentierte Rohwerte:** Register, die python-luxtronik mit unbekannter Funktion führt (Inputs 10352, 10353,
-  10410–10413, 10416, 10417, 10500–10502 und Holding 10060), gibt es als deaktivierte Diagnose-Sensoren `raw_<Adresse>`.
-  Sie werden nur gelesen (nie geschrieben) und selten abgefragt.
+* **Rohwerte:** Die Register, die python-luxtronik mit unbekannter Funktion führt (Inputs 10352, 10353, 10410–10413,
+  10416, 10417, 10500–10502), bleiben als deaktivierte Diagnose-Sensoren `raw_<Adresse>` erhalten (nur gelesen, selten
+  abgefragt). Seit 0.17.0 gibt ihnen die Firmware-Analyse Namen, und die aufgelösten haben daneben richtige Sensoren
+  mit neuen Schlüsseln: `hours_cooling` (10410, braucht *Kühlung*), `hours_solar` (10416, braucht die neue
+  Ausstattungs-Option *Solar*, vorbelegt aus dem neuen Flag `cap_solar` = Discrete Input 10004), `extra_dhw_setpoint`,
+  `extra_dhw_duration` und `extra_dhw_remaining` (10500–10502). Eine gemeinsame Adresse wird einmal gelesen. `raw_10113`
+  heißt jetzt *TVL calc max* (berechneter maximaler Vorlauf) statt *Soll Heizen (berechnet)*, und
+  `heating_limit`/`dhw_limit` heißen *Anforderungsgrenze* (Sollwert minus Hysterese); ihre Schlüssel sind unverändert.
 * **Pool-Sperre und Leistungsbegrenzung:** Der Schalter für die Pool-Sperre (Register 10053) existiert nur mit gewähltem
   Pool. Die Leistungsbegrenzung besteht aus einer Auswahl für den Modus (keine / weich / hart, Register 10040) und einer
   Zahl für den Wert (0–30 kW, Register 10041).

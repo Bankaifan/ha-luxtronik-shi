@@ -11,12 +11,89 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.17.0] – 2026-11-08
+
+Everything in this version follows the full analysis of the SHI firmware V3.92.3
+([docs/firmware-3.92.3-shi-full-analysis.md](docs/firmware-3.92.3-shi-full-analysis.md), German:
+[docs/firmware-3.92.3-shi-full-analysis.de.md](docs/firmware-3.92.3-shi-full-analysis.de.md)); the evidence grade of
+each item is given as *proven* (read from the firmware), *likely* (inferred) or *open*. No key was renamed or removed;
+entity IDs are unchanged.
+
+### Action required
+- **Overall offset (`cfg_overall_offset`, 10066): the range is now −5.0 … +5.0 K** (proven; python-luxtronik listed
+  −20 … +20 K). The firmware acknowledges a value beyond ±5 K and resets the register to 0 instead. Automations that
+  wrote larger values now get a validation error instead of a silent reset. The entity is disabled by default.
+- New equipment option **Solar** (operating hours of the solar function, `hours_solar`), pre-filled from the new
+  equipment flag `cap_solar`. Existing entries keep their options; the new option is off until you turn it on under
+  *Options*.
+
+### Added
+- **Firmware ranges and defaults for every writable register** (proven). `Register.reset_default` records the raw word
+  the firmware resets a register to at boot, on watchdog expiry and after a write outside its range (setpoints 350 /
+  400 / 200, power limit 300, everything else 0; the room setpoint 10060 reverts to its persisted controller
+  parameter). The number entities, climate and water heater carry the firmware limits.
+- **Writes outside the firmware range are never sent** (`write_out_of_range`, a validation error): the firmware would
+  acknowledge them and reset the register to its default, losing the value set before. The restore after a device
+  reset skips such values too.
+- **Default read back after a write is reported** (`write_reverted_to_default`): when a register reads its default
+  right after a write of another value, the write fails with an error naming the causes (error 816 *multiple SHI
+  write sources*, watchdog expiry). Block sequences keep their own `block_write_not_taken` message. Any other
+  read-back mismatch is logged as a warning.
+- **Resolved registers, new keys** (proven): `hours_cooling` (10410, needs *cooling*), `hours_solar` (10416, needs
+  *solar*), `extra_dhw_setpoint` (10500, 0.1 °C, controller parameter 1146), `extra_dhw_duration` (10501, minutes,
+  parameter 1147) and `extra_dhw_remaining` (10502, minutes, the running extra hot water timer), `cap_solar`
+  (discrete input 10004). The matching `raw_<address>` sensors keep their keys and stay disabled; a shared address
+  is read once. The pool hour counter 10412 stays a raw value: the firmware divides it by 7200 instead of 3600, so
+  the wire value is likely half the hours (not measured, no pool on the reference installation).
+- Diagnostics download names the controller parameter 1161 **Enable SHI** (not readable over Modbus): while it is off,
+  setpoints, offsets, levels and the power limit are read back but ignored; blocks, circulation and extra hot water
+  work regardless (proven).
+- README (EN/DE): section *Write ranges and defaults (firmware)* with the full table, level semantics, overall group
+  and *Enable SHI*; entity reference updated for every affected entity; register reference carries the source of
+  every writable register.
+
+### Changed
+- **Overall group (10065–10067)** (proven): a mode other than *no influence* takes precedence over the heating mode
+  **and** the mixing circuit modes; hot water is not affected. Mode *setpoint* is not implemented by the firmware for
+  this group (acts like *no influence*): the select refuses to write it (`overall_setpoint_not_implemented`), the
+  option stays listed so a value another client wrote is shown. Option labels say so. The level uses the parameters
+  *Hz. allg.* (1187/1188). The entities stay disabled by default and are still not restored (owner decision: an active
+  overall mode silently overrides what an optimizer writes per circuit).
+- **Level labels** (proven): 0 normal; 1 and 2 both raise the target by the controller parameter *Erhöhung* of the
+  circuit (the same parameter, so 2 equals 1); 3 lowers it by *Absenkung*. The amounts are the controller parameters
+  1187–1198 (menu *Offsets*). Option keys unchanged.
+- **Circulation pump and extra hot water are triggers** (proven, `TRIGGER_KEYS`): the firmware sets them back to 0
+  itself when the circulation run or the extra hot water timer ends. A read-back of 0 is the normal end, never a
+  failed write; they remain excluded from the restore and from the external change notice. The circulation trigger is
+  not accepted while the controller's hot water mode is *holiday* or *off*.
+- **Names** (keys unchanged): `heating_limit` and `dhw_limit` are *Demand border* (firmware items *Heating demand
+  border* / *DHW Demand border*: effective target minus hysteresis, tracked by the firmware, not parameters);
+  `raw_10113` is *Flow: calculated maximum (TVL calc max)* instead of *heating target (calculated)*; the raw sensors
+  of 10410–10417 and 10500–10502 are named after their firmware counters. Entity IDs of existing installations stay;
+  the generated dashboards use the new default IDs for new installations.
+- **Heat quantity counters** (`energy_th_*`, 10320–10328) decode as signed 32-bit values (firmware builder INT32); the
+  electric counters stay unsigned. Values do not change for any plausible counter reading.
+- Reset detection of the restore option accepts the proven firmware default of a setpoint as its reset value, next
+  to the learned value.
+- Documentation of the deferred hot water writes (exactly 10005–10008, pending map with a 10-tick counter), the
+  watchdog (any function code re-arms it; expiry and return go to the controller's event log, type 0x10), the
+  32-bit word order (high word at the lower address), discrete inputs (function code 2; no coils) and the per-register
+  visibility conditions (0x7FFF when the equipment is missing) in the code comments and the entity reference.
+- Fake SHI of the tests enforces the firmware ranges (acknowledge and reset to the default), knows the triggers, the
+  solar flag and the inputs 10410–10417 and 10500–10502.
+
 ### Documentation
 - Added the full analysis of the Luxtronik firmware V3.92.3 (all SHI registers with evidence, value ranges, boot
   defaults, discrete inputs, write path and watchdog) in English and German, plus the register table as CSV in both
   languages (`docs/firmware-3.92.3-shi-full-analysis*.md`, `docs/firmware-3.92.3-registers*.csv`). The two earlier
   firmware notes got short update lines where the new analysis refines them. Linked from both READMEs and from
-  `docs/registers.md`. No code change, no release.
+  `docs/registers.md`. Merged in #66.
+
+### Tests
+- `tests/test_firmware_3923_findings.py`: ranges and defaults of every writable holding, refusal of out-of-range
+  writes (number entity, coordinator, restore), default read-back as an error, deferred hot water writes, proven
+  default as reset value, triggers, overall mode without setpoint, level and overall labels, resolved registers,
+  shared addresses, solar flag and option, signed heat quantity counters.
 
 ## [0.16.1] – 2026-11-08
 
@@ -624,7 +701,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...v0.15.0
