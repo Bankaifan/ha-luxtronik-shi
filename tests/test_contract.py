@@ -16,6 +16,8 @@ import pathlib
 
 from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
+    BLOCK_SELECT_KEYS,
+    BLOCK_SWITCH_KEYS,
     CLIMATE_KEYS,
     DERIVED_SENSOR_KEYS,
     FIRMWARE_SENSOR_KEY,
@@ -46,6 +48,8 @@ def _current() -> dict[str, set[str]]:
         current.setdefault(reg.platform, set()).add(reg.key)
     current["climate"] = set(CLIMATE_KEYS)
     current["water_heater"] = set(WATER_HEATER_KEYS)
+    current["select"] |= set(BLOCK_SELECT_KEYS)
+    current["switch"] |= set(BLOCK_SWITCH_KEYS)
     current["sensor"] |= set(DERIVED_SENSOR_KEYS) | {FIRMWARE_SENSOR_KEY}
     current.setdefault("binary_sensor", set()).update([*_status_bits(), "online"])
     return current

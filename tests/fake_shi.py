@@ -173,6 +173,9 @@ class FakeSHI:
         self.pending: dict[int, tuple[int, float]] = {}
         # Owner measurement: the hot water mode (10005) cannot be set while the hot water block (10051) is on.
         self.block_refuses_dhw_mode = False
+        # Addresses whose writes are accepted on the wire but silently not stored (the SHI does this while its
+        # error 816 "multiple SHI write sources" is active; docs/firmware-3.92.3-shi-analysis.md).
+        self.ignored_writes: set[int] = set()
         self._server: asyncio.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
 
@@ -231,6 +234,8 @@ class FakeSHI:
             self.requests.append((func, address, value))
             if address not in self.holding:
                 return bytes([func | 0x80, 2])
+            if address in self.ignored_writes:
+                return pdu[:5]
             if self.block_refuses_dhw_mode and address == 10005 and self.holding.get(10051) == 1:
                 return pdu[:5]  # accepted on the wire, but the controller keeps its value
             if address in self.deferred:

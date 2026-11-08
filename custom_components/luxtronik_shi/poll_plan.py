@@ -16,16 +16,17 @@ from .registers import (
     Register,
 )
 
-# Registers read by the climate and water heater entities (see climate.py, water_heater.py) and by the status
-# bit binary sensors (bits of ``heat_generator_state``). Those entities are not registers of their own, so a
-# disabled register entity must not stop their values. ``tests/test_poll_plan.py`` checks this list against
-# the platform modules.
+# Registers read by the climate and water heater entities (see climate.py, water_heater.py), by the block
+# select and switch (block_views.py) and by the status bit binary sensors (bits of ``heat_generator_state``).
+# Those entities are not registers of their own, so a disabled register entity must not stop their values.
+# ``tests/test_poll_plan.py`` checks this list against the platform modules.
 PLATFORM_SOURCE_KEYS: frozenset[str] = frozenset(
     {
         "cfg_heating_mode",
         "cfg_heating_setpoint",
         "return",
         "heating_block",
+        "dhw_block",
         "operating_mode",
         "heat_generator_state",
         "cfg_dhw_mode",

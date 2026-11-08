@@ -82,7 +82,7 @@ die IP-Adresse einer bereits eingerichteten Wärmepumpe, übernimmt die Erkennun
 | **Climate / Water Heater** | Heizkreis (Auto / Heizen, Sollwert 15–75 °C) und Warmwasser (Keine Vorgabe / Sollwert / Anhebung / Stufe, Sollwert 30–75 °C), siehe unten |
 | **Schreiben: Zahlen** | **Heizkurven-Anhebung** (−20 … +20 K), Heizen Sollwert, Warmwasser Sollwert und Anhebung, Mischkreise 1–3 Sollwert und Anhebung (Heizen und Kühlen), Gesamt-Heizung Anhebung, Wert der Leistungsbegrenzung (0–30 kW) |
 | **Schreiben: Auswahl** | Betriebsart (Keine Vorgabe / Sollwert / Anhebung / Stufe) für Heizen, Warmwasser, Mischkreise 1–3 (Heizen und Kühlen), Gesamt-Heizung; Stufe (Normal / Erhöht / Erhöht Stufe 2 / Abgesenkt); Modus der Leistungsbegrenzung (keine / weich / hart) |
-| **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser* |
+| **Schreiben: Schalter** | *Heizung sperren*, *Warmwasser sperren*, *Kühlung sperren*, *Pool sperren* (nur mit gewähltem Pool), **Zirkulationspumpe**, *Extra-Warmwasser*; dazu die Sperren-Sichten *Betriebsart (Sperren)* (Select) und *Ein/Aus (Sperren)* (Schalter), siehe [unten](#sperren-sichten-für-den-heat-pump-optimizer) |
 | Pumpen und Ein-/Ausgänge | **Pumpe Heizung (HUP), Warmwasser (BUP), Zirkulation (ZIP)** läuft, Ausgänge **VBO** und **FP1** (FP2 und FP3 standardmäßig deaktiviert; nicht gemessen), Eingänge **EVU** und **EVU 2** als Pegel (standardmäßig deaktiviert). Gelesen aus denselben Registern wie die passenden `raw_`-Sensoren, die unverändert bleiben. Bei EVU ist nur der Name durch die Firmware-Analyse belegt; dass Pegel 1 *freigegeben* heißt, ist aus einem gemessenen Zustand abgeleitet, die Sensoren zeigen deshalb den Pegel, nicht „gesperrt“. Die Betriebsart *EVU-Sperre* meldet die Sperre selbst |
 | Diagnose | Puffertyp, Grenz-/Min-/Max-Werte, Ausstattungsmerkmale, Firmware, undokumentierte Rohwerte (standardmäßig deaktiviert). Schaltspielsperre, Mindestlaufzeit und minimale Warmwassertemperatur sind feste Firmware-Konstanten und für neue Installationen standardmäßig deaktiviert |
 
@@ -147,6 +147,47 @@ stoppen) und beim Water Heater `no_influence` statt der Betriebsart `off`.
 
 **Gesamt-Heizung** (Betriebsart, Anhebung und Stufe, 10065–10067) ist standardmäßig deaktiviert: Ihre Wirkung ist
 nicht belegt, und sie übersteuert die Einstellungen der einzelnen Kreise.
+
+### Sperren-Sichten für den Heat Pump Optimizer
+
+Ein **Select** (`block_mode`, *Betriebsart (Sperren)*) und ein **Schalter** (`block_power`, *Ein/Aus (Sperren)*) im
+Hauptgerät sind Sichten auf die beiden Register `heating_block` (10050) und `dhw_block` (10051). Sie lesen und
+schreiben genau diese, fragen nichts zusätzlich ab und schreiben wie jede andere Entität (Rücklesen, keine Meldung
+„außerhalb von Home Assistant geändert“). Wie die Sperren selbst werden sie nach einem Reset **nicht**
+wiederhergestellt. Sie ersetzen das Template-Select und den Template-Schalter, die manche Installationen für den Heat
+Pump Optimizer in der `configuration.yaml` pflegen: Eine Koordinator-Entität schreibt ihren Zustand bei jeder
+Abfrage, das hält die Frische-Prüfung des Optimizers (`last_reported`) ehrlich, während Home Assistant einen
+unveränderten Template-Zustand nicht erneut meldet.
+
+| Optionsschlüssel | Angezeigt als | Heizungs-Sperre | Warmwasser-Sperre |
+|---|---|---|---|
+| `heating_dhw` | Heizen und Warmwasser | aus | aus |
+| `heating` | Nur Heizen | aus | **an** |
+| `dhw_hot_water` | Nur Warmwasser | **an** | aus |
+
+Die Optionsschlüssel ergeben gefaltet (nur Buchstaben und Ziffern) `Heating + DHW`, `Heating` und `DHW (Hot
+Water)`, die Beschriftungen, die der Optimizer erkennt; er ordnet sie also Heizen und Warmwasser / nur Heizen / nur
+Warmwasser zu.
+
+* **„Nur Warmwasser“ erscheint auch, wenn beide Sperren gesetzt sind.** Drei Optionen können diesen Zustand nicht
+  zeigen. Der Schalter zeigt das echte *Aus*: Er ist genau dann aus, wenn beide Sperren gesetzt sind.
+* **Schalter:** Ausschalten setzt beide Sperren (zuerst Warmwasser). Einschalten gibt **nur die Warmwasser-Sperre
+  frei, und nur wenn beide Sperren gesetzt sind**; die Heizungs-Sperre bleibt, wie das Select sie hinterlassen hat.
+  In jedem anderen Zustand tut Einschalten nichts.
+* **Schreibreihenfolge.** Zwei Schreibzugriffe folgen aufeinander, und die SHI gibt alles frei, wenn ihr Watchdog
+  abläuft. Eine Änderung gibt deshalb erst frei und sperrt dann, sodass eine Unterbrechung zwischen den beiden
+  Zugriffen weniger Sperren hinterlässt, nie mehr (Nur Heizen -> Nur Warmwasser läuft über „Heizen und Warmwasser“).
+  Beide Register werden jedes Mal geschrieben. Nach jedem Schreiben wird zurückgelesen; übernimmt die Wärmepumpe den
+  Wert nicht (zum Beispiel solange ihr Fehler 816 *Mehrere SHI Schreibquellen* aktiv ist und Schreibzugriffe ohne
+  Fehlercode verwirft), bricht die Folge mit einer Fehlermeldung ab.
+* Bei neuen Installationen standardmäßig aktiviert; bei Einträgen, die vor ihrer Einführung angelegt wurden, sind sie
+  deaktiviert (in den Entitäts-Einstellungen aktivierbar).
+
+**Mit dem Optimizer verwenden:** In den Optionen des Optimizers die Entität für den *Wärmepumpen-Modus* auf das Select
+und die Ein/Aus-Entität auf den Schalter setzen (die Entitäts-IDs hängen von Gerätename und Sprache ab, siehe
+Entitätsregister). Danach das alte Template-Select und den Template-Schalter aus der `configuration.yaml` entfernen,
+Template-Entitäten neu laden bzw. neu starten und die verwaisten Entitäten löschen. Immer nur ein Schreiber für die
+Sperren.
 
 ### Gliederung in Home Assistant
 

@@ -345,8 +345,37 @@ def exceptions(lang: str) -> dict[str, dict[str, str]]:
     return out
 
 
+# Block select and switch (views on heating_block and dhw_block, see block_views.py). "Hot water only" is also
+# shown while both blocks are set; the switch shows the real off.
+BLOCK_VIEWS = {
+    "en": {
+        "mode": "Operating mode (blocks)",
+        "power": "On/off (blocks)",
+        "options": {
+            registers.BLOCK_MODE_HEATING_DHW: "Heating and hot water",
+            registers.BLOCK_MODE_HEATING: "Heating only",
+            registers.BLOCK_MODE_DHW: "Hot water only",
+        },
+    },
+    "de": {
+        "mode": "Betriebsart (Sperren)",
+        "power": "Ein/Aus (Sperren)",
+        "options": {
+            registers.BLOCK_MODE_HEATING_DHW: "Heizen und Warmwasser",
+            registers.BLOCK_MODE_HEATING: "Nur Heizen",
+            registers.BLOCK_MODE_DHW: "Nur Warmwasser",
+        },
+    },
+}
+
 EXCEPTIONS = {
     "en": {
+        "block_write_not_taken": {
+            "message": "The heat pump did not take {key} = {expected} (it reads {actual}). The remaining block writes were not made."
+        },
+        "block_state_unknown": {
+            "message": "The heating and hot water blocks have no value yet. Try again after the next update."
+        },
         "setpoint_out_of_range": {"message": "Setpoint {value} is outside {min} … {max} °C."},
         "unsupported_hvac_mode": {"message": "HVAC mode {mode} is not supported. Use auto or heat."},
         "unsupported_operation_mode": {"message": "Operation mode {mode} is not supported."},
@@ -359,6 +388,12 @@ EXCEPTIONS = {
         "state_off": {"message": "off"},
     },
     "de": {
+        "block_write_not_taken": {
+            "message": "Die Wärmepumpe hat {key} = {expected} nicht übernommen (sie liest {actual}). Die weiteren Schreibzugriffe auf die Sperren wurden nicht ausgeführt."
+        },
+        "block_state_unknown": {
+            "message": "Für die Sperren von Heizung und Warmwasser liegt noch kein Wert vor. Versuche es nach der nächsten Aktualisierung erneut."
+        },
         "setpoint_out_of_range": {"message": "Sollwert {value} liegt außerhalb von {min} … {max} °C."},
         "unsupported_hvac_mode": {"message": "HVAC-Modus {mode} wird nicht unterstützt. Verwende auto oder heat."},
         "unsupported_operation_mode": {"message": "Betriebsart {mode} wird nicht unterstützt."},
@@ -458,6 +493,12 @@ for lang in ("en", "de"):
             },
         }
     }
+    block_text = BLOCK_VIEWS[lang]
+    entity["select"][registers.BLOCK_MODE_KEY] = {
+        "name": block_text["mode"],
+        "state": {opt: block_text["options"][opt] for opt in registers.BLOCK_MODES},
+    }
+    entity["switch"][registers.BLOCK_POWER_KEY] = {"name": block_text["power"]}
     entity["sensor"][registers.FIRMWARE_SENSOR_KEY] = {"name": FIRMWARE_NAME[lang]}
     for derived in registers.DERIVED_SENSORS:
         entity["sensor"][derived.key] = {"name": derived.name_en if lang == "en" else derived.name_de}

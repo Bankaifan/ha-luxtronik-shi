@@ -499,6 +499,9 @@
       },
       "extra_dhw": {
         "name": "Extra"
+      },
+      "block_power": {
+        "name": "Ein/Aus (Sperren)"
       }
     },
     "number": {
@@ -719,6 +722,14 @@
           "offset": "Anhebung (Sollwert der Regelung plus Anhebung)",
           "level": "Stufe (Sollwert der Regelung, um die Stufe korrigiert)"
         }
+      },
+      "block_mode": {
+        "name": "Betriebsart (Sperren)",
+        "state": {
+          "heating_dhw": "Heizen und Warmwasser",
+          "heating": "Nur Heizen",
+          "dhw_hot_water": "Nur Warmwasser"
+        }
       }
     },
     "climate": {
@@ -812,6 +823,12 @@
     },
     "setpoint_not_active_unknown": {
       "message": "Der Sollwert wirkt nur in der Betriebsart „Sollwert“. {select} steht auf „unbekannt“, deshalb wurde nichts geschrieben. Stelle {select} zuerst auf „Sollwert“."
+    },
+    "block_write_not_taken": {
+      "message": "Die Wärmepumpe hat {key} = {expected} nicht übernommen (sie liest {actual}). Die weiteren Schreibzugriffe auf die Sperren wurden nicht ausgeführt."
+    },
+    "block_state_unknown": {
+      "message": "Für die Sperren von Heizung und Warmwasser liegt noch kein Wert vor. Versuche es nach der nächsten Aktualisierung erneut."
     },
     "setpoint_out_of_range": {
       "message": "Sollwert {value} liegt außerhalb von {min} … {max} °C."

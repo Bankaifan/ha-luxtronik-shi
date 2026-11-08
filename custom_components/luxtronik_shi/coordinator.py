@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from time import monotonic as _monotonic
@@ -195,6 +196,10 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.climate_enabled_default = True
         # Same for the water heater entity.
         self.water_heater_enabled_default = True
+        # Same for the block select and switch (views on the two block registers, see block_views.py).
+        self.block_views_enabled_default = True
+        # One block sequence (two writes in a fixed order) at a time, across the block select and switch.
+        self.block_sequence_lock = asyncio.Lock()
         # Restore after a device reset (option): raw values this integration wrote and read back, per key.
         self.restore_enabled = bool(entry.options.get(CONF_RESTORE_AFTER_RESET, DEFAULT_RESTORE_AFTER_RESET))
         self._restore_store: Store[dict[str, Any]] = Store(
@@ -654,6 +659,25 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Push the read-back to every entity without async_set_updated_data: that would also move the next
         # poll a full interval out, so a writer faster than the scan interval would stop the measurements from
         # updating.
+        self.data = dict(self._values)
+        self.async_update_listeners()
+
+    async def async_read_now(self, regs: Sequence[Register]) -> None:
+        """Read the given registers from the heat pump now (not a poll) and publish the values.
+
+        For a decision that must not rest on a value up to one scan interval old (see block_views.py). Takes
+        the write lock, so it never runs between the write and the read-back of another write.
+        """
+        async with self._write_lock:
+            try:
+                for reg in regs:
+                    await self._read_single(reg)
+            except ModbusCommError as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="poll_failed",
+                    translation_placeholders={"error": str(err)},
+                ) from err
         self.data = dict(self._values)
         self.async_update_listeners()
 

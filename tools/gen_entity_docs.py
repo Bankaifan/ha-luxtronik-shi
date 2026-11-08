@@ -89,6 +89,10 @@ def collect() -> list[Entity]:
     for key, source in ((registers.CLIMATE_HEATING_KEY, "cfg_heating_setpoint"), (registers.WATER_HEATER_DHW_KEY, "cfg_dhw_setpoint")):
         platform = "climate" if key == registers.CLIMATE_HEATING_KEY else "water_heater"
         found.append(Entity(key, platform, len(found), area=registers.area_of(source)))
+    for key in registers.BLOCK_SELECT_KEYS:
+        found.append(Entity(key, "select", len(found), area=registers.area_of(key)))
+    for key in registers.BLOCK_SWITCH_KEYS:
+        found.append(Entity(key, "switch", len(found), area=registers.area_of(key)))
     return found
 
 
@@ -167,6 +171,8 @@ def _values(entity: Entity, entry: texts.Entry, lang: str, trans: dict, page: di
             lines.append(f"{i} = `{opt}`: {states.get(opt, opt)}")
         flush()
         return "<br>".join(lines)
+    if entity.platform == "select" and reg is None:
+        return "<br>".join(f"`{k}`: {v}" for k, v in states.items())  # block mode: a view, not a register
     if entity.platform == "switch":
         return page["switch_values"]
     if entity.platform == "binary_sensor":

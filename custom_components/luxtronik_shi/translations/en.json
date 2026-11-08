@@ -499,6 +499,9 @@
       },
       "extra_dhw": {
         "name": "Extra"
+      },
+      "block_power": {
+        "name": "On/off (blocks)"
       }
     },
     "number": {
@@ -719,6 +722,14 @@
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
         }
+      },
+      "block_mode": {
+        "name": "Operating mode (blocks)",
+        "state": {
+          "heating_dhw": "Heating and hot water",
+          "heating": "Heating only",
+          "dhw_hot_water": "Hot water only"
+        }
       }
     },
     "climate": {
@@ -812,6 +823,12 @@
     },
     "setpoint_not_active_unknown": {
       "message": "The setpoint only applies in mode \"Setpoint\". {select} is in mode \"unknown\", so nothing was written. Set {select} to \"Setpoint\" first."
+    },
+    "block_write_not_taken": {
+      "message": "The heat pump did not take {key} = {expected} (it reads {actual}). The remaining block writes were not made."
+    },
+    "block_state_unknown": {
+      "message": "The heating and hot water blocks have no value yet. Try again after the next update."
     },
     "setpoint_out_of_range": {
       "message": "Setpoint {value} is outside {min} … {max} °C."

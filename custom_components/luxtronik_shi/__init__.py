@@ -22,7 +22,15 @@ from .const import (
 )
 from .coordinator import LuxtronikCoordinator, restore_store_key
 from .modbus_client import LuxtronikModbusClient
-from .registers import CLIMATE_KEYS, REMOVED_KEYS, RENAMED_KEYS, WATER_HEATER_KEYS, active_registers
+from .registers import (
+    BLOCK_SELECT_KEYS,
+    BLOCK_SWITCH_KEYS,
+    CLIMATE_KEYS,
+    REMOVED_KEYS,
+    RENAMED_KEYS,
+    WATER_HEATER_KEYS,
+    active_registers,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,6 +114,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) ->
         e.domain == Platform.WATER_HEATER and e.unique_id.endswith(WATER_HEATER_KEYS[0]) for e in known
     )
     coordinator.water_heater_enabled_default = not known or has_water_heater
+    # And for the block select and switch (added after 0.14.0): an entry that already has entities keeps them
+    # disabled until the owner enables them.
+    has_block_views = any(
+        (e.domain == Platform.SELECT and e.unique_id.endswith(f"_{BLOCK_SELECT_KEYS[0]}"))
+        or (e.domain == Platform.SWITCH and e.unique_id.endswith(f"_{BLOCK_SWITCH_KEYS[0]}"))
+        for e in known
+    )
+    coordinator.block_views_enabled_default = not known or has_block_views
 
     entry.runtime_data = coordinator
     coordinator.async_setup_devices()

@@ -11,6 +11,19 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.15.0] – 2026-11-08
+
+### Added
+- **Block views for the Heat Pump Optimizer:** a select `block_mode` (*Operating mode (blocks)*: `heating_dhw`,
+  `heating`, `dhw_hot_water`) and a switch `block_power` (*On/off (blocks)*), both views on `heating_block` and
+  `dhw_block`. They replace the template select and switch some installations use for the optimizer, poll nothing
+  extra and write through the normal path with read-back. The option keys are recognised by the optimizer as full,
+  heating only and hot water only. "Hot water only" is also shown while both blocks are set; the switch shows the
+  real *off*. A change releases a block before it sets the other one, and a write the heat pump does not take stops
+  the sequence with an error. Enabled by default on new installations only; existing entries enable them in the
+  entity settings. New keys `select.block_mode` and `switch.block_power`; no new registers. See the README section
+  *Block views for the Heat Pump Optimizer*.
+
 ## [0.14.0] – 2026-11-08
 
 ### Fixed
@@ -569,7 +582,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.11.0...v0.12.0

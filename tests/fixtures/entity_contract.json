@@ -57,6 +57,7 @@
     "cfg_room_setpoint"
   ],
   "select": [
+    "block_mode",
     "cfg_dhw_level",
     "cfg_dhw_mode",
     "cfg_heating_level",
@@ -159,6 +160,7 @@
     "switching_lock_minutes"
   ],
   "switch": [
+    "block_power",
     "circulation",
     "cooling_block",
     "dhw_block",

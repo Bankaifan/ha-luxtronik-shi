@@ -285,6 +285,45 @@ _add("pool_block", "blocks",
      "Sperrt die Pool-Heizung. Braucht *Pool* in der Ausstattung. Häufiges Schalten kann Wärmepumpe und "
      "Hydraulik belasten.", "PL")
 
+_add("block_mode", "blocks",
+     "Operating mode as a view on the two blocks `heating_block` and `dhw_block`, for the Heat Pump Optimizer "
+     "(point its *heat pump mode* option at this entity; it replaces a hand-written template select). Options: "
+     "`heating_dhw` = no block, `heating` = hot water blocked, `dhw_hot_water` = heating blocked. **`dhw_hot_water` "
+     "is also shown while both blocks are set**: three options cannot express that state, so use "
+     "`block_power` for the real off. Choosing an option writes both blocks, releases first and then blocks, so a "
+     "failure between the two writes leaves fewer blocks, never more. A write the heat pump does not take (read "
+     "back differs) stops the sequence with an error. The option keys fold to the same letters as the labels "
+     "`Heating + DHW`, `Heating` and `DHW (Hot Water)` that the optimizer knows. No extra polling. Not restored "
+     "after a reset, like the blocks. Enabled by default on new installations only; on an existing installation "
+     "enable it in the entity settings.",
+     "Betriebsart als Sicht auf die beiden Sperren `heating_block` und `dhw_block`, für den Heat Pump Optimizer "
+     "(dessen Option *Wärmepumpen-Modus* auf diese Entität zeigen lassen; sie ersetzt ein selbst geschriebenes "
+     "Template-Select). Optionen: `heating_dhw` = keine Sperre, `heating` = Warmwasser gesperrt, "
+     "`dhw_hot_water` = Heizen gesperrt. **`dhw_hot_water` wird auch angezeigt, wenn beide Sperren gesetzt "
+     "sind**: Drei Optionen können diesen Zustand nicht ausdrücken, das echte Aus zeigt `block_power`. Eine "
+     "Auswahl schreibt beide Sperren, erst Freigaben, dann Sperren; ein Fehler zwischen den beiden Schreibzugriffen "
+     "lässt also weniger Sperren stehen, nie mehr. Übernimmt die Wärmepumpe einen Wert nicht (Rücklesen weicht "
+     "ab), bricht die Folge mit einer Fehlermeldung ab. Die Optionsschlüssel ergeben gefaltet dieselben Buchstaben "
+     "wie die Beschriftungen `Heating + DHW`, `Heating` und `DHW (Hot Water)`, die der Optimizer kennt. Kein "
+     "zusätzliches Abfragen. Wird nach einem Reset nicht wiederhergestellt, wie die Sperren. Nur bei neuen "
+     "Installationen standardmäßig aktiv; bei einer bestehenden Installation in den Entitäts-Einstellungen "
+     "aktivieren.", "INT")
+_add("block_power", "blocks",
+     "On/off as a view on the two blocks: **off exactly when both `heating_block` and `dhw_block` are set**. "
+     "Turning off sets both (hot water first, so heating still runs if the second write fails). Turning on "
+     "releases only the hot water block, and only while both are set; the heating block stays as the "
+     "`block_mode` select left it, so after turning on the select usually reads *hot water only* until the "
+     "optimizer sets a mode. In any other state turning on does nothing. Replaces a hand-written template "
+     "switch. No extra polling; not restored after a reset. Enabled by default on new installations only.",
+     "Ein/Aus als Sicht auf die beiden Sperren: **aus genau dann, wenn `heating_block` und `dhw_block` beide "
+     "gesetzt sind**. Ausschalten setzt beide (erst Warmwasser, damit bei einem Fehler des zweiten "
+     "Schreibzugriffs weiter geheizt wird). Einschalten gibt nur die Warmwasser-Sperre frei, und nur solange "
+     "beide gesetzt sind; die Heizungs-Sperre bleibt, wie das Select `block_mode` sie hinterlassen hat, das "
+     "Select zeigt nach dem Einschalten also meist *Nur Warmwasser*, bis der Optimizer eine Betriebsart setzt. "
+     "In jedem anderen Zustand tut Einschalten nichts. Ersetzt einen selbst geschriebenen Template-Schalter. "
+     "Kein zusätzliches Abfragen; wird nach einem Reset nicht wiederhergestellt. Nur bei neuen Installationen "
+     "standardmäßig aktiv.", "INT")
+
 # ------------------------------------------------------------------ heating control
 _add("climate_heating", "heating",
      "Thermostat view of the heating circuit. HVAC mode `auto` = control mode 0 (the heat pump controls itself, "
