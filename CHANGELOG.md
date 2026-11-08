@@ -11,6 +11,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.14.0] – 2026-11-08
+
 ### Fixed
 - **No more "value changed outside Home Assistant" notice for the circulation pump.** The controller may switch it
   itself (time schedule, hot water run), so a change is no evidence of another Modbus client. Other writable
@@ -567,7 +569,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.10.1...v0.11.0
