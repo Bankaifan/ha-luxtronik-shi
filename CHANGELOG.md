@@ -11,6 +11,11 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Fixed
+- **No more "value changed outside Home Assistant" notice for the circulation pump.** The controller may switch it
+  itself (time schedule, hot water run), so a change is no evidence of another Modbus client. Other writable
+  settings are reported as before. The pump stays an ordinary switch and is still never restored after a reset.
+
 ### Added
 - **Ready-made dashboards** (`dashboards/`, English and German, profiles *basic* and *full*, plus an optional view
   with the HACS card apexcharts-card): overview, energy, locks and grid, control, diagnostics and an automation

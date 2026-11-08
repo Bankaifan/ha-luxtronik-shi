@@ -208,7 +208,7 @@ Die Integration meldet diese Hinweise unter *Einstellungen → System → Repara
 | Firmware der Wärmepumpe ist veraltet | Warnung | Firmware älter als 3.92.0: Zirkulationspumpe und Extra-Warmwasser haben keine Werte. |
 | Smart-Home-Schnittstelle nicht erreichbar | Fehler | Alle Abfragen sind 10 Minuten in Folge fehlgeschlagen. |
 | Werte nach Verbindungsausfall geändert | Warnung | Nach einem Ausfall weichen Heizungssperre, Warmwassersperre, Heizungs-Betriebsart oder Warmwasser-Betriebsart vom zuletzt vor dem Ausfall gelesenen Wert ab. |
-| Wert außerhalb von Home Assistant geändert | Warnung | Eine beschreibbare Einstellung (Betriebsart, Stufe, Sollwert, Anhebung, Sperre, Zirkulation, Leistungsbegrenzung) hat sich zwischen zwei Abfragen geändert, ohne dass Home Assistant geschrieben hat. |
+| Wert außerhalb von Home Assistant geändert | Warnung | Eine beschreibbare Einstellung (Betriebsart, Stufe, Sollwert, Anhebung, Sperre, Leistungsbegrenzung) hat sich zwischen zwei Abfragen geändert, ohne dass Home Assistant geschrieben hat. |
 
 Die ersten beiden verschwinden von selbst, sobald ihre Ursache weg ist.
 

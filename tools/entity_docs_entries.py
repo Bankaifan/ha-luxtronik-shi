@@ -361,10 +361,13 @@ _add("cfg_dhw_level", "hot_water",
 _add("circulation", "hot_water",
      "Switches the hot water circulation pump on, but only if no time schedule is set up for it in the "
      "controller. Needs firmware 3.92.0 or later. One of the keys the Heat Pump Optimizer depends on. The "
-     "heating circulation pumps cannot be controlled through the SHI.",
+     "heating circulation pumps cannot be controlled through the SHI. The controller may switch this pump itself "
+     "(time schedule, hot water run), so a change made there is not reported as a change outside Home Assistant.",
      "Schaltet die Warmwasser-Zirkulationspumpe ein, aber nur, wenn in der Regelung kein Zeitprogramm dafür "
      "eingerichtet ist. Braucht Firmware 3.92.0 oder neuer. Einer der Schlüssel, auf die der Heat Pump "
-     "Optimizer angewiesen ist. Die Heizungs-Umwälzpumpen lassen sich über die SHI nicht steuern.", "PL")
+     "Optimizer angewiesen ist. Die Heizungs-Umwälzpumpen lassen sich über die SHI nicht steuern. Die Regelung darf diese Pumpe selbst "
+     "schalten (Zeitprogramm, Warmwasserbereitung); eine Änderung dort wird deshalb nicht als Änderung außerhalb "
+     "von Home Assistant gemeldet.", "PL")
 _add("extra_dhw", "hot_water",
      "Starts extra hot water: heating runs until the maximum temperature is reached. Needs firmware 3.92.0 or "
      "later. Whether the controller resets it by itself afterwards (a one-shot) is **open**; because of that it "

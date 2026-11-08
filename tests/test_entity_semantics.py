@@ -434,6 +434,22 @@ async def test_extra_dhw_reset_by_the_controller_is_not_external(hass: HomeAssis
     assert _issue(hass, entry) is None
 
 
+async def test_circulation_changed_by_the_controller_is_not_external(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    switch = _entity_id(hass, entry, "switch", "circulation")
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch}, blocking=True)
+    shi.holding[10070] = 0  # a time schedule or the hot water run in the controller switches it
+    await _poll_settings(hass, entry)
+    assert _issue(hass, entry) is None
+    shi.holding[10070] = 1
+    await _poll_settings(hass, entry)
+    assert _issue(hass, entry) is None
+    # other keys are still reported
+    shi.holding[10001] = 310
+    await _poll_settings(hass, entry)
+    assert _issue(hass, entry) is not None
+
+
 async def test_external_change_with_restore_option_on(hass: HomeAssistant, shi: FakeSHI) -> None:
     from homeassistant.const import CONF_HOST, CONF_PORT
     from pytest_homeassistant_custom_component.common import MockConfigEntry

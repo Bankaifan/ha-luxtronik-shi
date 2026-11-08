@@ -197,7 +197,7 @@ The integration raises these issues under *Settings → System → Repairs*:
 | Heat pump firmware is outdated | warning | Firmware is older than 3.92.0: circulation pump and extra hot water have no values. |
 | Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
 | Values changed after connection outage | warning | After an outage, the heating block, hot water block, heating mode or hot water mode differs from the last value read before the outage. |
-| Value changed outside Home Assistant | warning | A writable setting (mode, level, setpoint, offset, block, circulation, power limit) changed between two polls without a write through Home Assistant. |
+| Value changed outside Home Assistant | warning | A writable setting (mode, level, setpoint, offset, block, power limit) changed between two polls without a write through Home Assistant. |
 
 The first two disappear by themselves when their condition ends.
 

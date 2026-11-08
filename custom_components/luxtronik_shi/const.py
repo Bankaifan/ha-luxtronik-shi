@@ -36,8 +36,10 @@ ISSUE_EXTERNAL_CHANGE = "values_changed_externally"
 # (covers a write that reached the device although its answer was lost).
 OWN_WRITE_WINDOW = 600  # seconds
 # Writable keys the controller changes by itself, so a change is no evidence of another writer. ``extra_dhw``
-# may be a one-shot that the controller resets (effect open, see const RESTORE_KEYS note).
-EXTERNAL_CHANGE_EXCLUDED: frozenset[str] = frozenset({"extra_dhw"})
+# may be a one-shot that the controller resets (effect open, see const RESTORE_KEYS note). ``circulation`` may
+# follow a time schedule in the controller and is switched on by the controller itself while it heats hot
+# water (the second reason is the owner's observation on the reference installation, not measured here).
+EXTERNAL_CHANGE_EXCLUDED: frozenset[str] = frozenset({"extra_dhw", "circulation"})
 # Control keys compared before and after an outage (notice only, never written back), with issue text labels.
 OUTAGE_WATCH_KEYS = {
     "heating_block": "heating block",
