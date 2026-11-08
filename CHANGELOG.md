@@ -11,6 +11,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Fixed
+- The plain temperature sensors (flow, return, outside, hot water, mixing circuits, heat source and the other
+  16 bit input temperatures) and the error number no longer show the SHI word for "not available" (`0x7FFF`) as
+  3276.7 K or 32767. They are unavailable instead, like the calculated entities that use them. Counters, raw
+  values and enumerations are unchanged. Keys and unique IDs are unchanged.
+
 ## [0.16.0] – 2026-11-08
 
 ### Added

@@ -22,6 +22,7 @@ from .registers import (
     WindowedCop,
     firmware_version,
     overall_cop,
+    reports_not_available,
     usable,
 )
 
@@ -61,9 +62,21 @@ class LuxtronikSensor(LuxtronikEntity, SensorEntity):
             self._attr_options = list(reg.options)
 
     @property
+    def available(self) -> bool:
+        """Unavailable while the controller reports the register as "not available" (0x7FFF)."""
+        return super().available and not self._not_available
+
+    @property
+    def _not_available(self) -> bool:
+        reg = self._reg
+        return reports_not_available(reg) and self._value is not None and usable(reg.key, self._value) is None
+
+    @property
     def native_value(self) -> float | int | None:
-        """Return the current value (enumerations as their option key)."""
+        """Return the current value (enumerations as their option key); never the "not available" word."""
         value = self._value
+        if self._not_available:
+            return None
         options = self._reg.options
         if options is None or value is None:
             return value

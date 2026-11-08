@@ -90,6 +90,23 @@ def usable(key: str, value: float | None) -> float | None:
     return value
 
 
+def reports_not_available(reg: Register) -> bool:
+    """Whether a plain sensor shows the "not available" word 0x7FFF as unavailable instead of as a number.
+
+    The SHI answers 0x7FFF for every register whose availability check fails (docs/firmware-3.92.3-shi-analysis.md,
+    proven). It is applied only where a measured quantity can never legitimately read 0x7FFF: the 16 bit input
+    temperatures and the error number. Counters, raw values (low words of 32 bit counters) and enumerations
+    are left alone (enumerations already show no state for a value outside their options).
+    """
+    return (
+        reg.platform == "sensor"
+        and reg.kind == "input"
+        and reg.dtype != "uint32"
+        and reg.options is None
+        and (reg.device_class == "temperature" or reg.key == "error_number")
+    )
+
+
 def encode_int16(value: float, scale: float) -> int:
     """Convert a physical value into a raw 16 bit word (two's complement)."""
     return int(round(value / scale)) % 0x10000
