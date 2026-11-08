@@ -129,16 +129,16 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `cfg_mk2_setpoint` | 10021 | holding | uint16 | 0.1 | °C | 20 … 65 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_mk2_offset` | 10022 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_mk2_level` | 10023 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `cfg_mk2_cool_mode` | 10025 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `cfg_mk2_cool_setpoint` | 10026 | holding | uint16 | 0.1 | °C | 5 … 25 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `cfg_mk2_cool_offset` | 10027 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_cool_mode` | 10025 | holding | uint16 | 1 | - | - | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_cool_setpoint` | 10026 | holding | uint16 | 0.1 | °C | 5 … 25 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk2_cool_offset` | 10027 | holding | int16 | 0.1 | K | -5 … 5 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_mk3_mode` | 10030 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_mk3_setpoint` | 10031 | holding | uint16 | 0.1 | °C | 20 … 65 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_mk3_offset` | 10032 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_mk3_level` | 10033 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `cfg_mk3_cool_mode` | 10035 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `cfg_mk3_cool_setpoint` | 10036 | holding | uint16 | 0.1 | °C | 5 … 25 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
-| `cfg_mk3_cool_offset` | 10037 | holding | int16 | 0.1 | K | -5 … 5 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_cool_mode` | 10035 | holding | uint16 | 1 | - | - | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_cool_setpoint` | 10036 | holding | uint16 | 0.1 | °C | 5 … 25 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
+| `cfg_mk3_cool_offset` | 10037 | holding | int16 | 0.1 | K | -5 … 5 | likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_power_limit_mode` | 10040 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `cfg_power_limit` | 10041 | holding | uint16 | 0.1 | kW | 0 … 30 | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `heating_block` | 10050 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |

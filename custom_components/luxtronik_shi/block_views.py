@@ -147,8 +147,8 @@ async def async_write_sequence(
             except HomeAssistantError as err:
                 if err.translation_key != "write_reverted_to_default":
                     raise
-                # The coordinator saw the default read back (the firmware reverted the block); for a sequence the
-                # message below says what else was not written.
+                # The coordinator saw the default read back (the firmware reverted the block); for a
+                # sequence the message below says what else was not written.
             actual = (coordinator.data or {}).get(reg.key)
             if actual != raw:
                 raise HomeAssistantError(

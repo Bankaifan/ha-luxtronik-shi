@@ -698,8 +698,11 @@ REGISTERS: tuple[Register, ...] = (
 )
 
 
+_COOL_LIKELY = "likely: firmware V3.92.3 range and default; consumer not traced (docs/firmware-3.92.3-shi-full-analysis.md)"
+
+
 def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
-    """Holdings of mixing circuit 2 or 3: same layout as circuit 1, ranges from python-luxtronik."""
+    """Holdings of mixing circuit 2 or 3: same layout as circuit 1, ranges and defaults from the firmware."""
     base = 10000 + 10 * n
     de, en, k = f"Mischkreis {n}", f"Mixing circuit {n}", f"cfg_mk{n}"
     return (
@@ -713,6 +716,7 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
             hi=65,
             step=0.5,
             unit="°C",
+            reset_default=_SETPOINT_DEFAULT,
         ),
         _number(
             f"{k}_offset",
@@ -726,7 +730,7 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
             signed=True,
         ),
         _select(f"{k}_level", base + 3, f"{de}: Stufe", f"{en}: level", _LEVELS),
-        _select(f"{k}_cool_mode", base + 5, f"{de}: Betriebsart", f"{en}: mode", _MODES),
+        _select(f"{k}_cool_mode", base + 5, f"{de}: Betriebsart", f"{en}: mode", _MODES, source=_COOL_LIKELY),
         _number(
             f"{k}_cool_setpoint",
             base + 6,
@@ -736,6 +740,8 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
             hi=25,
             step=0.5,
             unit="°C",
+            reset_default=_COOL_SETPOINT_DEFAULT,
+            source=_COOL_LIKELY,
         ),
         _number(
             f"{k}_cool_offset",
@@ -747,6 +753,7 @@ def _mixing_circuit_holdings(n: int) -> tuple[Register, ...]:
             step=0.5,
             unit="K",
             signed=True,
+            source=_COOL_LIKELY,
         ),
     )
 

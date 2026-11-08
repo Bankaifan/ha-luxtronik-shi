@@ -116,7 +116,8 @@ HOLDING_RANGES: dict[int, tuple[int, int, int]] = {
     **{base + 3: (0, 3, 0) for base in (10010, 10020, 10030)},
     **{base + 6: (50, 250, 200) for base in (10010, 10020, 10030)},
     **{base + 7: (-50, 50, 0) for base in (10010, 10020, 10030)},
-    **{address: (0, 3, 0) for address in (10000, 10005, 10010, 10015, 10020, 10025, 10030, 10035, 10040, 10065)},
+    **{address: (0, 3, 0) for address in (10000, 10005, 10010, 10015, 10020, 10025, 10030, 10035, 10065)},
+    10040: (0, 2, 0),  # LPC mode: enum "No limit / Soft limit / Hard limit"
 }
 # Triggers the firmware sets back to 0 by itself (full analysis, 3.2 and 3.3): circulation (10070) once no run is
 # active, extra hot water (10071) when its timer ends.
