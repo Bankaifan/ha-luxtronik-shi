@@ -6,24 +6,36 @@ Heat Pump Optimizer (HPO). Stability comes before features.
 
 ## Hard rules
 
-1. **Entity contract.** Unique IDs are `<entry_id>_<key>`. Keys in `registers.py`, the status bit keys in
-   `binary_sensor.py` and `online` must never be renamed, removed or moved to another platform.
-   `tests/test_contract.py` enforces this. Add new keys with `python tools/gen_contract.py`.
-   Do not change the unique ID scheme without a registry migration (`async_migrate_entries`), a test and the
-   owner's approval.
-   Keys the HPO of the reference installation depends on (selection): `flow`, `return`, `outside`, `dhw`,
-   `compressor_thermal_power`, `energy_el_heating`, `aux_heater_1`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`,
-   `heating_block`, `dhw_block`, `circulation`. Never make these depend on an optional equipment part other
-   than the one they belong to (`cfg_mk1_setpoint` → `mk1`).
-2. **Display names may change, keys may not.** Names (`name_de`/`name_en`) may change; existing entity IDs stay
-   in the registry. Generate translations only with `python tools/gen_translations.py`, never edit the JSON
+1. **Correctness before continuity.** The project is in testing and the owner is its only user. An entity that
+   models a register wrongly (wrong platform, an option the firmware does not implement, a unit, state or name that
+   gives the user a wrong idea of what the register does) is **fixed**, not preserved: the update may remove, rename
+   or move an entity to another platform. Reviewers are expected to recognise misleading models themselves and to
+   say so, instead of keeping them because of a rule. Every such breaking change needs, in the same PR:
+   - a `### Action required` subsection **first** in the CHANGELOG section of the version, naming every removed,
+     renamed or moved entity and what the user must do;
+   - a migration note in both READMEs;
+   - orphan cleanup where Home Assistant allows it: a renamed key moves its registry entry (`RENAMED_KEYS`,
+     `async_migrate_renamed_keys`), a removed or moved entity deletes the old registry entry at setup
+     (`REMOVED_KEYS`, `REMOVED_ENTITIES`, `async_remove_obsolete_entities`), so users do not keep dead entities;
+   - the hand-edited fixture `tests/fixtures/entity_contract.json`. Unique IDs are `<entry_id>_<key>`;
+     `tests/test_contract.py` compares the fixture with the code in both directions and is a **change detector**,
+     not a ban: it must be updated deliberately (new keys with `python tools/gen_contract.py`, removals, renames and
+     platform moves by hand), never silenced.
+   Keys the HPO of the reference installation depends on (selection, information for the PR text): `flow`, `return`,
+   `outside`, `dhw`, `compressor_thermal_power`, `energy_el_heating`, `aux_heater_1`, `cfg_heating_setpoint`,
+   `cfg_mk1_setpoint`, `heating_block`, `dhw_block`, `circulation` (a button since 0.17.0), the option keys of the
+   mode selects. When one of them changes (key, platform, option set), the PR must say so under *Action required* so
+   the HPO configuration is updated. Never make these depend on an optional equipment part other than the one they
+   belong to (`cfg_mk1_setpoint` → `mk1`).
+2. **Display names may change freely.** Names (`name_de`/`name_en`) may change without migration; existing entity
+   IDs stay in the registry. Generate translations only with `python tools/gen_translations.py`, never edit the JSON
    files by hand.
 3. **No invented register facts.** Address, data type, scale, range and effect only with a source:
    - `python-luxtronik` (Bouni/python-luxtronik, `luxtronik/definitions/{inputs,holdings}.py`, MIT),
    - a measurement on the reference installation (LWDV 91-1/3, FW 3.92.3) with a description,
    - otherwise mark it as **open** and expose it as a raw value (`raw_<address>`, disabled by default).
 4. **Writable registers** only with a test against `tests/fake_shi.py`, including read-back. No new writes
-   without a value range.
+   without a value range. No untested change of any kind.
 5. **Never test against real devices or a real Home Assistant.** Simulation only.
 6. **Do not increase polling load** without reason: block reads, `every` for rarely needed values.
 7. **Everything a user sees exists in English and German:** entity, option, state and attribute names, errors
@@ -65,7 +77,8 @@ Heat Pump Optimizer (HPO). Stability comes before features.
   CHANGELOG, README and code comments. German only in `README.de.md` and the German translations.
 * README changes go into both `README.md` (English) and `README.de.md` (German).
 * Before opening a PR: `ruff check .` and `pytest --timeout=60` pass.
-* Breaking changes only after consultation, in bold in the CHANGELOG, with migration notes in the README.
+* Breaking changes follow hard rule 1 (*Action required* first in the CHANGELOG, migration notes in both READMEs,
+  orphan cleanup, fixture updated). State them in the PR description so the owner sees them in review.
 
 ## Commands
 
@@ -73,6 +86,10 @@ Heat Pump Optimizer (HPO). Stability comes before features.
 pip install -r requirements_test.txt pytest-timeout ruff
 ruff check . && pytest --timeout=60
 python tools/gen_translations.py   # after name changes
-python tools/gen_contract.py       # after adding keys
+python tools/gen_contract.py       # after adding keys (removals/renames/moves: edit the fixture by hand)
+python tools/gen_entity_docs.py    # after entity changes (docs/entities*.md)
+python tools/gen_register_docs.py  # after register changes (docs/registers.md)
+python tools/gen_icons.py          # after icon changes
+python tools/gen_dashboard.py      # after entity changes (dashboards/)
 python tools/check_version.py      # version/CHANGELOG
 ```
