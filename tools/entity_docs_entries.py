@@ -526,7 +526,7 @@ _add("circulation", "hot_water",
      "the register back to 0 itself; `circulation_stop` ends it early. Whether the pump runs (also for runs of the "
      "controller's own time program) is `pump_circulation` (ZIP output). Not accepted while the "
      "hot water operating mode of the controller is *holiday* or *off*: *off* also clears the equipment flag "
-     "`cap_hot_water`, so the button is unavailable then; *holiday* cannot be read over the SHI, a press is then "
+     "`hot_water_available`, so the button is unavailable then; *holiday* cannot be read over the SHI, a press is then "
      "silently without effect. Needs firmware 3.92.0 or later. One of the keys the Heat Pump Optimizer depends on "
      "(**since 0.18.0 a button, up to 0.17.x a switch**: call `button.press` instead of `switch.turn_on`). The "
      "heating circulation pumps cannot be controlled through the SHI. Because the controller ends the run itself, "
@@ -537,7 +537,7 @@ _add("circulation", "hot_water",
      "setzt die Firmware das Register selbst auf 0; `circulation_stop` beendet ihn vorzeitig. Ob die Pumpe läuft "
      "(auch bei Läufen des eigenen Zeitprogramms der Regelung), zeigt `pump_circulation` (ZIP-Ausgang). Nicht "
      "angenommen, solange die Warmwasser-Betriebsart der Regelung *Ferien* oder *Aus* ist: *Aus* löscht auch das "
-     "Ausstattungs-Flag `cap_hot_water`, der Taster ist dann nicht verfügbar; *Ferien* ist über die SHI nicht "
+     "Flag `hot_water_available`, der Taster ist dann nicht verfügbar; *Ferien* ist über die SHI nicht "
      "lesbar, ein Druck bleibt dann stillschweigend ohne Wirkung. Braucht Firmware 3.92.0 oder neuer. Einer der "
      "Schlüssel, auf die der Heat Pump Optimizer angewiesen ist (**seit 0.18.0 ein Taster, bis 0.17.x ein "
      "Schalter**: `button.press` statt `switch.turn_on` aufrufen). Die Heizungs-Umwälzpumpen lassen sich über die "
@@ -687,10 +687,6 @@ _add("min_runtime_minutes", "system",
      "Mindestlaufzeit der Wärmepumpe in Minuten. Die Referenz-Firmware liefert die Konstante 20 (ein fester Wert, "
      "kein Messwert). Für neue Installationen standardmäßig deaktiviert.", "PL, FW")
 _caps = {
-    "cap_heating": ("heating (equipped and its controller mode is not *off*)",
-                    "Heizen (vorhanden und Betriebsart am Regler nicht *Aus*)"),
-    "cap_hot_water": ("hot water (equipped and its controller mode is not *off*)",
-                      "Warmwasser (vorhanden und Betriebsart am Regler nicht *Aus*)"),
     "cap_cooling": ("cooling (`cooling_configured`)", "Kühlen (`cooling_configured`)"),
     "cap_pool": ("pool (`pool_configured`)", "Pool (`pool_configured`)"),
     "cap_solar": ("a solar function (new in 0.17.0, pre-fills the *solar* option)",
@@ -712,6 +708,21 @@ for _k, (_en, _de) in _caps.items():
          f"Ausstattungs-Flag (Discrete Input, Funktionscode 2): Die Anlage hat {_de}. Wählt die Ausstattung im "
          "Einrichtungsdialog vor. Nicht in python-luxtronik; die Bedingungen sind durch die Firmware belegt "
          "(Vollanalyse, Abschnitt 2.3): Die Mischkreis-Flags folgen der Sichtbarkeit des Kreises.", "FW, OBS")
+
+for _k, _en, _de in (
+    ("heating_available", "heating", "Heizen"),
+    ("hot_water_available", "hot water", "Warmwasser"),
+):
+    _add(_k, "system",
+         f"Availability flag (discrete input, function code 2): on while {_en} is equipped **and** the controller's "
+         f"operating mode for it is not *off* (proven, full analysis, section 2.3). So it is not a pure equipment "
+         f"flag: it goes off when the mode is set to *off* at the control panel. For hot water it gates the "
+         f"circulation buttons. Key up to 0.17.x `cap_{_en.replace(' ', '_')}`, renamed in 0.18.0 (the entity ID stays).",
+         f"Verfügbarkeits-Flag (Discrete Input, Funktionscode 2): an, solange {_de} ausgestattet **und** die "
+         f"Betriebsart der Regelung dafür nicht *Aus* ist (belegt, Vollanalyse, Abschnitt 2.3). Es ist also kein "
+         f"reines Ausstattungs-Flag: Es geht aus, wenn am Bedienteil *Aus* eingestellt wird. Beim Warmwasser "
+         f"sperrt es die Zirkulations-Taster. Schlüssel bis 0.17.x `cap_{_en.replace(' ', '_')}`, in 0.18.0 umbenannt (die "
+         f"Entity-ID bleibt).", "FW, OBS")
 
 # ------------------------------------------------------------------ mixing circuits (templates)
 for _n in (1, 2, 3):

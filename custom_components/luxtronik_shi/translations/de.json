@@ -422,11 +422,11 @@
       "input_evu2": {
         "name": "Eingang: EVU 2 (Pegel 1 = an)"
       },
-      "cap_heating": {
-        "name": "Ausstattung: Heizen"
+      "heating_available": {
+        "name": "Heizen verfügbar (ausgestattet, Betriebsart nicht Aus)"
       },
-      "cap_hot_water": {
-        "name": "Ausstattung: Warmwasser"
+      "hot_water_available": {
+        "name": "Warmwasser verfügbar (ausgestattet, Betriebsart nicht Aus)"
       },
       "cap_cooling": {
         "name": "Ausstattung: Kühlen"

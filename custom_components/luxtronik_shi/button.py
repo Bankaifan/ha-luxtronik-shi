@@ -12,7 +12,7 @@ read-back); a read-back of 0 is the normal end and is not reported (``const.TRIG
 writes 0 to 10070, which ends a circulation run at once unless the time program requests circulation at the
 same time (firmware V3.92.3, FUN_00275f94; proven; see ``registers.TRIGGER_ACTIONS``). The circulation
 trigger is not accepted while the controller's hot water operating mode is "off" or "holiday"; "off" is
-visible as the equipment flag ``cap_hot_water`` (``registers.TRIGGER_REQUIRES``), so both circulation buttons
+visible as the flag ``hot_water_available`` (``registers.TRIGGER_REQUIRES``), so both circulation buttons
 are unavailable then.
 """
 

@@ -118,7 +118,7 @@ async def test_values(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert state("binary_sensor", "aux_heater_1") == "on"
     assert state("button", "circulation") == "unknown"  # a button has no state of its own
     assert state("button", "circulation_stop") == "unknown"
-    assert state("binary_sensor", "cap_heating") == "on"
+    assert state("binary_sensor", "heating_available") == "on"
     assert state("binary_sensor", "cap_cooling") == "off"
     assert state("binary_sensor", "online") == "on"
     assert state("switch", "dhw_block") == "off"

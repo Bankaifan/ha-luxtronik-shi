@@ -855,6 +855,9 @@ RENAMED_KEYS: dict[str, str] = {
     # 0.18.0: named after what they are (the demand border of heating and hot water), not a "limit".
     "heating_limit": "heating_demand_border",
     "dhw_limit": "dhw_demand_border",
+    # 0.18.0: discrete 10000/10001 mean "equipped AND the controller's mode is not off", not just "equipped".
+    "cap_heating": "heating_available",
+    "cap_hot_water": "hot_water_available",
 }
 
 # Raw values are disabled by default; handy for analysis and for reverse engineering of new firmware versions.
@@ -913,32 +916,48 @@ _RAW_ADDED: tuple[Register, ...] = (
 )
 RAW_REGISTERS: tuple[Register, ...] = _RAW_ADDED
 
-# Capability flags (discrete inputs) – tell which parts the installation has.
+# Capability flags (discrete inputs) – tell which parts the installation has. 10000 and 10001 are more than that:
+# they read 1 only while the part is equipped AND the controller's operating mode of it is not "off" (Ba_Hz_akt != 4,
+# Ba_Bw_akt != 4; full analysis, 2.3; proven), so their keys say "available" (``cap_heating`` / ``cap_hot_water`` up
+# to 0.17.x, RENAMED_KEYS).
+HEATING_AVAILABLE_KEY = "heating_available"
+HOT_WATER_AVAILABLE_KEY = "hot_water_available"
 CAPABILITIES: tuple[Register, ...] = tuple(
     Register(
-        key=f"cap_{suffix}",
+        key=key,
         address=address,
         kind="discrete",
-        name_de=f"Ausstattung: {de}",
-        name_en=f"Equipment: {en}",
+        name_de=de,
+        name_en=en,
         platform="binary_sensor",
         diagnostic=True,
         every=10,
     )
-    for address, suffix, de, en in (
-        (10000, "heating", "Heizen", "heating"),
-        (10001, "hot_water", "Warmwasser", "hot water"),
-        (10002, "cooling", "Kühlen", "cooling"),
-        (10003, "pool", "Pool", "pool"),
-        # 10004: solar equipment (visibility ID_Visi_Solar; full analysis, 2.3; proven). Added in 0.17.0.
-        (10004, "solar", "Solar", "solar"),
-        (10005, "room_controller", "Raumregler", "room controller"),
-        (10006, "mk1_heating", "Mischkreis 1 Heizen", "mixing circuit 1 heating"),
-        (10007, "mk1_cooling", "Mischkreis 1 Kühlen", "mixing circuit 1 cooling"),
-        (10008, "mk2_heating", "Mischkreis 2 Heizen", "mixing circuit 2 heating"),
-        (10009, "mk2_cooling", "Mischkreis 2 Kühlen", "mixing circuit 2 cooling"),
-        (10010, "mk3_heating", "Mischkreis 3 Heizen", "mixing circuit 3 heating"),
-        (10011, "mk3_cooling", "Mischkreis 3 Kühlen", "mixing circuit 3 cooling"),
+    for address, key, de, en in (
+        (
+            10000, HEATING_AVAILABLE_KEY, "Heizen verfügbar (ausgestattet, Betriebsart nicht Aus)",
+            "Heating available (equipped, mode not off)",
+        ),
+        (
+            10001, HOT_WATER_AVAILABLE_KEY, "Warmwasser verfügbar (ausgestattet, Betriebsart nicht Aus)",
+            "Hot water available (equipped, mode not off)",
+        ),
+        *(
+            (address, f"cap_{suffix}", f"Ausstattung: {de}", f"Equipment: {en}")
+            for address, suffix, de, en in (
+                (10002, "cooling", "Kühlen", "cooling"),
+                (10003, "pool", "Pool", "pool"),
+                # 10004: solar equipment (visibility ID_Visi_Solar; full analysis, 2.3; proven). Added in 0.17.0.
+                (10004, "solar", "Solar", "solar"),
+                (10005, "room_controller", "Raumregler", "room controller"),
+                (10006, "mk1_heating", "Mischkreis 1 Heizen", "mixing circuit 1 heating"),
+                (10007, "mk1_cooling", "Mischkreis 1 Kühlen", "mixing circuit 1 cooling"),
+                (10008, "mk2_heating", "Mischkreis 2 Heizen", "mixing circuit 2 heating"),
+                (10009, "mk2_cooling", "Mischkreis 2 Kühlen", "mixing circuit 2 cooling"),
+                (10010, "mk3_heating", "Mischkreis 3 Heizen", "mixing circuit 3 heating"),
+                (10011, "mk3_cooling", "Mischkreis 3 Kühlen", "mixing circuit 3 cooling"),
+            )
+        ),
     )
 )
 
@@ -1116,10 +1135,10 @@ TRIGGER_ACTIONS: tuple[TriggerAction, ...] = (
 )
 TRIGGER_ACTION_KEYS: tuple[str, ...] = tuple(action.key for action in TRIGGER_ACTIONS)
 # The circulation trigger is not accepted while the controller's hot water operating mode is "holiday" (3) or
-# "off" (4) (full analysis, 3.3; proven). Over the SHI only "off" is visible: discrete input 10001 (``cap_hot_water``)
+# "off" (4) (full analysis, 3.3; proven). Over the SHI only "off" is visible: discrete input 10001 (``hot_water_available``)
 # reads 0 while hot water is not equipped or its operating mode is "off" (full analysis, 2.3; proven). The button
 # is unavailable while that flag is off; "holiday" cannot be read, a press is then silently without effect.
-TRIGGER_REQUIRES: dict[str, str] = {CIRCULATION_KEY: "cap_hot_water"}
+TRIGGER_REQUIRES: dict[str, str] = {CIRCULATION_KEY: HOT_WATER_AVAILABLE_KEY}
 
 # Entities of the climate platform. They are not registers of their own: they combine existing registers
 # (``cfg_heating_mode``, ``cfg_heating_setpoint``, ``flow``). Their keys are part of the entity contract.

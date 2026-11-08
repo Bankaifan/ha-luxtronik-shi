@@ -244,7 +244,12 @@ def test_triggers_are_buttons_with_running_flags() -> None:
         TriggerAction("circulation_stop", "Zirkulation: beenden", "Circulation: end", "circulation", 0),
         TriggerAction("extra_dhw_stop", "Extra: beenden", "Extra: end", "extra_dhw", 0),
     )
-    assert TRIGGER_REQUIRES == {"circulation": "cap_hot_water"}
+    assert TRIGGER_REQUIRES == {"circulation": "hot_water_available"}
+    # 0.18.0: discrete 10000/10001 = equipped AND mode not off, named so; the registry entries are migrated
+    assert RENAMED_KEYS["cap_heating"] == "heating_available" and RENAMED_KEYS["cap_hot_water"] == "hot_water_available"
+    assert (BY_KEY["heating_available"].kind, BY_KEY["heating_available"].address) == ("discrete", 10000)
+    assert (BY_KEY["hot_water_available"].kind, BY_KEY["hot_water_available"].address) == ("discrete", 10001)
+    assert BY_KEY["hot_water_available"].name_en == "Hot water available (equipped, mode not off)"
 
 
 # Running indicator per trigger read from the trigger register (circulation: the pump output pump_circulation).

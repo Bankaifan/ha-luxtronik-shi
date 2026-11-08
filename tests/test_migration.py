@@ -10,6 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.luxtronik_shi.const import CONF_SLAVE, DOMAIN
 from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
+    BY_KEY,
     RAW_HOLDING_ADDRESSES_ADDED,
     RAW_INPUT_ADDRESSES_ADDED,
     RENAMED_KEYS,
@@ -27,7 +28,14 @@ OLD_ENTITY_IDS = {
     # the demand borders of the reference installation (keys renamed in 0.18.0)
     "heating_limit": "sensor.warmepumpe_heizung_anforderungsgrenze",
     "dhw_limit": "sensor.warmepumpe_warmwasser_anforderungsgrenze",
+    # the availability flags of discrete 10000/10001 (keys renamed in 0.18.0)
+    "cap_heating": "binary_sensor.warmepumpe_ausstattung_heizen",
+    "cap_hot_water": "binary_sensor.warmepumpe_ausstattung_warmwasser",
 }
+
+
+def _domain(old_key: str) -> str:
+    return BY_KEY[RENAMED_KEYS[old_key]].platform
 
 
 def _entry(hass: HomeAssistant, shi: FakeSHI, options: dict | None = None) -> MockConfigEntry:
@@ -50,12 +58,13 @@ def _create_old(
 ) -> er.RegistryEntry:
     """Registry entry as an installation of 0.8.2 or older has it (old key, entity ID chosen long ago)."""
     entity_id = OLD_ENTITY_IDS[key]
+    domain = _domain(key)
     return er.async_get(hass).async_get_or_create(
-        "sensor",
+        domain,
         DOMAIN,
         f"{entry.entry_id}_{key}",
         config_entry=entry,
-        suggested_object_id=entity_id.removeprefix("sensor."),
+        suggested_object_id=entity_id.removeprefix(f"{domain}."),
         disabled_by=disabled_by,
     )
 
@@ -75,13 +84,15 @@ async def test_renamed_entities_keep_their_entity_id(hass: HomeAssistant, shi: F
     registry = er.async_get(hass)
     for old_key, new_key in RENAMED_KEYS.items():
         # same registry entry (same internal id), same entity ID, new unique ID
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{new_key}") == OLD_ENTITY_IDS[old_key]
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{old_key}") is None
+        domain = _domain(old_key)
+        assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{new_key}") == OLD_ENTITY_IDS[old_key]
+        assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{old_key}") is None
         migrated = registry.async_get(OLD_ENTITY_IDS[old_key])
         assert migrated.id == old[old_key].id
         assert migrated.unique_id == f"{entry.entry_id}_{new_key}"
         assert migrated.disabled_by is None
-        assert migrated.unit_of_measurement == "°C"
+        if domain == "sensor":
+            assert migrated.unit_of_measurement == "°C"
     # the entities deliver values under the old entity IDs; 10112 used to be a raw 7, now 0.7 °C
     assert hass.states.get(OLD_ENTITY_IDS["raw_10109"]).state == "0.5"
     assert hass.states.get(OLD_ENTITY_IDS["raw_10110"]).state == "0.6"
@@ -136,8 +147,8 @@ async def test_new_installation_has_only_the_new_keys(hass: HomeAssistant, shi: 
 
     registry = er.async_get(hass)
     for old_key, new_key in RENAMED_KEYS.items():
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{old_key}") is None
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{new_key}")
+        assert registry.async_get_entity_id(_domain(old_key), DOMAIN, f"{entry.entry_id}_{old_key}") is None
+        assert registry.async_get_entity_id(_domain(old_key), DOMAIN, f"{entry.entry_id}_{new_key}")
     assert hass.states.get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_heat_source_input"))
     # max_flow_temp is a diagnostic value that stays disabled by default, as raw_10112 was
     flow_max = registry.async_get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_max_flow_temp"))

@@ -459,8 +459,8 @@ views:
       icon: mdi:clipboard-check
     - type: entities
       entities:
-      - entity: binary_sensor.warmepumpe_ausstattung_heizen
-      - entity: binary_sensor.warmepumpe_ausstattung_warmwasser
+      - entity: binary_sensor.warmepumpe_heizen_verfugbar_ausgestattet_betriebsart_nicht_aus
+      - entity: binary_sensor.warmepumpe_warmwasser_verfugbar_ausgestattet_betriebsart_nicht_aus
       - entity: binary_sensor.warmepumpe_ausstattung_kuhlen
       - entity: binary_sensor.warmepumpe_ausstattung_pool
       - entity: binary_sensor.warmepumpe_ausstattung_raumregler
@@ -559,8 +559,8 @@ views:
         | Wärmepumpe Warmwasser Pumpe: Zirkulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_warmwasser_pumpe_zirkulation_zip` |
         | Wärmepumpe Ausgang: VBO | `output_vbo` | `binary_sensor.warmepumpe_ausgang_vbo` |
         | Wärmepumpe Ausgang: FP1 | `output_fp1` | `binary_sensor.warmepumpe_ausgang_fp1` |
-        | Wärmepumpe Ausstattung: Heizen | `cap_heating` | `binary_sensor.warmepumpe_ausstattung_heizen` |
-        | Wärmepumpe Ausstattung: Warmwasser | `cap_hot_water` | `binary_sensor.warmepumpe_ausstattung_warmwasser` |
+        | Wärmepumpe Heizen verfügbar (ausgestattet, Betriebsart nicht Aus) | `heating_available` | `binary_sensor.warmepumpe_heizen_verfugbar_ausgestattet_betriebsart_nicht_aus` |
+        | Wärmepumpe Warmwasser verfügbar (ausgestattet, Betriebsart nicht Aus) | `hot_water_available` | `binary_sensor.warmepumpe_warmwasser_verfugbar_ausgestattet_betriebsart_nicht_aus` |
         | Wärmepumpe Ausstattung: Kühlen | `cap_cooling` | `binary_sensor.warmepumpe_ausstattung_kuhlen` |
         | Wärmepumpe Ausstattung: Pool | `cap_pool` | `binary_sensor.warmepumpe_ausstattung_pool` |
         | Wärmepumpe Ausstattung: Solar | `cap_solar` | `binary_sensor.warmepumpe_ausstattung_solar` |

@@ -539,8 +539,8 @@ views:
       icon: mdi:clipboard-check
     - type: entities
       entities:
-      - entity: binary_sensor.warmepumpe_equipment_heating
-      - entity: binary_sensor.warmepumpe_equipment_hot_water
+      - entity: binary_sensor.warmepumpe_heating_available_equipped_mode_not_off
+      - entity: binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off
       - entity: binary_sensor.warmepumpe_equipment_cooling
       - entity: binary_sensor.warmepumpe_equipment_pool
       - entity: binary_sensor.warmepumpe_equipment_room_controller
@@ -672,8 +672,8 @@ views:
         | Wärmepumpe Hot water Pump: circulation (ZIP) | `pump_circulation` | `binary_sensor.warmepumpe_hot_water_pump_circulation_zip` |
         | Wärmepumpe Output: VBO | `output_vbo` | `binary_sensor.warmepumpe_output_vbo` |
         | Wärmepumpe Output: FP1 | `output_fp1` | `binary_sensor.warmepumpe_output_fp1` |
-        | Wärmepumpe Equipment: heating | `cap_heating` | `binary_sensor.warmepumpe_equipment_heating` |
-        | Wärmepumpe Equipment: hot water | `cap_hot_water` | `binary_sensor.warmepumpe_equipment_hot_water` |
+        | Wärmepumpe Heating available (equipped, mode not off) | `heating_available` | `binary_sensor.warmepumpe_heating_available_equipped_mode_not_off` |
+        | Wärmepumpe Hot water available (equipped, mode not off) | `hot_water_available` | `binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off` |
         | Wärmepumpe Equipment: cooling | `cap_cooling` | `binary_sensor.warmepumpe_equipment_cooling` |
         | Wärmepumpe Equipment: pool | `cap_pool` | `binary_sensor.warmepumpe_equipment_pool` |
         | Wärmepumpe Equipment: solar | `cap_solar` | `binary_sensor.warmepumpe_equipment_solar` |

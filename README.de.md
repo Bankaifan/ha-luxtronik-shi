@@ -230,7 +230,7 @@ neuen Taster aufrufen statt `switch.turn_on`** (und `circulation_stop` / `extra_
 und den laufenden Zustand aus `pump_circulation` und `extra_dhw_running` lesen. Ein Rücklesen von 0
 direkt nach dem Druck ist das normale Ende (oder die Regelung hat den Trigger nicht angenommen) und kein Fehler. Der
 Zirkulations-Trigger wird nicht angenommen, solange die Warmwasser-Betriebsart der Regelung *Ferien* oder *Aus* ist:
-*Aus* löscht auch das Ausstattungs-Flag `cap_hot_water`, der Taster ist dann nicht verfügbar; *Ferien* ist über die SHI
+*Aus* löscht auch das Flag `hot_water_available`, die Taster sind dann nicht verfügbar; *Ferien* ist über die SHI
 nicht lesbar. Der Parameter *Enable SHI* gilt für die Trigger nicht. Keiner von beiden wird nach einem Reset
 wiederhergestellt oder als Änderung außerhalb von Home Assistant gemeldet.
 
@@ -624,6 +624,10 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   jetzt `dhw_demand_border` (*Anforderungsgrenze*: Sollwert minus Hysterese, von der Firmware nachgeführt, kein
   Parameter). Die Integration überträgt die Registry-Einträge, Entity-IDs, Verlauf und Einstellungen bleiben erhalten;
   es ändert sich nur das Ende der Unique-ID.
+* **Verfügbarkeits-Flags umbenannt (0.18.0):** `cap_heating` heißt jetzt `heating_available` und `cap_hot_water`
+  jetzt `hot_water_available` (Discrete Inputs 10000/10001: an, solange der Teil ausgestattet **und** die Betriebsart
+  der Regelung dafür nicht *Aus* ist; belegt). Die Registry-Einträge werden übertragen, Entity-IDs, Verlauf und
+  Einstellungen bleiben erhalten.
 * **Pool-Sperre und Leistungsbegrenzung:** Der Schalter für die Pool-Sperre (Register 10053) existiert nur mit gewähltem
   Pool. Die Leistungsbegrenzung besteht aus einer Auswahl für den Modus (keine / weich / hart, Register 10040) und einer
   Zahl für den Wert (0–30 kW, Register 10041).

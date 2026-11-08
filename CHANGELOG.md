@@ -33,7 +33,7 @@ of removed or moved entities are deleted when the integration starts.
   installation uses); to end a run press `circulation_stop` instead of `switch.turn_off`. **Whether circulation runs
   is the existing binary sensor `pump_circulation`** (*Pump: circulation (ZIP)*, the real pump output 10356; it also
   covers runs started by the controller's own time program). The circulation buttons are unavailable while
-  `cap_hot_water` is off (the controller does not accept the trigger while its hot water mode is *off*; *holiday*
+  `hot_water_available` (formerly `cap_hot_water`) is off (the controller does not accept the trigger while its hot water mode is *off*; *holiday*
   cannot be read, a press is then silently without effect).
 - **Raw twins of the proven outputs and inputs removed:** `raw_10350` … `raw_10356`, `raw_10360`, `raw_10361`. They
   read the same registers as the binary sensors `output_vbo`, `output_fp1`, `output_fp2`, `output_fp3`,
@@ -44,6 +44,11 @@ of removed or moved entities are deleted when the integration starts.
   `dhw_demand_border` (*Demand border*: effective target minus hysteresis, tracked by the firmware; not the heating
   limit and not a parameter). The registry entries are migrated, so entity IDs, history and settings stay; only the
   unique ID suffix changes. Adjust anything that matches on the unique ID or the key.
+- **Keys of discrete 10000/10001 renamed after what they are:** `cap_heating` → `heating_available` and
+  `cap_hot_water` → `hot_water_available` (*Heating / Hot water available (equipped, mode not off)*). The firmware
+  sets them only while the part is equipped **and** the controller's operating mode for it is not *off* (proven), so
+  they are availability flags, not equipment flags. The registry entries are migrated: entity IDs, history and
+  settings stay; only the unique ID suffix changes. Adjust anything that matches on the unique ID or the key.
 - **Mode option `off` is now `no_influence`** on every mode select (`cfg_heating_mode`, `cfg_dhw_mode`,
   `cfg_mk1_mode` … `cfg_mk3_mode`, `cfg_mk1_cool_mode` … `cfg_mk3_cool_mode`, `cfg_overall_mode`) and in the climate
   attribute `controller_mode`. Raw 0 means "the controller uses its own values"; the circuit keeps running, so `off`
@@ -74,7 +79,7 @@ of removed or moved entities are deleted when the integration starts.
 - **Button platform** for the two trigger registers (`button.py`): `circulation` and `extra_dhw` write 1 and read the
   register back (a read-back of 0 is the normal end, `TRIGGER_KEYS`); `circulation_stop` and `extra_dhw_stop` write 0
   (`TRIGGER_ACTIONS`). The buttons are unavailable while the register reads *not available* (0x7FFF) and, for
-  circulation (start and stop), while `cap_hot_water` is off (`TRIGGER_REQUIRES`); a press in that state raises
+  circulation (start and stop), while `hot_water_available` is off (`TRIGGER_REQUIRES`); a press in that state raises
   `trigger_blocked`. The binary sensor `extra_dhw_running` (`DERIVED_FLAGS`, device class *running*) shows the state of
   10071 and shares the one read of the register with the button.
 - **`circulation_stop`** (proven from firmware V3.92.3): the circulation logic (`FUN_00275f94`) computes its request
@@ -112,7 +117,8 @@ of removed or moved entities are deleted when the integration starts.
 - Trigger buttons and running flag (press, instant end, `circulation_stop` writes 0 with read-back 0 accepted and is
   blocked like the start button, `extra_dhw_stop`, blocked by the hot water mode, not available, firmware end is no
   external change, old switch and raw entries removed, `raw_10113`, `heating_limit` and `dhw_limit` migrated),
-  standalone output flags (address, poll interval, source, raw keys in `REMOVED_KEYS`), overall mode without the
+  standalone output flags (address, poll interval, source, raw keys in `REMOVED_KEYS`), `cap_heating` /
+  `cap_hot_water` migrated to `heating_available` / `hot_water_available`, overall mode without the
   setpoint option, level select with one `increased`.
 - `tests/test_contract.py` compares the fixture with the code in both directions and checks `REMOVED_KEYS`,
   `REMOVED_ENTITIES` and `RENAMED_KEYS` for consistency (`tests/contract.py` is shared with `tools/gen_contract.py`,

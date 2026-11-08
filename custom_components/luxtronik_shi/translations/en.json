@@ -422,11 +422,11 @@
       "input_evu2": {
         "name": "Input: EVU 2 (level 1 = on)"
       },
-      "cap_heating": {
-        "name": "Equipment: heating"
+      "heating_available": {
+        "name": "Heating available (equipped, mode not off)"
       },
-      "cap_hot_water": {
-        "name": "Equipment: hot water"
+      "hot_water_available": {
+        "name": "Hot water available (equipped, mode not off)"
       },
       "cap_cooling": {
         "name": "Equipment: cooling"

@@ -50,7 +50,7 @@ def test_internal_keys_cover_what_the_code_uses() -> None:
     assert RESTORE_KEYS <= keys
     for setpoint, (mode, target) in SETPOINT_GROUPS.items():
         assert {setpoint, mode, target} <= keys
-    assert {key for key in BY_KEY if key.startswith("cap_")} <= keys
+    assert {key for key in BY_KEY if key.startswith("cap_")} | {"heating_available", "hot_water_available"} <= keys
 
 
 def test_derived_sources_follow_their_entities_not_the_internal_keys() -> None:

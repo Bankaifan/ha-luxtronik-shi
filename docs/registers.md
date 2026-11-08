@@ -135,8 +135,8 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `cfg_overall_level` | 10067 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md) |
 | `circulation` | 10070 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware once no run is active |
 | `extra_dhw` | 10071 | holding | uint16 | 1 | - | - | proven: firmware V3.92.3 (docs/firmware-3.92.3-shi-full-analysis.md); trigger, reset to 0 by the firmware when the timer ends |
-| `cap_heating` | 10000 | discrete | uint16 | 1 | - | - | open |
-| `cap_hot_water` | 10001 | discrete | uint16 | 1 | - | - | open |
+| `heating_available` | 10000 | discrete | uint16 | 1 | - | - | open |
+| `hot_water_available` | 10001 | discrete | uint16 | 1 | - | - | open |
 | `cap_cooling` | 10002 | discrete | uint16 | 1 | - | - | open |
 | `cap_pool` | 10003 | discrete | uint16 | 1 | - | - | open |
 | `cap_solar` | 10004 | discrete | uint16 | 1 | - | - | open |

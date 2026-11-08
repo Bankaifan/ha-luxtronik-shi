@@ -216,7 +216,7 @@ get new entity IDs. **Automations and the Heat Pump Optimizer must call `button.
 state from `pump_circulation` and `extra_dhw_running`. A read-back of 0 right after the press is the
 normal end (or the controller did not accept the trigger) and is not an error. The circulation trigger is not accepted
 while the controller's hot water operating mode is *holiday* or *off*: *off* also clears the equipment flag
-`cap_hot_water`, so the button is unavailable then; *holiday* cannot be read over the SHI. The *Enable SHI* parameter
+`hot_water_available`, so the buttons are unavailable then; *holiday* cannot be read over the SHI. The *Enable SHI* parameter
 does not apply to the triggers. Neither is restored after a reset or reported as a change outside Home Assistant.
 
 ### Block views for the Heat Pump Optimizer
@@ -575,6 +575,9 @@ those who deliberately stay on YAML, no longer used in production and not tested
   `dhw_demand_border` (*demand border*: setpoint minus hysteresis, tracked by the firmware, not a parameter). The
   integration moves the registry entries over, so entity IDs, history and settings stay; only the unique ID suffix
   changes.
+* **Availability flags renamed (0.18.0):** `cap_heating` is now `heating_available` and `cap_hot_water` is now
+  `hot_water_available` (discrete inputs 10000/10001: on while the part is equipped **and** the controller's operating
+  mode for it is not *off*; proven). The registry entries move over, so entity IDs, history and settings stay.
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve
