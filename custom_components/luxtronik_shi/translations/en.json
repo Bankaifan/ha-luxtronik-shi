@@ -384,6 +384,12 @@
       },
       "cop_dhw": {
         "name": "COP overall"
+      },
+      "cop_total": {
+        "name": "COP overall"
+      },
+      "flow_return_difference": {
+        "name": "Temperature: flow-return difference"
       }
     },
     "binary_sensor": {
@@ -455,6 +461,21 @@
       },
       "cap_mk3_cooling": {
         "name": "Equipment: mixing circuit 3 cooling"
+      },
+      "fault": {
+        "name": "Status: fault"
+      },
+      "defrost": {
+        "name": "Status: defrost active"
+      },
+      "heating_running": {
+        "name": "Running"
+      },
+      "dhw_running": {
+        "name": "Running"
+      },
+      "power_limit_configured": {
+        "name": "Power limit: mode set"
       },
       "compressor_1": {
         "name": "Status: compressor 1 running"

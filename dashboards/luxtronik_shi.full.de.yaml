@@ -29,6 +29,14 @@ views:
       entity: sensor.warmepumpe_pool_status
     - type: tile
       entity: sensor.warmepumpe_status_fehlernummer
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_storung
+    - type: tile
+      entity: binary_sensor.warmepumpe_heizung_lauft
+    - type: tile
+      entity: binary_sensor.warmepumpe_warmwasser_lauft
+    - type: tile
+      entity: binary_sensor.warmepumpe_status_abtauung_lauft
     - type: conditional
       conditions:
       - condition: state
@@ -78,6 +86,8 @@ views:
       entity: sensor.warmepumpe_temperatur_vorlauf
     - type: tile
       entity: sensor.warmepumpe_temperatur_rucklauf
+    - type: tile
+      entity: sensor.warmepumpe_temperatur_differenz_vorlauf_rucklauf
     - type: tile
       entity: sensor.warmepumpe_warmwasser_temperatur
     - type: history-graph
@@ -228,6 +238,8 @@ views:
       entity: sensor.warmepumpe_heizung_cop_gesamt
     - type: tile
       entity: sensor.warmepumpe_warmwasser_cop_gesamt
+    - type: tile
+      entity: sensor.warmepumpe_cop_gesamt
     - type: markdown
       content: Der **COP (10 min)** ist das Energieverhältnis der letzten 10 Minuten (thermisch / elektrisch); er
         ist unbekannt, solange der Verdichter steht oder gerade erst gestartet ist. **COP gesamt** ist der Quotient
@@ -660,6 +672,13 @@ views:
         | Wärmepumpe COP (10 min) | `cop` | `sensor.warmepumpe_cop_10_min` |
         | Wärmepumpe Heizung COP gesamt | `cop_heating` | `sensor.warmepumpe_heizung_cop_gesamt` |
         | Wärmepumpe Warmwasser COP gesamt | `cop_dhw` | `sensor.warmepumpe_warmwasser_cop_gesamt` |
+        | Wärmepumpe COP gesamt | `cop_total` | `sensor.warmepumpe_cop_gesamt` |
+        | Wärmepumpe Temperatur: Differenz Vorlauf/Rücklauf | `flow_return_difference` | `sensor.warmepumpe_temperatur_differenz_vorlauf_rucklauf` |
+        | Wärmepumpe Status: Störung | `fault` | `binary_sensor.warmepumpe_status_storung` |
+        | Wärmepumpe Status: Abtauung läuft | `defrost` | `binary_sensor.warmepumpe_status_abtauung_lauft` |
+        | Wärmepumpe Heizung Läuft | `heating_running` | `binary_sensor.warmepumpe_heizung_lauft` |
+        | Wärmepumpe Warmwasser Läuft | `dhw_running` | `binary_sensor.warmepumpe_warmwasser_lauft` |
+        | Wärmepumpe Leistungsbegrenzung: Modus eingestellt | `power_limit_configured` | `binary_sensor.warmepumpe_leistungsbegrenzung_modus_eingestellt` |
         | Wärmepumpe Firmware-Version | `firmware_version` | `sensor.warmepumpe_firmware_version` |
         | Wärmepumpe Status: Verdichter 1 läuft | `compressor_1` | `binary_sensor.warmepumpe_status_verdichter_1_lauft` |
         | Wärmepumpe Status: Verdichter 2 läuft | `compressor_2` | `binary_sensor.warmepumpe_status_verdichter_2_lauft` |

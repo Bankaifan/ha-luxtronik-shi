@@ -13,7 +13,9 @@ from custom_components.luxtronik_shi.poll_plan import PLATFORM_SOURCE_KEYS, inte
 from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
     BY_KEY,
+    DERIVED_FLAGS,
     DERIVED_SENSORS,
+    DIFFERENCE_SENSORS,
     FIRMWARE_PARTS,
     SETPOINT_GROUPS,
     active_registers,
@@ -51,6 +53,11 @@ def test_internal_keys_cover_what_the_code_uses() -> None:
     for sensor in DERIVED_SENSORS:
         assert {sensor.thermal, sensor.electric} <= keys
     assert {key for key in BY_KEY if key.startswith("cap_")} <= keys
+    for flag in DERIVED_FLAGS:
+        assert flag.source in keys
+    for difference in DIFFERENCE_SENSORS:
+        assert {difference.minuend, difference.subtrahend} <= keys
+    assert {"energy_th_total", "energy_el_total"} <= keys
 
 
 def test_platform_source_keys_match_the_platform_modules() -> None:

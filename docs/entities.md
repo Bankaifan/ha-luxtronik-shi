@@ -18,8 +18,8 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 
 | Platform | Count | What it is |
 |---|---|---|
-| `sensor` | 79 | measurements, counters, calculated values, enumerations |
-| `binary_sensor` | 31 | status bits, equipment flags, connection |
+| `sensor` | 81 | measurements, counters, calculated values, enumerations |
+| `binary_sensor` | 36 | status bits, equipment flags, connection |
 | `switch` | 7 | blocks, circulation pump, extra hot water (0/1 holding registers), on/off view of the blocks |
 | `number` | 19 | writable setpoints, offsets, power limit |
 | `select` | 17 | writable modes, levels, power limit mode, operating mode view of the blocks |
@@ -50,7 +50,7 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 
 ## 1. Temperatures of the heating circuit
 
-**Background.** A heat pump warms the water that runs through the heating system (the *flow*, German *Vorlauf*) and gets it back cooler (the *return*, *Rücklauf*). The difference between the two is the *spread* (*Spreizung*). The integration has no spread entity; flow minus return in a template sensor gives it. The Luxtronik controller regulates on the **return** temperature: the heating setpoint of the SHI acts on it (see [Heating](#8-heating-circuit-control)). Its normal target comes from the *heating curve* (*Heizkurve*), which assigns a water temperature to every outside temperature: the *slope* says how strongly the water temperature follows the outside temperature, the *level* (or offset) shifts the whole curve up or down. Above the *heating limit* (*Heizgrenze*, an outside temperature) a heating curve controller stops heating. The lower the water temperature a heat pump has to deliver, the more efficient it is: the German Wikipedia article on heat pumps gives the example of a COP falling from 4.8 (B0/W35) to 3.6 (B0/W50).
+**Background.** A heat pump warms the water that runs through the heating system (the *flow*, German *Vorlauf*) and gets it back cooler (the *return*, *Rücklauf*). The difference between the two is the *spread* (*Spreizung*). The controller has no spread register; the integration calculates it as `flow_return_difference` (flow minus return). The Luxtronik controller regulates on the **return** temperature: the heating setpoint of the SHI acts on it (see [Heating](#8-heating-circuit-control)). Its normal target comes from the *heating curve* (*Heizkurve*), which assigns a water temperature to every outside temperature: the *slope* says how strongly the water temperature follows the outside temperature, the *level* (or offset) shifts the whole curve up or down. Above the *heating limit* (*Heizgrenze*, an outside temperature) a heating curve controller stops heating. The lower the water temperature a heat pump has to deliver, the more efficient it is: the German Wikipedia article on heat pumps gives the example of a COP falling from 4.8 (B0/W35) to 3.6 (B0/W50).
 
 **Pitfall: return and return target.** The published register list names 10100 *return target* and 10101 *return actual*. Measured on the reference installation it is the other way round, and the entities follow the measurement (`return` = 10100 follows the water, `return_target` = 10101 is the target). python-luxtronik agrees. Sources: PL, M, WEB ([Heizkurve](#sources), [Wärmepumpe](#sources)).
 
@@ -69,6 +69,7 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 | Temperature: heat source inlet | `heat_source_input`<br>sensor · input 10110 · device Heat pump | °C | - | Temperature of the heat source at the heat pump inlet. What this means for an air-to-water unit is not documented (open). Was `raw_10110` up to 0.8.2. *(PL)*<br>*read every 2 polls* |
 | Temperature: flow maximum | `max_flow_temp`<br>sensor · input 10112 · device Heat pump | °C | - | Maximum flow temperature as reported by the controller. python-luxtronik lists no unit; the integration reads it as °C with one decimal. Disabled by default. Was `raw_10112` up to 0.8.2. *(PL, INT)*<br>*disabled by default; category Diagnostic; read every 4 polls* |
 | Temperature: heat source outlet | `heat_source_out`<br>sensor · input 10111 · device Heat pump | °C | - | Temperature of the heat source at the heat pump outlet. Same caveat as for the inlet. Not present on entries created before 0.3.0 until the equipment is saved once. *(PL)*<br>*read every 2 polls* |
+| Temperature: flow-return difference | `flow_return_difference`<br>sensor · calculated, no register · device Heat pump | K | flow minus return (K), can be negative | Flow temperature minus return temperature, in K. The controller has no spread register, so this is calculated from `flow` and `return`, which are read anyway (no extra polling). Unavailable while either value is unavailable. It can be **negative or near zero** while the heat pump defrosts or when the circuit stands still; it is not clamped. Both sources have a resolution of 0.1 K and are not sampled at the same instant, so short jumps are noise. Unit K without a temperature class, so Home Assistant never converts it like an absolute temperature. *(INT)* |
 
 ## 2. Hot water temperatures
 
@@ -133,6 +134,7 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 | Energy: thermal | `energy_th_pool`<br>sensor · input 10328 · device Pool | kWh | - | Thermal energy produced for pool heating. Needs *pool* in the equipment. Counter in steps of 0.1 kWh over two registers (32 bit). *(PL)*<br>*needs pool in the equipment; read every 2 polls* |
 | COP overall | `cop_heating`<br>sensor · calculated, no register · device Heating | - | 0 … 12 | Overall COP of heating: `energy_th_heating` divided by `energy_el_heating`. Lifetime of the counters, **not** a JAZ. Shown as *unknown* with less than the minimum of electrical energy, a zero or negative result, an implausible result, or when a counter went backwards since the last reading (reset). *(INT)* |
 | COP overall | `cop_dhw`<br>sensor · calculated, no register · device Hot water | - | 0 … 12 | Overall COP of hot water: `energy_th_dhw` divided by `energy_el_dhw`. Same rules as the heating value. *(INT)* |
+| COP overall | `cop_total`<br>sensor · calculated, no register · device Heat pump | - | 0 … 12 | Overall COP of all modes: `energy_th_total` divided by `energy_el_total`. Lifetime of the counters, **not** a JAZ, and different from the 10-minute `cop`: that one is the energy ratio of a trailing window of the power sensors and reacts within minutes, this one moves slowly and only shows the long-term average. Same rules as the heating value (*unknown* with too little electrical energy, an implausible result, or after a counter went backwards). `energy_th_total` needs firmware 3.92.0 or later. *(INT)* |
 
 ## 6. Status and operating state
 
@@ -163,6 +165,10 @@ Every entity of the Luxtronik SHI integration, sorted by topic, with what it mea
 | Status: VD2 running | `heatpump_vd2_status`<br>binary_sensor · heat_generator_state, bit 1 · device Heat pump | - | on / off | Compressor 2 (VD2) runs, with the python-luxtronik name. Bit 1, the same as `compressor_2`. *(PL)*<br>*disabled by default* |
 | Status: ZWE2 active | `heatpump_zwe2_status`<br>binary_sensor · heat_generator_state, bit 3 · device Heat pump | - | on / off | ZWE2 is active, with the python-luxtronik name. Bit 3, the same as `aux_heater_2`. *(PL)*<br>*disabled by default* |
 | Status: ZWE3 active | `heatpump_zwe3_status`<br>binary_sensor · heat_generator_state, bit 4 · device Heat pump | - | on / off | ZWE3 is active. Bit 4. Needs firmware 3.90.1 or later. *(PL)*<br>*disabled by default* |
+| Status: fault | `fault`<br>binary_sensor · calculated, no register · device Heat pump | - | on / off | On when the error code `error_number` is not 0 (problem class). Calculated from that register, no extra polling; unavailable while it has no value. Which codes are real faults and which are warnings or lockouts is not distinguished: every code other than 0 switches it on (see `error_number` for the code list). *(INT)* |
+| Status: defrost active | `defrost`<br>binary_sensor · calculated, no register · device Heat pump | - | on / off | On while `operating_mode` is `defrost`. Calculated, no extra polling. It follows the controller's operating mode, not an output: whether it switches at exactly the same time as the defrost valve output of the native Luxtronik interface has not been measured (open). *(INT)* |
+| Running | `heating_running`<br>binary_sensor · calculated, no register · device Heating | - | on / off | On while `heating_status` is `running` (value 3). Calculated, no extra polling; unavailable while the status has no value. `requested` (a demand that is not served yet) is off. *(INT)* |
+| Running | `dhw_running`<br>binary_sensor · calculated, no register · device Hot water | - | on / off | On while `hot_water_status` is `running` (value 3). Calculated, no extra polling; unavailable while the status has no value. `requested` is off. *(INT)* |
 | Status: connection | `online`<br>binary_sensor · - · device Heat pump | - | on / off | On as long as the last poll of the heat pump succeeded. Unlike the other entities it never becomes unavailable: the state itself says whether the SHI answers. After 10 minutes of failed polls a repair issue is raised. *(INT)*<br>*category Diagnostic* |
 
 ## 7. Blocks (switches)
@@ -266,6 +272,7 @@ Sources: PL, FW, M, INT.
 |---|---|---|---|---|
 | Power limit: mode | `cfg_power_limit_mode`<br>select · holding 10040 · device Heat pump | - | 0 = `none`: No limit<br>1 = `soft`: Soft limit<br>2 = `hard`: Hard limit | Power limit mode: no limit (normal operation), soft limit (recommended for PV surplus), hard limit (only for §14a EnWG, may reduce comfort). Needs a matching value. *(PL)*<br>*category Configuration; read every 2 polls* |
 | Power limit: value | `cfg_power_limit`<br>number · holding 10041 · device Heat pump | kW | 0 … 30 kW<br>step 0.1 | Maximum allowed electrical power of the heat pump in kW, effective according to the limit mode. Not restored after a reset. *(PL)*<br>*category Configuration; read every 2 polls* |
+| Power limit: mode set | `power_limit_configured`<br>binary_sensor · calculated, no register · device Heat pump | - | on / off | On when `cfg_power_limit_mode` is `soft` or `hard`, off for `none`. This reports the **configured mode**, not whether the limit currently reduces the power: how the controller reacts to the limit is not documented (open). Calculated, no extra polling; unavailable while the mode has no value. *(INT)* |
 
 ## 13. Overall heating
 
@@ -415,11 +422,14 @@ These keys were renamed. The old key stays in the entity contract, the integrati
 | `cop` | sensor | [4. Power and calculated COP](#4-power-and-calculated-cop) |
 | `cop_dhw` | sensor | [5. Energy counters, operating hours and overall COP](#5-energy-counters-operating-hours-and-overall-cop) |
 | `cop_heating` | sensor | [5. Energy counters, operating hours and overall COP](#5-energy-counters-operating-hours-and-overall-cop) |
+| `cop_total` | sensor | [5. Energy counters, operating hours and overall COP](#5-energy-counters-operating-hours-and-overall-cop) |
+| `defrost` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `dhw` | sensor | [2. Hot water temperatures](#2-hot-water-temperatures) |
 | `dhw_block` | switch | [7. Blocks (switches)](#7-blocks-switches) |
 | `dhw_limit` | sensor | [2. Hot water temperatures](#2-hot-water-temperatures) |
 | `dhw_max` | sensor | [2. Hot water temperatures](#2-hot-water-temperatures) |
 | `dhw_min` | sensor | [2. Hot water temperatures](#2-hot-water-temperatures) |
+| `dhw_running` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `dhw_target` | sensor | [2. Hot water temperatures](#2-hot-water-temperatures) |
 | `electric_power` | sensor | [4. Power and calculated COP](#4-power-and-calculated-cop) |
 | `electric_power_min` | sensor | [4. Power and calculated COP](#4-power-and-calculated-cop) |
@@ -435,13 +445,16 @@ These keys were renamed. The old key stays in the entity contract, the integrati
 | `energy_th_total` | sensor | [5. Energy counters, operating hours and overall COP](#5-energy-counters-operating-hours-and-overall-cop) |
 | `error_number` | sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `extra_dhw` | switch | [9. Hot water control](#9-hot-water-control) |
+| `fault` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `firmware_version` | sensor | [14. System, firmware and equipment](#14-system-firmware-and-equipment) |
 | `flow` | sensor | [1. Temperatures of the heating circuit](#1-temperatures-of-the-heating-circuit) |
+| `flow_return_difference` | sensor | [1. Temperatures of the heating circuit](#1-temperatures-of-the-heating-circuit) |
 | `heat_generator_state` | sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `heat_source_input` | sensor | [1. Temperatures of the heating circuit](#1-temperatures-of-the-heating-circuit) |
 | `heat_source_out` | sensor | [1. Temperatures of the heating circuit](#1-temperatures-of-the-heating-circuit) |
 | `heating_block` | switch | [7. Blocks (switches)](#7-blocks-switches) |
 | `heating_limit` | sensor | [1. Temperatures of the heating circuit](#1-temperatures-of-the-heating-circuit) |
+| `heating_running` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `heating_status` | sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `heatpump_vd2_status` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `heatpump_zwe2_status` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
@@ -477,6 +490,7 @@ These keys were renamed. The old key stays in the entity contract, the integrati
 | `pool_block` | switch | [7. Blocks (switches)](#7-blocks-switches) |
 | `pool_configured` | binary_sensor | [11. Cooling and pool](#11-cooling-and-pool) |
 | `pool_status` | sensor | [6. Status and operating state](#6-status-and-operating-state) |
+| `power_limit_configured` | binary_sensor | [12. Power limit](#12-power-limit) |
 | `pump_circulation` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `pump_heating` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |
 | `pump_hot_water` | binary_sensor | [6. Status and operating state](#6-status-and-operating-state) |

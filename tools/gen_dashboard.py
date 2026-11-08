@@ -97,6 +97,10 @@ def universe() -> dict[str, Info]:
         )
     for sensor in registers.DERIVED_SENSORS:
         found[sensor.key] = Info(sensor.key, "sensor", registers.area_of(sensor.key), (), True, False)
+    for difference in registers.DIFFERENCE_SENSORS:
+        found[difference.key] = Info(difference.key, "sensor", registers.area_of(difference.key), (), True, False)
+    for flag in registers.DERIVED_FLAGS:
+        found[flag.key] = Info(flag.key, "binary_sensor", registers.area_of(flag.key), (), True, False)
     firmware = getattr(registers, "FIRMWARE_SENSOR_KEY", None)  # one text sensor since 0.12.0
     if firmware:
         found[firmware] = Info(firmware, "sensor", None, (), True, False)

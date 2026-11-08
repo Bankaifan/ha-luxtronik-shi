@@ -384,6 +384,12 @@
       },
       "cop_dhw": {
         "name": "COP gesamt"
+      },
+      "cop_total": {
+        "name": "COP gesamt"
+      },
+      "flow_return_difference": {
+        "name": "Temperatur: Differenz Vorlauf/Rücklauf"
       }
     },
     "binary_sensor": {
@@ -455,6 +461,21 @@
       },
       "cap_mk3_cooling": {
         "name": "Ausstattung: Mischkreis 3 Kühlen"
+      },
+      "fault": {
+        "name": "Status: Störung"
+      },
+      "defrost": {
+        "name": "Status: Abtauung läuft"
+      },
+      "heating_running": {
+        "name": "Läuft"
+      },
+      "dhw_running": {
+        "name": "Läuft"
+      },
+      "power_limit_configured": {
+        "name": "Leistungsbegrenzung: Modus eingestellt"
       },
       "compressor_1": {
         "name": "Status: Verdichter 1 läuft"

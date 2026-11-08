@@ -64,9 +64,21 @@
       },
       "cop_dhw": {
         "default": "mdi:gauge"
+      },
+      "cop_total": {
+        "default": "mdi:gauge"
+      },
+      "flow_return_difference": {
+        "default": "mdi:thermometer-lines"
       }
     },
     "binary_sensor": {
+      "defrost": {
+        "default": "mdi:snowflake-melt"
+      },
+      "power_limit_configured": {
+        "default": "mdi:speedometer-slow"
+      },
       "pump_heating": {
         "default": "mdi:pump-off",
         "state": {

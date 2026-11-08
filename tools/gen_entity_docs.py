@@ -40,6 +40,7 @@ class Entity:
     order: int
     reg: registers.Register | None = None
     derived: registers.DerivedSensor | None = None
+    calculated: bool = False  # a difference sensor or a flag derived from a register
     bit: int | None = None
     enabled_default: bool = True
     diagnostic: bool = False
@@ -78,6 +79,8 @@ def collect() -> list[Entity]:
         )
     for sensor in registers.DERIVED_SENSORS:
         found.append(Entity(sensor.key, "sensor", len(found), derived=sensor, area=registers.area_of(sensor.key)))
+    for difference in registers.DIFFERENCE_SENSORS:
+        found.append(Entity(difference.key, "sensor", len(found), calculated=True, area=registers.area_of(difference.key)))
     firmware = getattr(registers, "FIRMWARE_SENSOR_KEY", None)  # one firmware sensor, if the integration has it
     if firmware:
         found.append(Entity(firmware, "sensor", len(found), diagnostic=True))
@@ -85,6 +88,8 @@ def collect() -> list[Entity]:
         found.append(
             Entity(bit[0], "binary_sensor", len(found), bit=bit[1], enabled_default=bit[0] not in disabled)
         )
+    for flag in registers.DERIVED_FLAGS:
+        found.append(Entity(flag.key, "binary_sensor", len(found), calculated=True, area=registers.area_of(flag.key)))
     found.append(Entity("online", "binary_sensor", len(found), diagnostic=True))
     for key, source in ((registers.CLIMATE_HEATING_KEY, "cfg_heating_setpoint"), (registers.WATER_HEATER_DHW_KEY, "cfg_dhw_setpoint")):
         platform = "climate" if key == registers.CLIMATE_HEATING_KEY else "water_heater"
@@ -141,6 +146,9 @@ def _fmt(value: float, lang: str = "en") -> str:
 def _unit(entity: Entity) -> str:
     if entity.reg is not None and entity.reg.unit:
         return entity.reg.unit
+    for difference in registers.DIFFERENCE_SENSORS:
+        if difference.key == entity.key:
+            return difference.unit
     if entity.derived is not None:
         return "-"
     return "-"
@@ -191,7 +199,7 @@ def _values(entity: Entity, entry: texts.Entry, lang: str, trans: dict, page: di
 def _where(entity: Entity, page: dict) -> str:
     if entity.reg is not None:
         where = f"{KIND_TABLE[entity.reg.kind]} {entity.reg.address}"
-    elif entity.derived is not None:
+    elif entity.derived is not None or entity.calculated:
         where = page["derived"]
     elif entity.bit is not None:
         where = f"heat_generator_state, bit {entity.bit}"
