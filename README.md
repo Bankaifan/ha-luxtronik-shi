@@ -212,8 +212,10 @@ Entries created before 0.3.0 keep all entities until the equipment is saved ther
 * **Only what is used:** registers of *disabled* entities are not read. Enabling an entity reads its register at
   once and includes it in the following polls. Whatever the integration needs itself stays in the poll even if the
   entity is disabled: firmware, the control values compared after an outage, everything the restore and the reset
-  detection use, the inputs of the calculated sensors (COP, flow-return difference, fault, defrost, running, power limit), the equipment flags and the sources of the climate, water heater and
-  status bit entities.
+  detection use, the equipment flags and the sources of the climate, water heater and status bit entities. The
+  inputs of the calculated entities (COP, flow-return difference, fault, defrost, running, power limit) are read
+  while the source entity or at least one calculated entity that uses it is enabled; a default installation
+  reads the same registers as before.
 * **At most every 5 minutes** (10–300 s): the SHI drops every value set over it after 10 minutes without any Modbus
   access ([SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). An existing entry with a longer
   interval polls every 300 s and logs a warning; saving the options once stores the new value.

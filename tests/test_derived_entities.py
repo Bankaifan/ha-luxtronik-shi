@@ -51,8 +51,8 @@ def test_sources_are_existing_registers_that_a_default_installation_polls_anyway
     default_polled = {reg.key for reg in active_registers(None) if reg.enabled_default}
     # nothing is added to the poll plan of a default installation ...
     assert sources <= default_polled
-    # ... and the sources stay in the plan if their own entity is disabled
-    assert sources <= internal_keys()
+    # ... and they are not forced into the plan: they follow the entities that use them (test_poll_plan.py)
+    assert not (sources - {"operating_mode", "return"}) & internal_keys()
 
 
 async def test_the_poll_reads_no_register_beyond_the_registers(hass: HomeAssistant, shi: FakeSHI) -> None:

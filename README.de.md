@@ -226,8 +226,11 @@ Einträge aus Versionen vor 0.3.0 behalten alle Entitäten, bis die Ausstattung 
 * **Nur, was gebraucht wird:** Register *deaktivierter* Entitäten werden nicht gelesen. Wird eine Entität
   aktiviert, liest die Integration ihr Register sofort und nimmt es in die folgenden Abfragen auf. Was die
   Integration selbst braucht, bleibt auch bei deaktivierter Entität in der Abfrage: Firmware, die nach einem Ausfall
-  verglichenen Steuerwerte, alles, was Wiederherstellung und Reset-Erkennung nutzen, die Eingänge der berechneten Sensoren (COP, Differenz Vorlauf/Rücklauf, Störung, Abtauung, läuft, Leistungsbegrenzung),
-  die Ausstattungsmerkmale und die Quellen der Climate-, Water-Heater- und Statusbit-Entitäten.
+  verglichenen Steuerwerte, alles, was Wiederherstellung und Reset-Erkennung nutzen, die Ausstattungsmerkmale und
+  die Quellen der Climate-, Water-Heater- und Statusbit-Entitäten. Die Eingänge der berechneten Entitäten (COP,
+  Differenz Vorlauf/Rücklauf, Störung, Abtauung, läuft, Leistungsbegrenzung) werden gelesen, solange die
+  Quell-Entität oder mindestens eine berechnete Entität, die sie nutzt, aktiviert ist; eine
+  Standardinstallation liest dieselben Register wie vorher.
 * **Höchstens alle 5 Minuten** (10–300 s): Die SHI verwirft alle über sie gesetzten Werte nach 10 Minuten ohne jeden
   Modbus-Zugriff ([SHI-Watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog), englisch). Ein bestehender
   Eintrag mit längerem Intervall fragt alle 300 s ab und schreibt eine Warnung ins Log; einmal die Optionen speichern

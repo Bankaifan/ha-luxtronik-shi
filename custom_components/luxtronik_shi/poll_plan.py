@@ -38,15 +38,32 @@ PLATFORM_SOURCE_KEYS: frozenset[str] = frozenset(
 )
 
 
+def derived_consumers() -> dict[str, tuple[tuple[str, str], ...]]:
+    """For each source register of a calculated entity: the ``(platform, key)`` of the entities using it."""
+    consumers: dict[str, list[tuple[str, str]]] = {}
+    for sensor in DERIVED_SENSORS:
+        for source in (sensor.thermal, sensor.electric):
+            consumers.setdefault(source, []).append(("sensor", sensor.key))
+    for difference in DIFFERENCE_SENSORS:
+        for source in (difference.minuend, difference.subtrahend):
+            consumers.setdefault(source, []).append(("sensor", difference.key))
+    for flag in DERIVED_FLAGS:
+        consumers.setdefault(flag.source, []).append(("binary_sensor", flag.key))
+    return {source: tuple(entities) for source, entities in consumers.items()}
+
+
 def internal_keys() -> frozenset[str]:
     """Keys that are polled whether or not their entity is enabled.
 
     Whatever the coordinator itself reads is in here: the firmware parts (version, repair issue), the control
     values compared after an outage, every key that can be restored, is deferred or blocked (reset detection,
     write read-back, hot water rules), the setpoint groups (mode and effective target), the inputs of the
-    calculated sensors and binary sensors (COP, flow-return difference, fault, defrost, running, power limit),
     the equipment flags (diagnostics) and the sources of the climate, water heater and status bit
     entities. When in doubt a key belongs here: reading it costs a little traffic, missing it breaks logic.
+
+    The sources of the calculated sensors and binary sensors (COP, flow-return difference, fault, defrost,
+    running, power limit) are NOT here: they follow ``derived_consumers`` (polled while the source entity or
+    one entity that uses it is enabled), unless another rule above keeps them.
     """
     keys: set[str] = set(FIRMWARE_PARTS)
     keys |= set(OUTAGE_WATCH_KEYS)
@@ -55,11 +72,6 @@ def internal_keys() -> frozenset[str]:
     keys.add(DHW_BLOCK_KEY)
     for setpoint, (mode, target) in SETPOINT_GROUPS.items():
         keys |= {setpoint, mode, target}
-    for sensor in DERIVED_SENSORS:
-        keys |= {sensor.thermal, sensor.electric}
-    for difference in DIFFERENCE_SENSORS:
-        keys |= {difference.minuend, difference.subtrahend}
-    keys |= {flag.source for flag in DERIVED_FLAGS}
     keys |= {reg.key for reg in CAPABILITIES}
     keys |= PLATFORM_SOURCE_KEYS
     return frozenset(keys)
@@ -74,12 +86,29 @@ def entity_enabled(registry: er.EntityRegistry, entry_id: str, reg: Register) ->
     return entity.disabled_by is None
 
 
+def _entity_enabled_by_key(registry: er.EntityRegistry, entry_id: str, platform: str, key: str) -> bool:
+    """Whether a calculated entity is enabled (enabled by default, so a missing one counts as enabled)."""
+    entity_id = registry.async_get_entity_id(platform, DOMAIN, f"{entry_id}_{key}")
+    entity = registry.async_get(entity_id) if entity_id else None
+    return entity is None or entity.disabled_by is None
+
+
 def select_polled(
     hass: HomeAssistant, entry_id: str, registers: Iterable[Register]
 ) -> tuple[Register, ...]:
-    """The registers to poll: enabled entities and internal keys, in the order of ``registers``."""
+    """The registers to poll: enabled entities, sources of enabled calculated entities and internal keys."""
     registry = er.async_get(hass)
     internal = internal_keys()
-    return tuple(
-        reg for reg in registers if reg.key in internal or entity_enabled(registry, entry_id, reg)
-    )
+    consumers = derived_consumers()
+
+    def polled(reg: Register) -> bool:
+        return (
+            reg.key in internal
+            or entity_enabled(registry, entry_id, reg)
+            or any(
+                _entity_enabled_by_key(registry, entry_id, platform, key)
+                for platform, key in consumers.get(reg.key, ())
+            )
+        )
+
+    return tuple(reg for reg in registers if polled(reg))

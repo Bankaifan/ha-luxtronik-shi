@@ -11,6 +11,21 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.16.1] – 2026-11-08
+
+### Fixed
+- The plain temperature sensors (flow, return, outside, hot water, mixing circuits, heat source and the other
+  16 bit input temperatures) and the error number no longer show the SHI word for "not available" (`0x7FFF`) as
+  3276.7 K or 32767. They are unavailable instead, like the calculated entities that use them. Counters, raw
+  values and enumerations are unchanged. Keys and unique IDs are unchanged.
+- **Sources of calculated entities are polled only while they are used.** Since 0.16.0 the inputs of the
+  calculated entities (`flow`, `error_number`, `heating_status`, `hot_water_status`, `cfg_power_limit_mode`,
+  `energy_th_total`, `energy_el_total`, and like the COP sources before) were read even when both the source
+  entity and every calculated entity using it were disabled, against the rule since 0.13.0 that registers of
+  disabled entities are not read. A source is now in the poll plan while its own entity or at least one calculated
+  entity that uses it is enabled (this covers the COP sources too); enabling or disabling a calculated entity
+  re-plans like any other entity. Default installations poll exactly the same 79 registers as before.
+
 ## [0.16.0] – 2026-11-08
 
 ### Added
@@ -602,7 +617,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.13.0...v0.14.0
