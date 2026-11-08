@@ -25,7 +25,7 @@ async def test_climate_new_installation_is_enabled(hass: HomeAssistant, shi: Fak
     assert state.attributes["current_temperature"] == 28.5  # input return, 10100 = 285 (setpoint is tRL)
     assert state.attributes["min_temp"] == 15
     assert state.attributes["max_temp"] == 75
-    assert state.attributes["controller_mode"] == "off"
+    assert state.attributes["controller_mode"] == "no_influence"
     assert state.attributes["setpoint_active"] is False
     assert state.attributes["effective_target"] == 30.0  # input return target, 10101 = 300
     assert state.attributes["heating_block"] is False
@@ -120,7 +120,7 @@ async def test_climate_hvac_mode_writes_mode_register(hass: HomeAssistant, shi: 
     )
     assert shi.holding_value(10000) == 0
     assert hass.states.get(entity_id).state == "auto"
-    assert hass.states.get(select).state == "off"
+    assert hass.states.get(select).state == "no_influence"
 
 
 async def test_climate_other_controller_modes_count_as_heat(hass: HomeAssistant, shi: FakeSHI) -> None:

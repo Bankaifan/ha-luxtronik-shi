@@ -37,14 +37,14 @@ ISSUE_EXTERNAL_CHANGE = "values_changed_externally"
 OWN_WRITE_WINDOW = 600  # seconds
 # Triggers: writable keys the firmware sets back to 0 by itself (docs/firmware-3.92.3-shi-full-analysis.md,
 # sections 3.2 and 3.3; proven). ``circulation`` (10070) starts a circulation run and reads 0 again once no
-# run is
-# active; ``extra_dhw`` (10071) starts extra hot water for the controller's duration (parameter 1147, sensor
-# ``extra_dhw_duration``) and reads 0 again when the timer ends (``extra_dhw_remaining`` counts down). A read-
-# back
-# of 0 is the normal end of the action, never a failed write, a device reset or another writer: they are not
-# restored after a reset, not compared for changes outside Home Assistant, and a default read-back after a
-# write
-# is not reported for them.
+# run is active; ``extra_dhw`` (10071) starts extra hot water for the controller's duration (parameter 1147,
+# sensor ``extra_dhw_duration``) and reads 0 again when the timer ends (``extra_dhw_remaining`` counts
+# down). They are buttons (press = write 1; ``circulation_stop`` and ``extra_dhw_stop`` write 0), not switches
+# (0.17.x); the running state is ``extra_dhw_running`` and the pump output ``pump_circulation``: a read-back
+# of 0 is the normal end
+# of the action, never a failed write, a device reset or another writer, so they are not restored after a
+# reset, not compared for changes outside Home Assistant, and a default read-back after a write is not
+# reported for them.
 TRIGGER_KEYS: frozenset[str] = frozenset({"extra_dhw", "circulation"})
 # Writable keys the controller changes by itself, so a change is no evidence of another writer: the triggers.
 EXTERNAL_CHANGE_EXCLUDED: frozenset[str] = TRIGGER_KEYS

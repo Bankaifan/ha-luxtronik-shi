@@ -50,7 +50,7 @@ def test_internal_keys_cover_what_the_code_uses() -> None:
     assert RESTORE_KEYS <= keys
     for setpoint, (mode, target) in SETPOINT_GROUPS.items():
         assert {setpoint, mode, target} <= keys
-    assert {key for key in BY_KEY if key.startswith("cap_")} <= keys
+    assert {key for key in BY_KEY if key.startswith("cap_")} | {"heating_available", "hot_water_available"} <= keys
 
 
 def test_derived_sources_follow_their_entities_not_the_internal_keys() -> None:
@@ -87,11 +87,11 @@ async def test_disabled_entities_are_not_polled(hass: HomeAssistant, shi: FakeSH
     polled = _polled_keys(entry)
     disabled = {reg.key for reg in active_registers(None) if not reg.enabled_default} - internal_keys()
     assert disabled and not (disabled & polled)
-    assert "raw_10354" not in entry.runtime_data.data
+    assert "max_flow_temp" not in entry.runtime_data.data
     assert "flow" in polled
     shi.requests.clear()
     await _cycle(entry)
-    assert not _requested(shi, 4, 10354)  # HUP output, disabled by default
+    assert not _requested(shi, 4, 10112)  # maximum flow, disabled by default
     assert _requested(shi, 4, 10100)  # a normal block is still read
 
 
@@ -114,29 +114,29 @@ async def test_internal_keys_are_polled_without_an_enabled_entity(hass: HomeAssi
 
 
 async def test_enabling_at_runtime_reads_at_once(hass: HomeAssistant, shi: FakeSHI) -> None:
-    shi.input[10354] = 1
-    shi.input[10360] = 1
+    shi.input[10112] = 10
+    shi.input[10113] = 10
     entry = await _setup(hass, shi)
     coordinator = entry.runtime_data
-    assert "raw_10354" not in coordinator.data
+    assert "max_flow_temp" not in coordinator.data
     registry = er.async_get(hass)
 
     shi.requests.clear()
-    registry.async_update_entity(_entity_id(hass, entry, "sensor", "raw_10354"), disabled_by=None)
-    registry.async_update_entity(_entity_id(hass, entry, "sensor", "raw_10360"), disabled_by=None)
+    registry.async_update_entity(_entity_id(hass, entry, "sensor", "max_flow_temp"), disabled_by=None)
+    registry.async_update_entity(_entity_id(hass, entry, "sensor", "flow_calc_max"), disabled_by=None)
     await hass.async_block_till_done()
 
-    assert coordinator.data["raw_10354"] == 1  # no poll in between: read by the enablement itself
-    assert coordinator.data["raw_10360"] == 1
-    assert {"raw_10354", "raw_10360"} <= _polled_keys(entry)
-    # the two registers are neighbours with a gap of 5: two reads, not a whole poll
+    assert coordinator.data["max_flow_temp"] == 1.0  # no poll in between: read by the enablement itself
+    assert coordinator.data["flow_calc_max"] == 1.0
+    assert {"max_flow_temp", "flow_calc_max"} <= _polled_keys(entry)
+    # two neighbouring registers: at most two reads, not a whole poll
     assert len(shi.requests) <= 2
-    # from now on the regular poll reads them (raw inputs: every 4th cycle)
-    shi.input[10354] = 0
+    # from now on the regular poll reads them (every 4th cycle)
+    shi.input[10112] = 0
     shi.requests.clear()
     await _cycle(entry)
-    assert _requested(shi, 4, 10354)
-    assert coordinator.data["raw_10354"] == 0
+    assert _requested(shi, 4, 10112)
+    assert coordinator.data["max_flow_temp"] == 0
 
 
 async def test_disabling_at_runtime_stops_polling(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -158,11 +158,11 @@ async def test_failed_read_of_enabled_register_is_left_to_the_poll(hass: HomeAss
     async def broken(*args, **kwargs):
         raise coordinator_module.ModbusCommError("down")
 
-    shi.input[10354] = 1
+    shi.input[10112] = 1
     coordinator.client.read = broken
-    er.async_get(hass).async_update_entity(_entity_id(hass, entry, "sensor", "raw_10354"), disabled_by=None)
+    er.async_get(hass).async_update_entity(_entity_id(hass, entry, "sensor", "max_flow_temp"), disabled_by=None)
     await hass.async_block_till_done()
-    assert "raw_10354" in _polled_keys(entry)  # in the plan, value follows with a poll
+    assert "max_flow_temp" in _polled_keys(entry)  # in the plan, value follows with a poll
 
 
 async def test_fewer_requests_than_polling_everything(hass: HomeAssistant, shi: FakeSHI) -> None:

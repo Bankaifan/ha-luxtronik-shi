@@ -9,7 +9,7 @@
           "pool": "mdi:pool",
           "evu_lock": "mdi:transmission-tower-off",
           "defrost": "mdi:snowflake-melt",
-          "off": "mdi:power-off",
+          "no_request": "mdi:sleep",
           "external_source": "mdi:source-branch",
           "cooling": "mdi:snowflake"
         }
@@ -117,6 +117,27 @@
       },
       "input_evu2": {
         "default": "mdi:transmission-tower"
+      },
+      "extra_dhw_running": {
+        "default": "mdi:water-boiler-off",
+        "state": {
+          "on": "mdi:water-boiler",
+          "off": "mdi:water-boiler-off"
+        }
+      }
+    },
+    "button": {
+      "circulation": {
+        "default": "mdi:sync"
+      },
+      "extra_dhw": {
+        "default": "mdi:water-boiler"
+      },
+      "circulation_stop": {
+        "default": "mdi:sync-off"
+      },
+      "extra_dhw_stop": {
+        "default": "mdi:stop-circle-outline"
       }
     }
   }

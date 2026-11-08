@@ -93,7 +93,7 @@ def universe() -> dict[str, Info]:
             continue
         found[reg.key] = Info(
             reg.key, reg.platform, registers.area_of(reg.key), registers.features_of(reg),
-            reg.enabled_default, reg.platform in ("switch", "number", "select"),
+            reg.enabled_default, reg.platform in ("switch", "button", "number", "select"),
         )
     for sensor in registers.DERIVED_SENSORS:
         found[sensor.key] = Info(sensor.key, "sensor", registers.area_of(sensor.key), (), True, False)
@@ -116,6 +116,8 @@ def universe() -> dict[str, Info]:
         found[key] = Info(key, "select", None, (), True, True)
     for key in registers.BLOCK_SWITCH_KEYS:
         found[key] = Info(key, "switch", None, (), True, True)
+    for action in registers.TRIGGER_ACTIONS:
+        found[action.key] = Info(action.key, "button", registers.area_of(action.key), (), True, True)
     return found
 
 

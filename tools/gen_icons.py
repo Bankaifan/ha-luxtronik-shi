@@ -23,7 +23,7 @@ _OPERATING_MODE_ICONS = {
     "pool": "mdi:pool",
     "evu_lock": "mdi:transmission-tower-off",
     "defrost": "mdi:snowflake-melt",
-    "off": "mdi:power-off",
+    "no_request": "mdi:sleep",
     "external_source": "mdi:source-branch",
     "cooling": "mdi:snowflake",
 }
@@ -59,7 +59,17 @@ def build() -> dict:
         binary_sensor[key] = {"default": "mdi:electric-switch"}
     for key in ("input_evu", "input_evu2"):
         binary_sensor[key] = {"default": "mdi:transmission-tower"}
-    return {"entity": {"sensor": sensor, "binary_sensor": binary_sensor}}
+    # The extra hot water running flag and the trigger buttons (circulation run, extra hot water).
+    binary_sensor["extra_dhw_running"] = {
+        "default": "mdi:water-boiler-off", "state": {"on": "mdi:water-boiler", "off": "mdi:water-boiler-off"}
+    }
+    button: dict[str, dict] = {
+        registers.CIRCULATION_KEY: {"default": "mdi:sync"},
+        registers.EXTRA_DHW_KEY: {"default": "mdi:water-boiler"},
+        "circulation_stop": {"default": "mdi:sync-off"},
+        "extra_dhw_stop": {"default": "mdi:stop-circle-outline"},
+    }
+    return {"entity": {"sensor": sensor, "binary_sensor": binary_sensor, "button": button}}
 
 
 def main() -> None:

@@ -1,4 +1,9 @@
-"""Switches of the Luxtronik SHI (blocks, extra hot water and the on/off view of the blocks)."""
+"""Switches of the Luxtronik SHI: the four blocks and the on/off view of the blocks.
+
+A block (10050 ... 10053) is a state the writer holds: it stays as written until it is changed or the SHI
+watchdog releases it (docs/firmware-3.92.3-shi-full-analysis.md, 3.3 and 4; proven), so a switch is the right
+model. The triggers circulation and extra hot water are buttons (button.py), not switches, since 0.18.0.
+"""
 
 from __future__ import annotations
 
@@ -42,14 +47,7 @@ async def async_setup_entry(
 
 
 class LuxtronikSwitch(LuxtronikEntity, SwitchEntity):
-    """A 0/1 holding register.
-
-    The blocks stay as written. ``circulation`` and ``extra_dhw`` are triggers (const.TRIGGER_KEYS): the
-    firmware
-    sets them back to 0 when the run or the timer ends, so the switch goes off by itself; the coordinator does
-    not
-    treat that read-back as a failed write.
-    """
+    """A 0/1 holding register that stays as written (a block): on = 1 = blocked."""
 
     @property
     def is_on(self) -> bool | None:

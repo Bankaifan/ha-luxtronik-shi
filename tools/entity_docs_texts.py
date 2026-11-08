@@ -248,8 +248,8 @@ SECTIONS: tuple[Section, ...] = (
         "top of it. Every circuit has a *mode* (raw 0 to 3) that decides which of the three companion values "
         "counts:\n\n"
         "| Raw | Key | Effect |\n|---|---|---|\n"
-        "| 0 | `off` | **No influence**: the controller uses its own values. This does **not** switch the circuit "
-        "off, heating goes on. |\n"
+        "| 0 | `no_influence` | **No influence**: the controller uses its own values. This does **not** switch the "
+        "circuit off, heating goes on (up to 0.17.x the option key was `off`). |\n"
         "| 1 | `setpoint` | The *setpoint* number replaces the controller's target. |\n"
         "| 2 | `offset` | The controller's target plus the *offset* in kelvin. |\n"
         "| 3 | `level` | The controller's target corrected by the *level*. |\n\n"
@@ -269,8 +269,8 @@ SECTIONS: tuple[Section, ...] = (
         "darüber. Jeder Kreis hat eine *Betriebsart* (roh 0 bis 3), die entscheidet, welcher der drei "
         "zugehörigen Werte zählt:\n\n"
         "| Roh | Schlüssel | Wirkung |\n|---|---|---|\n"
-        "| 0 | `off` | **Keine Vorgabe**: Die Regelung nutzt ihre eigenen Werte. Das schaltet den Kreis "
-        "**nicht** ab, es wird weiter geheizt. |\n"
+        "| 0 | `no_influence` | **Keine Vorgabe**: Die Regelung nutzt ihre eigenen Werte. Das schaltet den Kreis "
+        "**nicht** ab, es wird weiter geheizt (bis 0.17.x hieß der Optionsschlüssel `off`). |\n"
         "| 1 | `setpoint` | Die Zahl *Sollwert* ersetzt den Sollwert der Regelung. |\n"
         "| 2 | `offset` | Der Sollwert der Regelung plus die *Anhebung* in Kelvin. |\n"
         "| 3 | `level` | Der Sollwert der Regelung, um die *Stufe* korrigiert. |\n\n"
@@ -476,7 +476,8 @@ PAGE = {
         "platform_text": {
             "sensor": "measurements, counters, calculated values, enumerations",
             "binary_sensor": "status bits, equipment flags, connection",
-            "switch": "blocks, circulation pump, extra hot water (0/1 holding registers), on/off view of the blocks",
+            "switch": "blocks (0/1 holding registers that stay as written), on/off view of the blocks",
+            "button": "triggers: start a circulation run, start or end extra hot water",
             "number": "writable setpoints, offsets, power limit",
             "select": "writable modes, levels, power limit mode, operating mode view of the blocks",
             "climate": "thermostat view of the heating circuit",
@@ -486,12 +487,14 @@ PAGE = {
         "none": "-",
         "on_off": "on / off",
         "switch_values": "0 = off, 1 = on",
+        "button_values": "press = write {raw}",
+        "unselectable": "(not offered: not implemented by the firmware)",
         "derived": "calculated, no register",
         "view": "view on several registers",
         "renamed_title": "Renamed keys",
         "renamed_text": (
-            "These keys were renamed. The old key stays in the entity contract, the integration moves the "
-            "registry entry, and the entity ID stays."
+            "These keys were renamed. The integration moves the registry entry to the new unique ID, so the entity "
+            "ID stays."
         ),
         "renamed_cols": ("Old key", "New key"),
         "index_title": "Index of all keys",
@@ -555,7 +558,8 @@ PAGE = {
         "platform_text": {
             "sensor": "Messwerte, Zähler, berechnete Werte, Aufzählungen",
             "binary_sensor": "Statusbits, Ausstattungs-Flags, Verbindung",
-            "switch": "Sperren, Zirkulationspumpe, Extra-Warmwasser (0/1-Holding-Register), Ein/Aus-Sicht auf die Sperren",
+            "switch": "Sperren (0/1-Holding-Register, die bleiben wie geschrieben), Ein/Aus-Sicht auf die Sperren",
+            "button": "Trigger: Zirkulationslauf starten, Extra-Warmwasser starten oder beenden",
             "number": "schreibbare Sollwerte, Anhebungen, Leistungsbegrenzung",
             "select": "schreibbare Betriebsarten, Stufen, Modus der Leistungsbegrenzung, Betriebsart-Sicht auf die Sperren",
             "climate": "Thermostat-Sicht auf den Heizkreis",
@@ -565,12 +569,14 @@ PAGE = {
         "none": "-",
         "on_off": "an / aus",
         "switch_values": "0 = aus, 1 = an",
+        "button_values": "Druck = schreibt {raw}",
+        "unselectable": "(nicht wählbar: von der Firmware nicht umgesetzt)",
         "derived": "berechnet, kein Register",
         "view": "Sicht auf mehrere Register",
         "renamed_title": "Umbenannte Schlüssel",
         "renamed_text": (
-            "Diese Schlüssel wurden umbenannt. Der alte Schlüssel bleibt im Entitäten-Vertrag, die Integration "
-            "verschiebt den Registry-Eintrag, und die Entity-ID bleibt."
+            "Diese Schlüssel wurden umbenannt. Die Integration verschiebt den Registry-Eintrag auf die neue Unique-ID, "
+            "die Entity-ID bleibt."
         ),
         "renamed_cols": ("Alter Schlüssel", "Neuer Schlüssel"),
         "index_title": "Index aller Schlüssel",
@@ -613,13 +619,14 @@ PITFALLS = {
         "2. **Restore after a device reset** is an option, off by default. When on, the integration writes back the "
         "values it set itself, but only after a connection outage and only if every one of them reads its reset "
         "value; a change seen during continuous polling counts as somebody else's. Restored keys: {restored}. "
-        "Blocks, circulation pump, extra hot water, the power limit and the overall group are deliberately "
-        "left out. Leave the option off if another system also writes these registers.\n"
-        "3. **A setpoint only counts in its mode `setpoint`.** In `off`, `offset` and `level` the controller "
-        "ignores it. The setpoint numbers still write in every mode; climate and water heater refuse. Check "
-        "`setpoint_active` and `effective_target`.\n"
-        "4. **Mode `off` is \"no influence\", not off.** To stop heating use the heating block; to stop hot water "
-        "the hot water block.\n"
+        "Blocks, the circulation and extra hot water triggers, the power limit and the overall group are "
+        "deliberately left out. Leave the option off if another system also writes these registers.\n"
+        "3. **A setpoint only counts in its mode `setpoint`.** In `no_influence`, `offset` and `level` the "
+        "controller ignores it. The setpoint numbers still write in every mode; climate and water heater refuse. "
+        "Check `setpoint_active` and `effective_target`.\n"
+        "4. **Mode `no_influence` (raw 0) is not off.** The controller uses its own values and the circuit keeps "
+        "running. To stop heating use the heating block; to stop hot water the hot water block. (Up to 0.17.x the "
+        "option was called `off`.)\n"
         "5. **Hot water writes are committed late** (about 10 s) and not while the hot water block is on, see "
         "[hot water control](#9-hot-water-control).\n"
         "6. **Two writers overwrite each other.** The Heat Pump Optimizer, OpenEMS, the native Luxtronik "
@@ -640,16 +647,20 @@ PITFALLS = {
         "then error 816 (more than two write sources within an hour) or a watchdog expiry. The controller "
         "clamps the effect on top: the heating setpoint to [return target minimum, return limit], the hot water "
         "target to the maximum hot water temperature.\n"
-        "10. **The overall group takes precedence.** While `cfg_overall_mode` is not `off`, the heating mode and "
-        "the mixing circuit modes are ignored; the overall mode has no setpoint (its mode `setpoint` acts like "
-        "`off` and is refused). Levels: 1 and 2 both raise by the controller parameter *Erhöhung*, 3 lowers by "
-        "*Absenkung* (menu *Offsets*, set at the control panel).\n"
+        "10. **The overall group takes precedence.** While `cfg_overall_mode` is not `no_influence`, the heating "
+        "mode and the mixing circuit modes are ignored; the overall mode has no setpoint (raw 1 acts like "
+        "`no_influence` and is not offered). Levels: `increased` (raw 1, and raw 2 which the firmware treats the "
+        "same) raises by the controller parameter *Erhöhung*, `decreased` (raw 3) lowers by *Absenkung* (menu "
+        "*Offsets*, set at the control panel).\n"
         "11. **Enable SHI.** The controller parameter *Enable SHI* (1161, menu: Modbus TCP / myUplink / both) "
         "cannot be read over Modbus. While it is off, setpoints, offsets, levels and the power limit are read "
         "back correctly but have no effect; blocks, circulation and extra hot water work regardless. The "
         "diagnostics download names it (FW, proven).\n"
         "12. **Slow values** (counters, hours, settings, firmware) are read only every Nth poll, so they can lag "
-        "by several update intervals."
+        "by several update intervals.\n"
+        "13. **Circulation and extra hot water are triggers**, not states: a button press writes 1, the firmware "
+        "sets the register back to 0 when the run or the timer ends, and the `*_running` binary sensors show the "
+        "state. Up to 0.17.x they were switches (`switch.turn_on`); since 0.18.0 call `button.press`."
     ),
     "de": (
         "1. **Über die SHI gesetzte Werte sind flüchtig.** Die Regelung verwirft jeden über Modbus gesetzten Wert, "
@@ -665,14 +676,15 @@ PITFALLS = {
         "2. **Wiederherstellung nach einem Geräte-Reset** ist eine Option, standardmäßig aus. Ist sie an, schreibt "
         "die Integration die selbst gesetzten Werte zurück, aber nur nach einem Verbindungsausfall und nur, wenn "
         "jeder davon seinen Reset-Wert liest; eine Änderung bei durchgehender Abfrage gilt als fremd. "
-        "Wiederhergestellte Schlüssel: {restored}. Sperren, Zirkulationspumpe, Extra-Warmwasser, die "
+        "Wiederhergestellte Schlüssel: {restored}. Sperren, die Trigger Zirkulation und Extra-Warmwasser, die "
         "Leistungsbegrenzung und die Gesamt-Gruppe sind bewusst ausgenommen. Lass die Option aus, wenn ein "
         "anderes System diese Register ebenfalls schreibt.\n"
-        "3. **Ein Sollwert zählt nur in seiner Betriebsart `setpoint`.** In `off`, `offset` und `level` ignoriert "
-        "ihn die Regelung. Die Sollwert-Zahlen schreiben trotzdem in jeder Betriebsart; Climate und Water "
-        "Heater lehnen ab. Prüfe `setpoint_active` und `effective_target`.\n"
-        "4. **Die Betriebsart `off` heißt „keine Vorgabe“, nicht aus.** Zum Stoppen des Heizens nimm die "
-        "Heizungs-Sperre, für das Warmwasser die Warmwasser-Sperre.\n"
+        "3. **Ein Sollwert zählt nur in seiner Betriebsart `setpoint`.** In `no_influence`, `offset` und `level` "
+        "ignoriert ihn die Regelung. Die Sollwert-Zahlen schreiben trotzdem in jeder Betriebsart; Climate und "
+        "Water Heater lehnen ab. Prüfe `setpoint_active` und `effective_target`.\n"
+        "4. **Die Betriebsart `no_influence` (roh 0) ist nicht aus.** Die Regelung nutzt ihre eigenen Werte, der "
+        "Kreis läuft weiter. Zum Stoppen des Heizens nimm die Heizungs-Sperre, für das Warmwasser die "
+        "Warmwasser-Sperre. (Bis 0.17.x hieß die Option `off`.)\n"
         "5. **Warmwasser-Schreibzugriffe werden spät übernommen** (etwa 10 s) und nicht, solange die "
         "Warmwasser-Sperre an ist, siehe [Warmwasser-Steuerung](#9-warmwasser-steuerung).\n"
         "6. **Zwei Schreiber überschreiben sich.** Heat Pump Optimizer, OpenEMS, die native "
@@ -696,17 +708,21 @@ PITFALLS = {
         "Schreibquellen innerhalb einer Stunde) oder ein Ablauf des Wächters. Die Regelung begrenzt zusätzlich "
         "die Wirkung: den Heizungs-Sollwert auf [Rücklauf-Soll Minimum, Rücklauf-Begrenzung], das "
         "Warmwasser-Ziel auf die maximale Warmwassertemperatur.\n"
-        "10. **Die Gesamt-Gruppe hat Vorrang.** Solange `cfg_overall_mode` nicht `off` ist, werden die "
+        "10. **Die Gesamt-Gruppe hat Vorrang.** Solange `cfg_overall_mode` nicht `no_influence` ist, werden die "
         "Heizungs-Betriebsart und die Mischkreis-Betriebsarten ignoriert; die Gesamt-Betriebsart hat keinen "
-        "Sollwert (ihre Betriebsart `setpoint` wirkt wie `off` und wird abgelehnt). Stufen: 1 und 2 erhöhen "
-        "beide um den Reglerparameter *Erhöhung*, 3 senkt um *Absenkung* (Menü *Offsets*, am Bedienteil "
-        "eingestellt).\n"
+        "Sollwert (roh 1 wirkt wie `no_influence` und wird nicht angeboten). Stufen: `increased` (roh 1, und roh "
+        "2, das die Firmware gleich behandelt) erhöht um den Reglerparameter *Erhöhung*, `decreased` (roh 3) "
+        "senkt um *Absenkung* (Menü *Offsets*, am Bedienteil eingestellt).\n"
         "11. **Enable SHI.** Der Reglerparameter *Enable SHI* (1161, Menü: Modbus TCP / myUplink / beides) lässt "
         "sich über Modbus nicht lesen. Steht er aus, werden Sollwerte, Anhebungen, Stufen und die "
         "Leistungsbegrenzung korrekt zurückgelesen, wirken aber nicht; Sperren, Zirkulation und "
         "Extra-Warmwasser funktionieren trotzdem. Der Diagnose-Download nennt ihn (FW, belegt).\n"
         "12. **Langsame Werte** (Zähler, Stunden, Einstellungen, Firmware) werden nur jede N-te Abfrage gelesen "
-        "und können deshalb mehrere Aktualisierungsintervalle hinterherhinken."
+        "und können deshalb mehrere Aktualisierungsintervalle hinterherhinken.\n"
+        "13. **Zirkulation und Extra-Warmwasser sind Trigger**, keine Zustände: Ein Tastendruck schreibt 1, die "
+        "Firmware setzt das Register beim Ende des Laufs oder des Timers selbst auf 0, und die Binärsensoren "
+        "`*_running` zeigen den Zustand. Bis 0.17.x waren es Schalter (`switch.turn_on`); seit 0.18.0 "
+        "`button.press` aufrufen."
     ),
 }
 

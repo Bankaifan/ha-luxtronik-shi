@@ -92,7 +92,7 @@ async def test_climate_has_no_off(hass: HomeAssistant, shi: FakeSHI) -> None:
 
 
 # ------------------------------------------------------------------ F3: target only in mode setpoint
-@pytest.mark.parametrize(("raw", "mode"), [(0, "off"), (2, "offset"), (3, "level")])
+@pytest.mark.parametrize(("raw", "mode"), [(0, "no_influence"), (2, "offset"), (3, "level")])
 @pytest.mark.parametrize(
     ("domain", "key", "mode_address", "select_key", "value"),
     [
@@ -128,11 +128,11 @@ async def test_target_write_outside_setpoint_mode_is_refused(
 @pytest.mark.parametrize("lang", ["en", "de"])
 def test_refusal_messages_exist_in_both_languages(lang: str) -> None:
     exceptions = _texts(lang)["exceptions"]
-    for mode in ("off", "offset", "level", "unknown"):
+    for mode in ("no_influence", "offset", "level", "unknown"):
         assert "{select}" in exceptions[f"setpoint_not_active_{mode}"]["message"]
     expected = {"en": '"Setpoint"', "de": "„Sollwert“"}[lang]
-    assert expected in exceptions["setpoint_not_active_off"]["message"]
-    assert {"en": '"No influence"', "de": "„Keine Vorgabe“"}[lang] in exceptions["setpoint_not_active_off"]["message"]
+    assert expected in exceptions["setpoint_not_active_no_influence"]["message"]
+    assert {"en": '"No influence"', "de": "„Keine Vorgabe“"}[lang] in exceptions["setpoint_not_active_no_influence"]["message"]
 
 
 @pytest.mark.parametrize(
@@ -218,8 +218,9 @@ def test_mode_zero_is_no_influence_on_every_mode_select(lang: str, label: str) -
     assert len(mode_selects) == 9  # heating, hot water, MK1-3 heating and cooling, overall heating
     for key in mode_selects:
         # the overall mode adds what "no influence" means for the circuits (tools/gen_translations.py)
-        assert selects[key]["state"]["off"].startswith(label), key
+        assert selects[key]["state"]["no_influence"].startswith(label), key
         assert set(selects[key]["state"]) == set(CONTROL_MODES)
+        assert "off" not in selects[key]["state"]  # raw 0 does not switch the circuit off
 
 
 @pytest.mark.parametrize("lang", ["en", "de"])
@@ -231,8 +232,9 @@ def test_climate_and_water_heater_states_are_translated(lang: str) -> None:
     assert states["no_influence"] == {"en": "No influence", "de": "Keine Vorgabe"}[lang]
     for attr in ("setpoint_active", "effective_target", "heating_block", "controller_mode"):
         assert entity["climate"]["climate_heating"]["state_attributes"][attr]["name"]
-    # the operating mode sensor keeps its own meaning of "off": no request
-    assert entity["sensor"]["operating_mode"]["state"]["off"] == {"en": "No request", "de": "Keine Anforderung"}[lang]
+    # the operating mode sensor: raw 5 is "no request" (idle), not off
+    assert entity["sensor"]["operating_mode"]["state"]["no_request"] == {"en": "No request", "de": "Keine Anforderung"}[lang]
+    assert "off" not in entity["sensor"]["operating_mode"]["state"]
 
 
 # ------------------------------------------------------------------ F10: return temperature, action, block
@@ -305,7 +307,7 @@ async def test_external_change_raises_issue_and_logbook_entry(hass: HomeAssistan
     await _poll_settings(hass, entry)
     changes = _issue(hass, entry).translation_placeholders["changes"]
     assert "WP Heating Setpoint: 22.0 °C -> 26.0 °C" in changes
-    assert "WP Heating Mode: No influence -> Offset (controller's target plus offset)" in changes
+    assert "WP Heating Mode: No influence (controller uses its own values) -> Offset (controller's target plus offset)" in changes
     # after a dismissal, a new change starts a fresh list
     ir.async_get(hass).async_ignore(DOMAIN, f"{ISSUE_EXTERNAL_CHANGE}_{entry.entry_id}", True)
     shi.holding[10051] = 1
@@ -326,7 +328,7 @@ async def test_external_change_logbook_in_german(hass: HomeAssistant, shi: FakeS
     shi.holding[10005] = 1
     await _poll_settings(hass, entry)
     assert events[1]["message"] == (
-        "WP Warmwasser Betriebsart außerhalb von Home Assistant geändert: Keine Vorgabe -> "
+        "WP Warmwasser Betriebsart außerhalb von Home Assistant geändert: Keine Vorgabe (Regelung nutzt ihre eigenen Werte) -> "
         "Sollwert (ersetzt den Sollwert der Regelung)"
     )
 
@@ -400,7 +402,7 @@ async def test_zeros_without_an_outage_are_external(hass: HomeAssistant, shi: Fa
     shi.holding.update({10000: 0, 10005: 0})
     await _poll_settings(hass, entry)
     changes = _issue(hass, entry).translation_placeholders["changes"]
-    assert "WP Heating Mode: Setpoint (replaces the controller's target) -> No influence" in changes
+    assert "WP Heating Mode: Setpoint (replaces the controller's target) -> No influence (controller uses its own values)" in changes
     assert "WP Hot water Mode" in changes
 
 
@@ -428,8 +430,8 @@ async def test_changes_during_an_outage_are_not_external(hass: HomeAssistant, sh
 
 async def test_extra_dhw_reset_by_the_controller_is_not_external(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = await _setup(hass, shi)
-    switch = _entity_id(hass, entry, "switch", "extra_dhw")
-    await hass.services.async_call("switch", "turn_on", {"entity_id": switch}, blocking=True)
+    button = _entity_id(hass, entry, "button", "extra_dhw")
+    await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
     shi.holding[10071] = 0  # the controller ends the extra hot water by itself
     await _poll_settings(hass, entry)
     assert _issue(hass, entry) is None
@@ -437,8 +439,8 @@ async def test_extra_dhw_reset_by_the_controller_is_not_external(hass: HomeAssis
 
 async def test_circulation_changed_by_the_controller_is_not_external(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = await _setup(hass, shi)
-    switch = _entity_id(hass, entry, "switch", "circulation")
-    await hass.services.async_call("switch", "turn_on", {"entity_id": switch}, blocking=True)
+    button = _entity_id(hass, entry, "button", "circulation")
+    await hass.services.async_call("button", "press", {"entity_id": button}, blocking=True)
     shi.holding[10070] = 0  # a time schedule or the hot water run in the controller switches it
     await _poll_settings(hass, entry)
     assert _issue(hass, entry) is None

@@ -108,7 +108,7 @@
       "room": {
         "name": "Temperature: room (room unit)"
       },
-      "heating_limit": {
+      "heating_demand_border": {
         "name": "Demand border"
       },
       "outside": {
@@ -126,7 +126,7 @@
       "dhw_max": {
         "name": "Maximum"
       },
-      "dhw_limit": {
+      "dhw_demand_border": {
         "name": "Demand border"
       },
       "mk1_flow": {
@@ -202,7 +202,7 @@
           "pool": "Pool / solar",
           "evu_lock": "Utility lockout",
           "defrost": "Defrost",
-          "off": "No request",
+          "no_request": "No request",
           "external_source": "Heating (external source)",
           "cooling": "Cooling"
         }
@@ -327,6 +327,9 @@
       "max_flow_temp": {
         "name": "Temperature: flow maximum"
       },
+      "flow_calc_max": {
+        "name": "Flow: calculated maximum (TVL calc max)"
+      },
       "heat_source_out": {
         "name": "Temperature: heat source outlet"
       },
@@ -357,62 +360,11 @@
       "extra_dhw_remaining": {
         "name": "Extra: remaining time"
       },
-      "raw_10113": {
-        "name": "Flow: calculated maximum (TVL calc max)"
-      },
-      "raw_10350": {
-        "name": "Output: VBO"
-      },
-      "raw_10351": {
-        "name": "Output: FP1"
-      },
-      "raw_10354": {
-        "name": "Output: heating circulation pump (HUP)"
-      },
-      "raw_10355": {
-        "name": "Output: DHW pump (BUP)"
-      },
-      "raw_10356": {
-        "name": "Output: circulation pump (ZIP)"
-      },
-      "raw_10360": {
-        "name": "Input: EVU"
-      },
-      "raw_10361": {
-        "name": "Input: EVU 2"
-      },
-      "raw_10352": {
-        "name": "Output: FP2"
-      },
-      "raw_10353": {
-        "name": "Output: FP3"
-      },
-      "raw_10410": {
-        "name": "Operating hours cooling: word 1"
-      },
-      "raw_10411": {
-        "name": "Operating hours cooling: word 2"
-      },
       "raw_10412": {
         "name": "Operating hours pool: word 1 (divisor 7200)"
       },
       "raw_10413": {
         "name": "Operating hours pool: word 2 (divisor 7200)"
-      },
-      "raw_10416": {
-        "name": "Operating hours solar: word 1"
-      },
-      "raw_10417": {
-        "name": "Operating hours solar: word 2"
-      },
-      "raw_10500": {
-        "name": "Extra hot water: setpoint"
-      },
-      "raw_10501": {
-        "name": "Extra hot water: duration"
-      },
-      "raw_10502": {
-        "name": "Extra hot water: remaining time"
       },
       "firmware_version": {
         "name": "Firmware version"
@@ -470,11 +422,11 @@
       "input_evu2": {
         "name": "Input: EVU 2 (level 1 = on)"
       },
-      "cap_heating": {
-        "name": "Equipment: heating"
+      "heating_available": {
+        "name": "Heating available (equipped, mode not off)"
       },
-      "cap_hot_water": {
-        "name": "Equipment: hot water"
+      "hot_water_available": {
+        "name": "Hot water available (equipped, mode not off)"
       },
       "cap_cooling": {
         "name": "Equipment: cooling"
@@ -521,6 +473,9 @@
       "power_limit_configured": {
         "name": "Power limit: mode set"
       },
+      "extra_dhw_running": {
+        "name": "Extra: running"
+      },
       "compressor_1": {
         "name": "Status: compressor 1 running"
       },
@@ -559,14 +514,22 @@
       "pool_block": {
         "name": "Block"
       },
-      "circulation": {
-        "name": "Circulation pump"
-      },
-      "extra_dhw": {
-        "name": "Extra"
-      },
       "block_power": {
         "name": "On/off (blocks)"
+      }
+    },
+    "button": {
+      "circulation": {
+        "name": "Circulation: start run"
+      },
+      "extra_dhw": {
+        "name": "Extra: start"
+      },
+      "circulation_stop": {
+        "name": "Circulation: end"
+      },
+      "extra_dhw_stop": {
+        "name": "Extra: end"
       }
     },
     "number": {
@@ -648,7 +611,7 @@
       "cfg_heating_mode": {
         "name": "Mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -659,14 +622,13 @@
         "state": {
           "normal": "Normal (no correction)",
           "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
           "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_dhw_mode": {
         "name": "Mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -677,14 +639,13 @@
         "state": {
           "normal": "Normal (no correction)",
           "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
           "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk1_mode": {
         "name": "Mixing circuit 1: mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -695,14 +656,13 @@
         "state": {
           "normal": "Normal (no correction)",
           "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
           "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk1_cool_mode": {
         "name": "Mixing circuit 1: mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -719,7 +679,7 @@
       "cfg_overall_mode": {
         "name": "Overall: mode",
         "state": {
-          "off": "No influence (circuits follow their own modes)",
+          "no_influence": "No influence (circuits follow their own modes)",
           "setpoint": "Setpoint (not implemented by the firmware, acts like no influence)",
           "offset": "Offset for all heating circuits (overrides their modes)",
           "level": "Level for all heating circuits (overrides their modes)"
@@ -730,14 +690,13 @@
         "state": {
           "normal": "Normal (no correction)",
           "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
           "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk2_mode": {
         "name": "Mixing circuit 2: mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -748,14 +707,13 @@
         "state": {
           "normal": "Normal (no correction)",
           "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
           "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk2_cool_mode": {
         "name": "Mixing circuit 2: mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -764,7 +722,7 @@
       "cfg_mk3_mode": {
         "name": "Mixing circuit 3: mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -775,14 +733,13 @@
         "state": {
           "normal": "Normal (no correction)",
           "increased": "Increased (by the controller's \"Erhöhung\" parameter)",
-          "increased2": "Increased, step 2 (same as step 1 in the firmware)",
           "decreased": "Decreased (by the controller's \"Absenkung\" parameter)"
         }
       },
       "cfg_mk3_cool_mode": {
         "name": "Mixing circuit 3: mode",
         "state": {
-          "off": "No influence",
+          "no_influence": "No influence (controller uses its own values)",
           "setpoint": "Setpoint (replaces the controller's target)",
           "offset": "Offset (controller's target plus offset)",
           "level": "Level (controller's target corrected by the level)"
@@ -807,7 +764,7 @@
           "controller_mode": {
             "name": "Control mode",
             "state": {
-              "off": "No influence",
+              "no_influence": "No influence (controller uses its own values)",
               "setpoint": "Setpoint (replaces the controller's target)",
               "offset": "Offset (controller's target plus offset)",
               "level": "Level (controller's target corrected by the level)"
@@ -877,7 +834,7 @@
     "base_values_changed": {
       "message": "After a restart of the heat pump, the base values these setpoints fall back to have changed (learned before -> now):\n\n{changes}\n\nThe values set in Home Assistant remain valid and were restored:\n\n{restored}\n\nNo action is needed. This is information only."
     },
-    "setpoint_not_active_off": {
+    "setpoint_not_active_no_influence": {
       "message": "The setpoint only applies in mode \"Setpoint\". {select} is in mode \"No influence\", so nothing was written. Set {select} to \"Setpoint\" first."
     },
     "setpoint_not_active_offset": {
@@ -919,8 +876,8 @@
     "write_reverted_to_default": {
       "message": "The heat pump did not take {key} = {value}: the register reads its default {default} again. The controller reverts a value set over the Smart Home Interface when another Modbus client writes as well (error 816, more than two write sources within an hour), when its watchdog expired at that moment, or when the value is outside its range. The value set before is gone as well; set it again."
     },
-    "overall_setpoint_not_implemented": {
-      "message": "The overall mode has no setpoint: the heat pump firmware does not implement this mode for the overall group and treats it like \"no influence\". Use offset or level, or set the mode of the single circuit."
+    "trigger_blocked": {
+      "message": "{key} was not started: the controller does not accept it while hot water is not equipped or its operating mode at the control panel is off ({flag} reads off)."
     },
     "not_writable": {
       "message": "Register {key} cannot be written."

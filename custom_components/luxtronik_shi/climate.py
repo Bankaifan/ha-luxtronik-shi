@@ -7,7 +7,7 @@ and select entities.
 
 HVAC modes (python-luxtronik ``ControlMode``):
 
-* ``auto``: control mode 0, "no influence". The heat pump controls itself with its own values. This is not
+* ``auto``: control mode 0 (``no_influence``). The heat pump controls itself with its own values. This is not
   "off": heating goes on. There is no ``off`` HVAC mode; blocking heating is the ``heating_block`` switch,
   which belongs to an optimizer such as the Heat Pump Optimizer.
 * ``heat``: any other control mode (setpoint, offset, level). Choosing ``heat`` from ``auto`` writes
@@ -40,7 +40,7 @@ from . import LuxtronikConfigEntry
 from .compat import CLIMATE_NATIVE_TEMPERATURE
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
-from .registers import BY_KEY, CLIMATE_HEATING_KEY, encode_int16
+from .registers import BY_KEY, CLIMATE_HEATING_KEY, MODE_NO_INFLUENCE, MODE_SETPOINT, encode_int16
 from .setpoint import setpoint_attributes, validate_setpoint_write
 
 _MODE_REG = BY_KEY["cfg_heating_mode"]
@@ -103,7 +103,7 @@ class LuxtronikHeatingClimate(CoordinatorEntity[LuxtronikCoordinator], ClimateEn
         mode = self._mode()
         if mode is None:
             return None
-        return HVACMode.AUTO if mode == "off" else HVACMode.HEAT
+        return HVACMode.AUTO if mode == MODE_NO_INFLUENCE else HVACMode.HEAT
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -172,7 +172,7 @@ class LuxtronikHeatingClimate(CoordinatorEntity[LuxtronikCoordinator], ClimateEn
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """``auto`` writes mode 0 (no influence). ``heat`` writes ``setpoint`` only coming from mode 0."""
         if hvac_mode == HVACMode.AUTO:
-            await self.coordinator.async_write(_MODE_REG, _MODE_REG.options.index("off"))
+            await self.coordinator.async_write(_MODE_REG, _MODE_REG.options.index(MODE_NO_INFLUENCE))
             return
         if hvac_mode != HVACMode.HEAT:
             raise ServiceValidationError(
@@ -183,9 +183,9 @@ class LuxtronikHeatingClimate(CoordinatorEntity[LuxtronikCoordinator], ClimateEn
         mode = self._mode()
         if mode is None:
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="control_mode_unknown")
-        if mode != "off":
+        if mode != MODE_NO_INFLUENCE:
             return  # setpoint, offset or level already heat; an optimizer's offset or level stays
-        await self.coordinator.async_write(_MODE_REG, _MODE_REG.options.index("setpoint"))
+        await self.coordinator.async_write(_MODE_REG, _MODE_REG.options.index(MODE_SETPOINT))
 
     async def async_turn_on(self) -> None:
         """Same as choosing ``heat``."""

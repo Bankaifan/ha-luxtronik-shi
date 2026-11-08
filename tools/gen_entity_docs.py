@@ -25,7 +25,7 @@ import entity_docs_texts as texts  # noqa: E402
 import registers  # noqa: E402
 
 OUTPUTS = {"en": ROOT / "docs" / "entities.md", "de": ROOT / "docs" / "entities.de.md"}
-PLATFORM_ORDER = ("sensor", "binary_sensor", "switch", "number", "select", "climate", "water_heater")
+PLATFORM_ORDER = ("sensor", "binary_sensor", "switch", "button", "number", "select", "climate", "water_heater")
 KIND_TABLE = {"input": "input", "holding": "holding", "discrete": "discrete input"}
 
 
@@ -98,6 +98,10 @@ def collect() -> list[Entity]:
         found.append(Entity(key, "select", len(found), area=registers.area_of(key)))
     for key in registers.BLOCK_SWITCH_KEYS:
         found.append(Entity(key, "switch", len(found), area=registers.area_of(key)))
+    for action in registers.TRIGGER_ACTIONS:  # a second button on a trigger register (writes its own word)
+        found.append(
+            Entity(action.key, "button", len(found), reg=registers.BY_KEY[action.register], area=registers.area_of(action.key))
+        )
     return found
 
 
@@ -171,18 +175,34 @@ def _values(entity: Entity, entry: texts.Entry, lang: str, trans: dict, page: di
                 lines.append(f"{run[0]} … {run[-1]} = `unknown_N`: " + states.get(reg.options[run[0]], "").replace(str(run[0]), "N"))
                 run.clear()
 
+        seen: dict[str, list[int]] = {}  # raw values the firmware treats alike share one option
         for i, opt in enumerate(reg.options):
             if opt.startswith("unknown_"):
                 run.append(i)
                 continue
             flush()
-            lines.append(f"{i} = `{opt}`: {states.get(opt, opt)}")
+            if opt in seen:
+                seen[opt].append(i)
+                continue
+            seen[opt] = [i]
+            lines.append(opt)
         flush()
-        return "<br>".join(lines)
+        out: list[str] = []
+        for line in lines:
+            if line not in seen:
+                out.append(line)  # an unknown_N run
+                continue
+            raws = " / ".join(str(i) for i in seen[line])
+            note = f" {page['unselectable']}" if line in reg.unselectable else ""
+            out.append(f"{raws} = `{line}`: {states.get(line, line)}{note}")
+        return "<br>".join(out)
     if entity.platform == "select" and reg is None:
         return "<br>".join(f"`{k}`: {v}" for k, v in states.items())  # block mode: a view, not a register
     if entity.platform == "switch":
         return page["switch_values"]
+    if entity.platform == "button":
+        raw = next((a.raw for a in registers.TRIGGER_ACTIONS if a.key == entity.key), 1)
+        return page["button_values"].format(raw=raw)
     if entity.platform == "binary_sensor":
         return page["on_off"]
     if entity.platform == "climate":

@@ -78,11 +78,12 @@ that is already set up.
 | Status | operating mode as text (heating, hot water, pool / solar, utility lockout, defrost, no request, heating from external source, cooling), **compressor 1/2 running**, **auxiliary heater (ZWE) 1/2 active** (additional status bits for VD2, ZWE2 and ZWE3 exist, disabled by default), error number, heating/hot water/cooling/pool status as text (disabled, no request, requested, running; other values as *Unknown (n)*), connection. Calculated from registers that are read anyway (no extra polling): **fault** (error number is not 0), **defrost active**, **heating running** / **hot water running** (status is *running*), **power limit: mode set** (the configured mode is soft or hard; this is not whether the limit currently reduces the power) and the **flow-return difference** in K (flow minus return, can be negative) |
 | **Climate / water heater** | heating circuit (auto / heat, setpoint 15–75 °C) and hot water (no influence / setpoint / offset / level, setpoint 30–75 °C), see below |
 | **Write: numbers** | **heating curve offset** (−20 … +20 K), heating setpoint, hot water setpoint and offset, mixing circuits 1–3 setpoint and offset (heating and cooling), overall heating offset (−5 … +5 K), power limit value (0–30 kW). All ranges are the firmware's, see [write ranges](#write-ranges-and-defaults-firmware) |
-| **Write: selects** | mode (no influence / setpoint / offset / level) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating (no setpoint there); level (normal / increased / increased step 2 = step 1 / decreased, amounts are the controller's *Offsets* parameters); power limit mode (none / soft / hard) |
-| **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected), **circulation pump** and *extra hot water* (both triggers the firmware switches off again by itself); plus the block views *operating mode (blocks)* (select) and *on/off (blocks)* (switch), see [below](#block-views-for-the-heat-pump-optimizer) |
+| **Write: selects** | mode (`no_influence` / `setpoint` / `offset` / `level`) for heating, hot water, mixing circuits 1–3 (heating and cooling), overall heating (`no_influence` / `offset` / `level`: the firmware has no setpoint there); level (`normal` / `increased` / `decreased`; raw 1 and 2 are both `increased`, the amounts are the controller's *Offsets* parameters); power limit mode (none / soft / hard) |
+| **Write: switches** | *block heating*, *block hot water*, *block cooling*, *block pool* (only with a pool selected): a block stays as written until it is changed or the SHI watchdog releases it; plus the block views *operating mode (blocks)* (select) and *on/off (blocks)* (switch), see [below](#block-views-for-the-heat-pump-optimizer) |
+| **Write: buttons** | **circulation: start run** and **extra: start** (the two trigger registers 10070/10071: a press writes 1, the firmware sets the register back to 0 when the run or the timer ends), **extra: end** (writes 0, ends extra hot water early). The running state is the binary sensors **circulation: run active** and **extra: running**, see [triggers](#triggers-circulation-run-and-extra-hot-water) |
 | Extra hot water | **setpoint**, **duration** and **remaining time** of extra hot water (controller parameters 1146/1147 and the running timer; firmware 3.92.3 analysis), in the *Hot water* device |
 | Pumps and I/O | **pump heating (HUP), hot water (BUP), circulation (ZIP)** running, outputs **VBO** and **FP1** (FP2 and FP3 disabled by default; not measured), inputs **EVU** and **EVU 2** as a level (disabled by default). Read from the same registers as the matching `raw_` sensors, which stay as they are. For EVU only the name is proven by the firmware analysis; that level 1 means *released* is inferred from one measured state, so the sensors show the level, not "locked". The operating mode *utility lockout* reports the lock itself |
-| Diagnostic | buffer tank type, limit/min/max values, equipment flags, firmware, undocumented raw values (disabled by default). The switching lock, minimum runtime and minimum hot water temperature are fixed firmware constants and disabled by default for new installations |
+| Diagnostic | buffer tank type, limit/min/max values, equipment flags, firmware, the calculated maximum flow (*TVL calc max*, 10113) and the raw values without a proven meaning (disabled by default). The switching lock, minimum runtime and minimum hot water temperature are fixed firmware constants and disabled by default for new installations |
 
 **Every entity explained:** the [entity reference](docs/entities.md) (also in [German](docs/entities.de.md)) lists each
 entity by topic with key, unit, value range, meaning and pitfalls, plus short background on how heat pumps work.
@@ -140,17 +141,19 @@ written values have no effect, check this setting at the control panel.
 A **climate entity** for the heating circuit and a **water heater entity** in the *Hot water* device are views on the
 mode select and the setpoint number of their circuit. They write the same registers.
 
-**Modes say what they do** (python-luxtronik `ControlMode`). Raw 0 of every mode select is **No influence**: the heat
-pump works with its own values. It does not switch anything off. The selects show:
+**Modes say what they do** (firmware analysis, python-luxtronik `ControlMode`). Raw 0 of every mode select is
+**No influence**: the heat pump works with its own values. It does not switch anything off. The selects show:
 
 | Raw | Option key | Shown as |
 |---|---|---|
-| 0 | `off` | No influence |
+| 0 | `no_influence` | No influence (controller uses its own values) |
 | 1 | `setpoint` | Setpoint (replaces the controller's target) |
 | 2 | `offset` | Offset (controller's target plus offset) |
 | 3 | `level` | Level (controller's target corrected by the level) |
 
-The option keys stay the same for automations; only the shown text changed.
+**Changed in 0.18.0:** the option key of raw 0 is `no_influence` (it was `off`, which it is not). Automations and
+optimizer configurations that select or compare `off` on a mode select must use `no_influence`; the water heater
+already used that key. The operating mode sensor likewise shows `no_request` for raw 5 instead of `off`.
 
 * **Climate:** HVAC mode `auto` is control mode 0 (*the heat pump controls itself*), `heat` is setpoint, offset or
   level. There is **no `off`**: blocking heating is the *block heating* switch, which an optimizer owns. Choosing
@@ -179,10 +182,42 @@ and `no_influence` instead of the water heater operation `off`.
 
 **Overall heating** (mode, offset and level, 10065–10067) is disabled by default. The firmware analysis proves what it
 does: while its mode is not *no influence*, the modes of the heating circuit **and** of all mixing circuits are ignored
-and the overall offset or level applies to them (hot water is not affected). Its mode *setpoint* is **not implemented**
-by the firmware and acts like *no influence*; the select refuses to write it (the option stays listed so a value another
-client wrote is shown). The level uses the controller parameters *Hz. allg.* (1187/1188). It stays disabled by default
-because an active overall mode silently overrides what an optimizer writes per circuit.
+and the overall offset or level applies to them (hot water is not affected). Raw 1 (*setpoint*) is **not implemented**
+by the firmware for this group and acts like *no influence*, so the select offers only `no_influence`, `offset` and
+`level`; a raw 1 another client wrote shows as *unknown* (the raw value is in the diagnostics download and in the
+change notice). The level uses the controller parameters *Hz. allg.* (1187/1188). It stays disabled by default because
+an active overall mode silently overrides what an optimizer writes per circuit.
+
+**Levels** (`cfg_*_level`): the firmware uses the same controller parameter *Erhöhung* for raw 1 and raw 2, so both are
+one option `increased` (written as raw 1; a raw 2 another client wrote shows as `increased` too). Raw 3 is `decreased`
+(*Absenkung*). The option `increased2` of 0.17.x is gone.
+
+### Triggers: circulation run and extra hot water
+
+Registers 10070 (circulation) and 10071 (extra hot water) are **triggers**, proven by the firmware analysis: a write of
+1 starts the action, and the firmware sets the register back to 0 itself when the action is over (circulation: once no
+run with the controller's run and pause times is active any more; extra hot water: when its timer of
+`extra_dhw_duration` minutes ends). A trigger is not a state the user holds, so since 0.18.0 each one is a start
+**button** plus a stop **button**, in the *Hot water* device, with a binary sensor that shows whether it runs:
+
+| Key | Platform | What it does |
+|---|---|---|
+| `circulation` | button | *Circulation: start run*: writes 1 to 10070 |
+| `circulation_stop` | button | *Circulation: end*: writes 0 to 10070, the pump stops at once (unless the controller's own time program requests circulation at the same time) |
+| `pump_circulation` | binary_sensor | *Pump: circulation (ZIP)*: the real pump output 10356; on for runs started here and for runs of the time program |
+| `extra_dhw` | button | *Extra: start*: writes 1 to 10071, the hot water target is raised to `extra_dhw_setpoint` for `extra_dhw_duration` |
+| `extra_dhw_stop` | button | *Extra: end*: writes 0 to 10071, which sets the timer to 0 |
+| `extra_dhw_running` | binary_sensor | *Extra: running*: 10071 reads 1; `extra_dhw_remaining` shows the minutes left |
+
+Up to 0.17.x both triggers were **switches** (`switch.<name>_circulation…`, `switch.<name>_extra…`). Those entities are
+removed when 0.18.0 starts (the registry entries are deleted, they would otherwise stay as dead entities); the buttons
+get new entity IDs. **Automations and the Heat Pump Optimizer must call `button.press` on the new button instead of
+`switch.turn_on`** (and `circulation_stop` / `extra_dhw_stop` instead of `switch.turn_off`), and read the running
+state from `pump_circulation` and `extra_dhw_running`. A read-back of 0 right after the press is the
+normal end (or the controller did not accept the trigger) and is not an error. The circulation trigger is not accepted
+while the controller's hot water operating mode is *holiday* or *off*: *off* also clears the equipment flag
+`hot_water_available`, so the buttons are unavailable then; *holiday* cannot be read over the SHI. The *Enable SHI* parameter
+does not apply to the triggers. Neither is restored after a reset or reported as a change outside Home Assistant.
 
 ### Block views for the Heat Pump Optimizer
 
@@ -229,7 +264,7 @@ Like the menus of the Luxtronik controller, the entities are split into devices:
 |---|---|
 | **<name>** (heat pump) | temperatures (flow, return, outside, heat source), status and operating mode, compressor/auxiliary heater, power, COP, total energy and compressor hours, power limit, system values, firmware version (one text sensor, e.g. 3.92.3), equipment flags, raw values |
 | **<name> Heating** | climate entity, mode, setpoint, heating curve offset, level, overall heating, block, mixing circuits 1–3, heating energy, hours and COP |
-| **<name> Hot water** | water heater entity, temperatures, mode, setpoint, offset, level, block, circulation pump, extra hot water, hot water energy, hours and COP |
+| **<name> Hot water** | water heater entity, temperatures, mode, setpoint, offset, level, block, the circulation run and extra hot water triggers (buttons and running flags), hot water energy, hours and COP |
 | **<name> Cooling** / **<name> Pool** | only when cooling or a pool is selected in the equipment; Cooling holds the cooling entities of the mixing circuits, Pool the pool block, status and energy |
 
 The sub-devices are linked to the heat pump device. Within a sub-device the names are short (*Setpoint*,
@@ -277,7 +312,7 @@ The integration raises these issues under *Settings → System → Repairs*:
 
 | Issue | Severity | Raised when |
 |---|---|---|
-| Heat pump firmware is outdated | warning | Firmware is older than 3.92.0: circulation pump and extra hot water have no values. |
+| Heat pump firmware is outdated | warning | Firmware is older than 3.92.0: the circulation run and extra hot water triggers have no values. |
 | Smart Home Interface not reachable | error | Every poll failed for 10 minutes in a row. |
 | Values changed after connection outage | warning | After an outage, the heating block, hot water block, heating mode or hot water mode differs from the last value read before the outage. |
 | Value changed outside Home Assistant | warning | A writable setting (mode, level, setpoint, offset, block, power limit) changed between two polls without a write through Home Assistant. |
@@ -290,7 +325,7 @@ are added while it is open, and each change also gets a logbook entry. Dismiss i
 the next change raises it again. It is a notice only, nothing is written back. Not reported: the first poll after
 setup, everything after an outage (failed polls, a reconnect or a gap beyond the SHI watchdog, the same signal as the
 restore) until every setting was read again, values the integration itself tried to write within the last 10 minutes,
-and *extra hot water*, which the controller ends by itself. Without an outage the device cannot revert values, so a
+and the triggers *circulation* and *extra hot water*, which the controller ends by itself. Without an outage the device cannot revert values, so a
 change is always reported. Writes through Home Assistant are never reported; they show in the logbook with
 who made them. Works with and without the restore option.
 
@@ -307,7 +342,7 @@ The SHI forgets every value set over Modbus when the controller restarts, and wh
 minutes without any Modbus access (every read re-arms it, so this only happens while nothing polls; see
 [SHI watchdog](docs/firmware-3.92.3-shi-analysis.md#shi-watchdog)). The holding registers
 then read their reset value. Measured on the reference installation (LWDV 91-1/3, firmware 3.92.3): after two
-controller reboots the heating mode read `off` (raw 0) instead of `setpoint`, and once the heating level read raw 0
+controller reboots the heating mode read `no_influence` (raw 0) instead of `setpoint`, and once the heating level read raw 0
 instead of 2.
 
 Under *Options*, **Restore values after a device reset** (off by default) makes the integration write such values back:
@@ -318,7 +353,7 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   of each circuit (heating, hot water, mixing circuits 1–3 heating and cooling) and the room setpoint are
   remembered (`RESTORE_KEYS` in `const.py`). The overall group (`cfg_overall_*`, 10065–10067) is left out: it is
   proven to override the heating and mixing circuit modes, so an automatic re-apply could silently override what an
-  optimizer sets per circuit (on the reference installation 10065 once fell back to `off` about 2 s after a write).
+  optimizer sets per circuit (on the reference installation 10065 once fell back to `no_influence` about 2 s after a write).
   Blocks (heating, hot water, cooling, pool), the triggers circulation and extra hot water (the firmware switches
   them off itself) and the power limit are **never** restored: an optimizer such as the Heat Pump Optimizer owns them
   live, and re-applying a block after a long downtime would undo the watchdog's fail-safe (everything released). A
@@ -327,7 +362,7 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   setpoints in the list (for example `cfg_heating_mode`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`) are restored
   even if an optimizer writes them; its next write wins. A failed write or a different read-back forgets the
   key. The values are stored per entry in Home Assistant's storage (`.storage/luxtronik_shi.restore.<entry_id>`), so a
-  restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `off`,
+  restore also works after a Home Assistant restart. Setting a value back to its neutral value (e.g. mode `no_influence`,
   offset 0) is remembered like any other write, so there is nothing left to restore for it.
   Apart from the one-time adoption below, values written by others are not remembered: another Modbus client's values are out of scope, and values another
   integration writes over the native port 8889 are controller parameters, not values set over the SHI, so a reset
@@ -365,7 +400,7 @@ Under *Options*, **Restore values after a device reset** (off by default) makes 
   all differing values are restored, values first and modes last. If only some reverted, the changed ones were
   external changes: they are forgotten and nothing is restored. A single remembered mode reading 0 after an outage is
   enough. Example: hot water mode `setpoint` at 54 °C and heating mode `offset` with offset 0 – after a reboot both
-  modes and the 54 °C come back; a mode that was `off` stays `off`.
+  modes and the 54 °C come back; a mode that was `no_influence` stays `no_influence`.
 * **Learned setpoint reset values.** After a confirmed reset the integration stores the value each setpoint reverted
   to. From then on a setpoint only counts as reverted if it reads exactly that value; another value means someone
   changed it. These values are learned on your device, not taken from a firmware table. If a setpoint blocks a reset
@@ -457,7 +492,7 @@ installation (LWDV 91-1/3, Heat Pump Optimizer in "control" mode) without changi
    `sensor.einstellung_heizen_anhebung_heating_offset`).
 5. **Check consumers:** renaming does not update references in dashboards, automations and templates. Check them
    (e.g. with the entity search) and adjust references to removed sensors.
-6. **Operating mode is now text** (`off`, `heating`, `dhw`, `defrost`, …). The old YAML entity was numeric
+6. **Operating mode is now text** (`no_request`, `heating`, `hot_water`, `defrost`, …). The old YAML entity was numeric
    (Luxtronik: 1 = hot water, 5 = no demand). Templates that compare numbers must be changed to text.
 7. Long-term statistics are kept if the new entity gets the same entity ID and the same unit. Statistics of removed
    entities (e.g. `einstellung_*`, `diagnose_rohwert_*`) remain orphaned in the database.
@@ -499,7 +534,7 @@ those who deliberately stay on YAML, no longer used in production and not tested
 
 * **Values can fall back after a controller restart.** The SHI holding registers are volatile. After a power cut or
   a controller restart, values written through this integration (for example the heating or hot water block) can
-  return to the controller default, e.g. `off`. By default the integration does **not** write them back; see
+  return to the controller default, e.g. released. By default the integration does **not** write them back; see
   [restore after a device reset](#restore-after-a-device-reset-option) for the option that does. If Home Assistant was
   running during the outage, a [repair issue](#repair-issues) shows what changed. Check the block and mode entities
   after a power outage, or have your automation or planner write them again.
@@ -510,29 +545,39 @@ those who deliberately stay on YAML, no longer used in production and not tested
   followed the written value). It only applies with heating mode `setpoint` (reg. 10000 = 1).
 * **Block heating:** `switch.<name>_heating_block` only blocks heating; hot water keeps running. A planner (e.g. Heat
   Pump Optimizer) can block at a planned 0 W and release again if the planner fails or the room gets too cold.
-* The *level* options keep the python-luxtronik `LevelMode` keys (normal / increased / increased2 / decreased); the
-  firmware proves that 1 and 2 raise by the same controller parameter and 3 lowers (see
-  [write ranges and defaults](#write-ranges-and-defaults-firmware)). Circulation pump and extra hot water require
-  firmware 3.92.0 and are **triggers**: the firmware sets them back to 0 when the circulation run or the extra hot
-  water timer ends, so the switch goes off by itself; that is neither a failed write nor a change outside Home
-  Assistant. The circulation trigger is not accepted while the controller's hot water mode is *holiday* or *off*.
+* The *level* options are `normal` / `increased` / `decreased` (raw 0 / 1 and 2 / 3): the firmware proves that raw 1
+  and 2 raise by the same controller parameter and 3 lowers (see
+  [write ranges and defaults](#write-ranges-and-defaults-firmware)). Circulation run and extra hot water require
+  firmware 3.92.0 and are **triggers** (buttons with a running binary sensor, see
+  [triggers](#triggers-circulation-run-and-extra-hot-water)).
 * **Status bits VD2, ZWE2, ZWE3:** the binary sensors `heatpump_vd2_status`, `heatpump_zwe2_status` and
   `heatpump_zwe3_status` come from python-luxtronik (bits 1, 3 and 4 of register 10000) and are disabled by default.
   VD2 and ZWE2 show the same bits as *compressor 2* and *auxiliary heater 2*; ZWE3 needs firmware 3.90.1 or later
   (per python-luxtronik).
-* **Renamed raw values (10109, 10110, 10112):** `raw_10109` is now `outside_temp_average` (outside average, °C),
-  `raw_10110` is now `heat_source_input` (heat source inlet, °C) and `raw_10112` is
-  `max_flow_temp` (flow maximum, °C, disabled by default). The integration moves the existing entities over when it
-  starts, so their entity IDs, history and settings stay. Only the unique ID suffix and the name change; adjust
-  anything that matches on the old `raw_*` unique ID. Long-term statistics of 10112 start now (it had no unit before).
-* **Raw values:** the registers python-luxtronik lists with unknown function (inputs 10352, 10353, 10410–10413,
-  10416, 10417, 10500–10502) stay available as disabled `raw_<address>` diagnostic sensors (read only, polled rarely).
-  Since 0.17.0 the firmware analysis gives them names, and the resolved ones have proper sensors next to them with
-  new keys: `hours_cooling` (10410, needs *cooling*), `hours_solar` (10416, needs the new equipment option *solar*,
-  pre-filled from the new flag `cap_solar` = discrete input 10004), `extra_dhw_setpoint`, `extra_dhw_duration` and
-  `extra_dhw_remaining` (10500–10502). A shared address is read once. `raw_10113` is named *TVL calc max* (the
-  calculated maximum flow) instead of *heating target (calculated)*, and `heating_limit`/`dhw_limit` are named
-  *demand border* (setpoint minus hysteresis); their keys are unchanged.
+* **Renamed raw values (10109, 10110, 10112, 10113):** `raw_10109` is now `outside_temp_average` (outside average,
+  °C), `raw_10110` is now `heat_source_input` (heat source inlet, °C), `raw_10112` is `max_flow_temp` (flow maximum,
+  °C, disabled by default) and, since 0.18.0, `raw_10113` is `flow_calc_max` (*TVL calc max*, the calculated maximum
+  flow, °C, disabled by default). The integration moves the existing entities over when it starts, so their entity
+  IDs, history and settings stay. Only the unique ID suffix changes; adjust anything that matches on the old `raw_*`
+  unique ID.
+* **Raw values:** the firmware analysis resolved most of the registers python-luxtronik lists with unknown function.
+  The resolved ones have proper sensors: `hours_cooling` (10410, needs *cooling*), `hours_solar` (10416, needs the
+  equipment option *solar*, pre-filled from the flag `cap_solar` = discrete input 10004), `extra_dhw_setpoint`,
+  `extra_dhw_duration` and `extra_dhw_remaining` (10500–10502) and `flow_calc_max` (10113). **Since 0.18.0 the raw
+  word sensors of those addresses (`raw_10410`, `raw_10411`, `raw_10416`, `raw_10417`, `raw_10500`, `raw_10501`,
+  `raw_10502`) no longer exist**; their registry entries are deleted at start. Still raw (disabled diagnostics, read
+  only, polled rarely): the pool operating hours 10412/10413 (the firmware divides them by 7200 instead of 3600, only
+  likely a factor 2, not measured). **Since 0.18.0 the raw twins of the proven outputs and inputs (`raw_10350` …
+  `raw_10356`, `raw_10360`, `raw_10361`) no longer exist** either; the binary sensors `output_vbo`, `output_fp1` …
+  `output_fp3`, `pump_heating`, `pump_hot_water`, `pump_circulation`, `input_evu`, `input_evu2` read those registers
+  (same poll interval), and the raw registry entries are deleted at start.
+* **Demand borders renamed (0.18.0):** `heating_limit` is now `heating_demand_border` and `dhw_limit` is now
+  `dhw_demand_border` (*demand border*: setpoint minus hysteresis, tracked by the firmware, not a parameter). The
+  integration moves the registry entries over, so entity IDs, history and settings stay; only the unique ID suffix
+  changes.
+* **Availability flags renamed (0.18.0):** `cap_heating` is now `heating_available` and `cap_hot_water` is now
+  `hot_water_available` (discrete inputs 10000/10001: on while the part is equipped **and** the controller's operating
+  mode for it is not *off*; proven). The registry entries move over, so entity IDs, history and settings stay.
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve

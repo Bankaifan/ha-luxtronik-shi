@@ -100,7 +100,7 @@ async def test_water_heater_set_temperature_limits_are_accepted(
 
 @pytest.mark.parametrize(
     ("mode", "raw", "option"),
-    [("setpoint", 1, "setpoint"), ("offset", 2, "offset"), ("level", 3, "level"), ("no_influence", 0, "off")],
+    [("setpoint", 1, "setpoint"), ("offset", 2, "offset"), ("level", 3, "level"), ("no_influence", 0, "no_influence")],
 )
 async def test_water_heater_operation_mode_writes_mode_register(
     hass: HomeAssistant, shi: FakeSHI, mode: str, raw: int, option: str

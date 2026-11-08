@@ -68,6 +68,7 @@ from .registers import (
     BY_KEY,
     CONTROL_MODES,
     FIRMWARE_PARTS,
+    MODE_SETPOINT,
     SETPOINT_GROUPS,
     Register,
     area_of,
@@ -80,7 +81,7 @@ _LOGGER = logging.getLogger(__name__)
 
 MAX_GAP = 3  # registers that may be skipped inside one block read
 MAX_BLOCK = 40  # maximum registers per request
-WRITABLE_PLATFORMS = ("number", "select", "switch")
+WRITABLE_PLATFORMS = ("number", "select", "switch", "button")
 # Event the logbook integration turns into an entry (homeassistant.components.logbook EVENT_LOGBOOK_ENTRY).
 # Fired directly so the integration does not depend on the logbook integration being loaded.
 EVENT_LOGBOOK_ENTRY = "logbook_entry"
@@ -148,6 +149,13 @@ def restore_group(key: str) -> str:
         if key.endswith(suffix):
             return key.removesuffix(suffix)
     return key
+
+
+def _same_option(reg: Register, old: int, new: int) -> bool:
+    """Whether two raw values are the same option (levels: raw 1 and 2 are both ``increased``), so a
+    change between them is no change the user could see or act on."""
+    options = reg.options or ()
+    return 0 <= old < len(options) and 0 <= new < len(options) and options[old] == options[new]
 
 
 class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -421,12 +429,11 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     offset = reg.address - block.start
                     self._store(reg, words[offset : offset + reg.width], poll=True)
                 return
-        shared: dict[int, list[Register]] = {}  # entities that share a register (ALIAS_OF) are read once
+        shared: dict[int, list[Register]] = {}  # entities that share a register are read once
         for reg in block.registers:
             shared.setdefault(reg.address, []).append(reg)
         for regs in shared.values():
-            # The widest register first: a 32 bit counter and the raw sensor of its high word share an address
-            # (SHARES_ADDRESS); the single word is the first of the two.
+            # The widest register first, so that a 16 bit twin of a 32 bit register gets the first word.
             first, *twins = sorted(regs, key=lambda r: -r.width)
             await self._read_single(first, poll=True, twins=twins)
 
@@ -689,8 +696,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         reverted it (docs/firmware-3.92.3-shi-full-analysis.md, 1.4 and 4): a value outside the range (never
         sent
         by this integration), error 816 "multiple SHI write sources" or a watchdog expiry at that moment; the
-        value set before is gone as well. That is an error of the write. A trigger (TRIGGER_KEYS) reading 0 is
-        its normal end and nothing is reported; any other mismatch is logged.
+        value set before is gone as well. That is an error of the write. A trigger (TRIGGER_KEYS, the
+        buttons) reading 0 is its normal end (the run may be over before the read-back, or the controller did
+        not accept it) and nothing is reported; any other mismatch is logged.
         """
         current = self._raw.get(reg.key)
         if reg.key in TRIGGER_KEYS:
@@ -725,7 +733,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """A raw holding word as text: option key, on/off, or value with unit (no translation lookup)."""
         if reg.options:
             return reg.options[raw] if 0 <= raw < len(reg.options) else str(raw)
-        if reg.platform == "switch":
+        if reg.platform in ("switch", "button"):
             return str(raw)
         return self._format_number(reg, decode(reg, [raw]))
 
@@ -770,7 +778,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         mode = self._values.get(SETPOINT_GROUPS[key][0])
         if not isinstance(mode, int) or not 0 <= mode < len(CONTROL_MODES):
             return None
-        return CONTROL_MODES[mode] == "setpoint"
+        return CONTROL_MODES[mode] == MODE_SETPOINT
 
     # ------------------------------------------------------------------ changes outside Home Assistant
     async def _check_external_changes(self, *, outage: bool) -> None:
@@ -793,7 +801,9 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         changes = [
             (reg, old, new)
             for reg, old, new in changes
-            if reg.key not in EXTERNAL_CHANGE_EXCLUDED and not self._own_write(reg.key, new, now)
+            if reg.key not in EXTERNAL_CHANGE_EXCLUDED
+            and not self._own_write(reg.key, new, now)
+            and not _same_option(reg, old, new)
         ]
         if not changes:
             return
@@ -886,7 +896,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if reg.options:
             option = reg.options[raw] if 0 <= raw < len(reg.options) else str(raw)
             return self._text(texts, f"entity.{reg.platform}.{key}.state.{option}", option)
-        if reg.platform == "switch" and raw in (0, 1):
+        if reg.platform in ("switch", "button") and raw in (0, 1):
             state = "on" if raw == 1 else "off"
             return self._text(texts, f"exceptions.state_{state}.message", state)
         number = f"{decode(reg, [raw]):.{reg.precision or 0}f}"
@@ -1097,7 +1107,7 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 mode_reg = BY_KEY.get(mode)
                 if mode_reg is None or mode_reg.options is None:
                     continue
-                if self._raw.get(mode) != mode_reg.options.index("setpoint"):
+                if self._raw.get(mode) != mode_reg.options.index(MODE_SETPOINT):
                     continue
             adopted[key] = raw
         self._remembered.update(adopted)

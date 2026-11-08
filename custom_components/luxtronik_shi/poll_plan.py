@@ -15,6 +15,7 @@ from .registers import (
     DIFFERENCE_SENSORS,
     FIRMWARE_PARTS,
     SETPOINT_GROUPS,
+    TRIGGER_ACTIONS,
     Register,
 )
 
@@ -49,6 +50,8 @@ def derived_consumers() -> dict[str, tuple[tuple[str, str], ...]]:
             consumers.setdefault(source, []).append(("sensor", difference.key))
     for flag in DERIVED_FLAGS:
         consumers.setdefault(flag.source, []).append(("binary_sensor", flag.key))
+    for action in TRIGGER_ACTIONS:  # a stop button needs its register read for its availability
+        consumers.setdefault(action.register, []).append(("button", action.key))
     return {source: tuple(entities) for source, entities in consumers.items()}
 
 
@@ -62,8 +65,9 @@ def internal_keys() -> frozenset[str]:
     entities. When in doubt a key belongs here: reading it costs a little traffic, missing it breaks logic.
 
     The sources of the calculated sensors and binary sensors (COP, flow-return difference, fault, defrost,
-    running, power limit) are NOT here: they follow ``derived_consumers`` (polled while the source entity or
-    one entity that uses it is enabled), unless another rule above keeps them.
+    running, power limit, the trigger running flags) and of the trigger stop button are NOT here: they
+    follow ``derived_consumers`` (polled while the source entity or one entity that uses it is enabled),
+    unless another rule above keeps them.
     """
     keys: set[str] = set(FIRMWARE_PARTS)
     keys |= set(OUTAGE_WATCH_KEYS)

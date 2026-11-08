@@ -108,24 +108,24 @@ async def test_values(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert state("number", "cfg_heating_setpoint") == "22.0"
     assert state("number", "cfg_heating_offset") == "0.0"
     assert state("number", "cfg_dhw_setpoint") == "40.0"
-    assert state("select", "cfg_heating_mode") == "off"
+    assert state("select", "cfg_heating_mode") == "no_influence"
     assert state("sensor", "operating_mode") == "hot_water"
     assert state("sensor", "mk1_flow") == "30.0"
-    assert state("sensor", "heating_limit") == "22.8"
+    assert state("sensor", "heating_demand_border") == "22.8"
     assert state("sensor", "buffer_type") == "separation"
     assert state("binary_sensor", "cooling_release") == "on"
     assert state("binary_sensor", "compressor_1") == "off"  # status mask 4 = ZWE1 only
     assert state("binary_sensor", "aux_heater_1") == "on"
-    assert state("switch", "circulation") == "off"
-    assert state("binary_sensor", "cap_heating") == "on"
+    assert state("button", "circulation") == "unknown"  # a button has no state of its own
+    assert state("button", "circulation_stop") == "unknown"
+    assert state("binary_sensor", "heating_available") == "on"
     assert state("binary_sensor", "cap_cooling") == "off"
     assert state("binary_sensor", "online") == "on"
     assert state("switch", "dhw_block") == "off"
 
-    # raw diagnostic values are registered but disabled by default
+    # entries without an equipment option get no raw values (the outputs of 0.17.x are gone, 10412/10413 came later)
     registry = er.async_get(hass)
-    raw = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10113"))
-    assert raw.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert registry.async_get_entity_id("sensor", "luxtronik_shi", f"{entry.entry_id}_raw_10354") is None
 
 
 async def test_heating_offset_write(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -171,9 +171,9 @@ async def test_missing_register_inside_block(hass: HomeAssistant, shi: FakeSHI) 
     # the missing values are just unknown, the block was read register by register; the disabled raw value is
     # not polled at all
     data = entry.runtime_data.data
-    assert "raw_10113" not in data
-    assert data["dhw_limit"] is None
-    assert data["heating_limit"] is None
+    assert "flow_calc_max" not in data
+    assert data["dhw_demand_border"] is None
+    assert data["heating_demand_border"] is None
     assert "max_flow_temp" not in data  # disabled by default, not polled
     assert any(block.split for block in entry.runtime_data._blocks)
 
@@ -251,12 +251,11 @@ async def test_number_and_select_write(hass: HomeAssistant, shi: FakeSHI) -> Non
     assert shi.holding_value(10005) == 1
 
 
-async def test_circulation_switch(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_circulation_button(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = await _setup(hass, shi)
-    entity_id = _entity_id(hass, entry, "switch", "circulation")
-    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    entity_id = _entity_id(hass, entry, "button", "circulation")
+    await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
     assert shi.holding_value(10070) == 1
-    assert hass.states.get(entity_id).state == "on"
 
 
 async def test_pool_block_and_power_limit_write_readback(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -356,10 +355,11 @@ async def test_entry_without_equipment_option_keeps_everything(hass: HomeAssista
     )
 
     # everything from before 0.4.0, nothing that was added later (registers of 0.4.0, raw values added after 0.8.2,
-    # output and input flags of 0.13.0, the resolved sensors and the solar flag of 0.17.0).
-    # Renamed keys stay in the contract but have no entity of their own any more (see tests/test_migration.py).
+    # output and input flags of 0.13.0, the resolved sensors and the solar flag of 0.17.0). The contract fixture
+    # lists only current keys (renamed keys are gone from it, see tests/test_migration.py).
     added = {reg.key for reg in (*ADDED_IN_0_4, *_RAW_ADDED, *OUTPUT_FLAGS, *RESOLVED_IN_0_17)} | {"cap_solar"}
-    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added) - len(RENAMED_KEYS)
+    assert not added & set(RENAMED_KEYS.values())
+    assert len(entries) == sum(len(keys) for keys in contract.values()) - len(added)
     assert not {e.unique_id.removeprefix(f"{entry.entry_id}_") for e in entries} & added
 
 
@@ -501,7 +501,9 @@ async def test_sub_devices(hass: HomeAssistant, shi: FakeSHI) -> None:
     assert device_of("number", "cfg_mk1_setpoint") == heating.id
     assert device_of("switch", "heating_block") == heating.id
     assert device_of("sensor", "dhw") == hot_water.id
-    assert device_of("switch", "circulation") == hot_water.id
+    assert device_of("button", "circulation") == hot_water.id
+    assert device_of("button", "circulation_stop") == hot_water.id
+    assert device_of("button", "extra_dhw_stop") == hot_water.id
     assert device_of("switch", "dhw_block") == hot_water.id
 
 
@@ -592,24 +594,17 @@ async def test_buffer_type_mapping(hass: HomeAssistant, shi: FakeSHI, raw: int, 
 
 
 async def test_named_raw_values_decode(hass: HomeAssistant, shi: FakeSHI) -> None:
-    """Raw 10113 is the calculated heating flow target in 0.1 degC; outputs and inputs are plain 0/1 values."""
+    """10113 is the calculated maximum flow in 0.1 degC (``flow_calc_max``)."""
     shi.input[10113] = 253
-    shi.input[10354] = 1
     registry = er.async_get(hass)
     entry = await _setup(hass, shi)
     data = entry.runtime_data.data
-    assert "raw_10113" not in data  # disabled by default: not polled
-    reg = registry.async_get(_entity_id(hass, entry, "sensor", "raw_10354"))
-    assert reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert "flow_calc_max" not in data  # disabled by default: not polled
     # Enabling an entity reads its register at once (the entry is reloaded by Home Assistant a bit later).
-    for address in (10113, 10354):
-        registry.async_update_entity(
-            _entity_id(hass, entry, "sensor", f"raw_{address}"), disabled_by=None
-        )
+    registry.async_update_entity(_entity_id(hass, entry, "sensor", "flow_calc_max"), disabled_by=None)
     await hass.async_block_till_done()
     data = entry.runtime_data.data
-    assert data["raw_10113"] == 25.3
-    assert data["raw_10354"] == 1
+    assert data["flow_calc_max"] == 25.3
 
 
 async def test_default_name_follows_the_language(hass: HomeAssistant, shi: FakeSHI) -> None:

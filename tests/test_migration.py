@@ -10,6 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.luxtronik_shi.const import CONF_SLAVE, DOMAIN
 from custom_components.luxtronik_shi.registers import (
     ALL_REGISTERS,
+    BY_KEY,
     RAW_HOLDING_ADDRESSES_ADDED,
     RAW_INPUT_ADDRESSES_ADDED,
     RENAMED_KEYS,
@@ -22,7 +23,19 @@ OLD_ENTITY_IDS = {
     "raw_10109": "sensor.waermepumpe_temperatur_aussen_mittelwert",
     "raw_10110": "sensor.waermepumpe_temperatur_waermequelle_eintritt",
     "raw_10112": "sensor.waermepumpe_rohwert_vorlauf_maximum_10112",
+    # the reference installation's entity ID of the raw value 10113 (0.9 ... 0.17.x)
+    "raw_10113": "sensor.warmepumpe_diagnose_rohwert_10113",
+    # the demand borders of the reference installation (keys renamed in 0.18.0)
+    "heating_limit": "sensor.warmepumpe_heizung_anforderungsgrenze",
+    "dhw_limit": "sensor.warmepumpe_warmwasser_anforderungsgrenze",
+    # the availability flags of discrete 10000/10001 (keys renamed in 0.18.0)
+    "cap_heating": "binary_sensor.warmepumpe_ausstattung_heizen",
+    "cap_hot_water": "binary_sensor.warmepumpe_ausstattung_warmwasser",
 }
+
+
+def _domain(old_key: str) -> str:
+    return BY_KEY[RENAMED_KEYS[old_key]].platform
 
 
 def _entry(hass: HomeAssistant, shi: FakeSHI, options: dict | None = None) -> MockConfigEntry:
@@ -45,12 +58,13 @@ def _create_old(
 ) -> er.RegistryEntry:
     """Registry entry as an installation of 0.8.2 or older has it (old key, entity ID chosen long ago)."""
     entity_id = OLD_ENTITY_IDS[key]
+    domain = _domain(key)
     return er.async_get(hass).async_get_or_create(
-        "sensor",
+        domain,
         DOMAIN,
         f"{entry.entry_id}_{key}",
         config_entry=entry,
-        suggested_object_id=entity_id.removeprefix("sensor."),
+        suggested_object_id=entity_id.removeprefix(f"{domain}."),
         disabled_by=disabled_by,
     )
 
@@ -70,21 +84,24 @@ async def test_renamed_entities_keep_their_entity_id(hass: HomeAssistant, shi: F
     registry = er.async_get(hass)
     for old_key, new_key in RENAMED_KEYS.items():
         # same registry entry (same internal id), same entity ID, new unique ID
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{new_key}") == OLD_ENTITY_IDS[old_key]
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{old_key}") is None
+        domain = _domain(old_key)
+        assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{new_key}") == OLD_ENTITY_IDS[old_key]
+        assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{old_key}") is None
         migrated = registry.async_get(OLD_ENTITY_IDS[old_key])
         assert migrated.id == old[old_key].id
         assert migrated.unique_id == f"{entry.entry_id}_{new_key}"
         assert migrated.disabled_by is None
-        assert migrated.unit_of_measurement == "°C"
+        if domain == "sensor":
+            assert migrated.unit_of_measurement == "°C"
     # the entities deliver values under the old entity IDs; 10112 used to be a raw 7, now 0.7 °C
     assert hass.states.get(OLD_ENTITY_IDS["raw_10109"]).state == "0.5"
     assert hass.states.get(OLD_ENTITY_IDS["raw_10110"]).state == "0.6"
     assert hass.states.get(OLD_ENTITY_IDS["raw_10112"]).state == "0.7"
+    assert hass.states.get(OLD_ENTITY_IDS["raw_10113"]).state == "0.8"  # raw 8 = 0.8 °C (flow_calc_max)
     # no second entity was created next to the migrated ones
     unique_ids = [e.unique_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)]
     assert len(unique_ids) == len(set(unique_ids))
-    assert not [uid for uid in unique_ids if uid.endswith(("_raw_10109", "_raw_10110", "_raw_10112"))]
+    assert not [uid for uid in unique_ids if uid.endswith(tuple(f"_{key}" for key in RENAMED_KEYS))]
 
 
 async def test_migration_keeps_disabled_state(hass: HomeAssistant, shi: FakeSHI) -> None:
@@ -130,8 +147,8 @@ async def test_new_installation_has_only_the_new_keys(hass: HomeAssistant, shi: 
 
     registry = er.async_get(hass)
     for old_key, new_key in RENAMED_KEYS.items():
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{old_key}") is None
-        assert registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{new_key}")
+        assert registry.async_get_entity_id(_domain(old_key), DOMAIN, f"{entry.entry_id}_{old_key}") is None
+        assert registry.async_get_entity_id(_domain(old_key), DOMAIN, f"{entry.entry_id}_{new_key}")
     assert hass.states.get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_heat_source_input"))
     # max_flow_temp is a diagnostic value that stays disabled by default, as raw_10112 was
     flow_max = registry.async_get(registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_max_flow_temp"))
@@ -139,8 +156,11 @@ async def test_new_installation_has_only_the_new_keys(hass: HomeAssistant, shi: 
 
 
 def test_added_raw_registers_come_from_python_luxtronik() -> None:
-    """Addresses of the ``unknown_input_*`` definitions that had no key yet (10060 became cfg_room_setpoint)."""
-    assert RAW_INPUT_ADDRESSES_ADDED == (10352, 10353, 10410, 10411, 10412, 10413, 10416, 10417, 10500, 10501, 10502)
+    """Addresses of the ``unknown_input_*`` definitions that still have no proper entity (10060 became
+    cfg_room_setpoint; 10410/10411, 10416/10417 and 10500-10502 became hours_cooling, hours_solar and the
+    extra_dhw_* sensors, their raw twins are gone; 10352/10353 are only the binary sensors output_fp2/output_fp3
+    since 0.18.0)."""
+    assert RAW_INPUT_ADDRESSES_ADDED == (10412, 10413)
     assert RAW_HOLDING_ADDRESSES_ADDED == ()
     by_key = {reg.key: reg for reg in ALL_REGISTERS}
     for address in RAW_INPUT_ADDRESSES_ADDED:
@@ -165,16 +185,16 @@ async def test_added_raw_registers_are_read_and_disabled(hass: HomeAssistant, sh
     await _setup(hass, entry)
 
     registry = er.async_get(hass)
-    assert "raw_10352" not in entry.runtime_data.data  # disabled by default: not polled
-    for address in (10352, 10502):
+    assert "raw_10412" not in entry.runtime_data.data  # disabled by default: not polled
+    for address in (10412, 10413):
         registry.async_update_entity(
             registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"), disabled_by=None
         )
     await hass.async_block_till_done()
     data = entry.runtime_data.data
-    assert data["raw_10352"] == 52
-    assert data["raw_10502"] == 2
-    for address in (10352, 10502):
+    assert data["raw_10412"] == 12
+    assert data["raw_10413"] == 13
+    for address in (10412, 10413):
         registry.async_update_entity(
             registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_raw_{address}"),
             disabled_by=er.RegistryEntryDisabler.INTEGRATION,
