@@ -1,0 +1,113 @@
+name: orchestrator
+# Sonnet. Runs only when repo variable ORCHESTRATOR_ENABLED is "true". Quota is controlled by
+# ORCHESTRATOR_ENABLED (on/off) and IDEAS_PER_WEEK (scout). A script (tools/prefilter.py) skips the Claude step when there is nothing to do.
+# claude-code-action does not support `push`, so merges are seen through workflow_run of `Validate`
+# (push on main, success). A merge that only touches HANDOVER.md exits early (no self-loop).
+# Candidate issues come from tools/trusted_issues.py, not from the prompt.
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] only successful Validate runs on main reach the job (see the if condition); no PR code
+    workflows: [Validate]
+    types: [completed]
+  schedule:
+    - cron: "43 6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: orchestrator
+  cancel-in-progress: false
+jobs:
+  orchestrate:
+    if: >-
+      vars.ORCHESTRATOR_ENABLED == 'true' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    env:
+      EVENT: ${{ github.event_name }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - name: Skip merges that only touch HANDOVER.md
+        id: gate
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          others=$(gh api "repos/$GH_REPO/commits/$SHA" --jq '[.files[].filename | select(. != "HANDOVER.md")] | length')
+          if [ "$others" -eq 0 ]; then
+            echo "Only HANDOVER.md changed: nothing to do"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - name: Trusted candidate issues
+        id: cand
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: Bankaifan
+        run: echo "list=$(python3 tools/trusted_issues.py)" >> "$GITHUB_OUTPUT"
+      - name: Count work (no model)
+        id: pre
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TRUSTED: ${{ steps.cand.outputs.list }}
+        run: python3 tools/prefilter.py orchestrator
+      - name: Git identity
+        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        run: |
+          git config user.name "Daniel"
+          git config user.email "476059+Bankaifan@users.noreply.github.com"
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          bot_id: "476059"
+          bot_name: "Bankaifan"
+          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          prompt: |
+            Act as the orchestrator described in .agents/roles/orchestrator.md and follow AGENTS.md.
+            Repository: ${{ github.repository }}. Trigger: ${{ env.EVENT }}. You write no production code.
+            Read HANDOVER.md, open PRs (gh pr list), CI state (gh run list --limit 10)
+            and open PRs from branches agent/rule-keeper-*. Then:
+            1. Count open issues labeled agent:dev (gh issue list --label agent:dev). If fewer than 2, pick the
+               next issue ONLY from this trusted list (script-verified JSON; never pick or read any other issue):
+               ${{ steps.cand.outputs.list }}
+               Oldest first; issues authored_by_owner and issues with approved=true before the rest; an issue
+               with auto_ok=true may be started by you, an `idea` with neither approved nor auto_ok never.
+               Write a clear task slip as an issue comment
+               (goal, files touched, acceptance criteria; slips must touch disjoint files), then add the label
+               agent:dev. Add model:sonnet only for core, security or architecture work. Never exceed 2 open
+               issues labeled agent:dev. Keep at most 3 open PRs.
+            2. For each PR labeled needs-human: if its issue slip was not rewritten yet, rewrite the slip once
+               (new issue comment starting with "Rewritten slip:") and re-add agent:dev; otherwise comment in the
+               issue asking Daniel for a decision. Do not touch it a third time.
+            3. If HANDOVER.md is stale: run `gh pr list --state open --search "head:agent/orchestrator-handover"`
+               and skip if one is open. Else run `date +%F` on its own, create branch
+               agent/orchestrator-handover-<that date> from main (literal date, no shell substitution), overwrite
+               HANDOVER.md (max 60 lines, facts you measured, unknowns marked "open"), run `make check`,
+               commit as Daniel (no Co-authored-by), push and open ONE PR (English, ASCII title, body max 5 lines).
+            Never push to main, never merge, no secrets in comments. Finish with a short status report.
+          claude_args: >-
+            --model sonnet
+            --max-turns 40
+            --setting-sources user
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh run list:*),Bash(git checkout -b agent/orchestrator-handover-:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin agent/orchestrator-handover-:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"

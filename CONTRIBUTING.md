@@ -12,9 +12,11 @@ a typical project.
 
 ## Rules for changes
 
-* **Entity keys are a contract.** Do not rename, remove or move a key from `registers.py` or a status bit key.
-  `tests/test_contract.py` enforces this. New keys are added with `python tools/gen_contract.py`.
-* **Display names may change**, keys may not. Translations are generated with `python tools/gen_translations.py`;
+* **Entity keys are a contract.** `tests/test_contract.py` detects every change to a key, platform or option set. A
+  wrongly modelled entity may be fixed, but then the change needs an *Action required* CHANGELOG section, migration notes
+  in both READMEs, orphan cleanup and an updated `tests/fixtures/entity_contract.json` (see [AGENTS.md](AGENTS.md)).
+  New keys are added with `python tools/gen_contract.py`.
+* **Display names may change** freely. Translations are generated with `python tools/gen_translations.py`;
   do not edit the JSON files by hand.
 * **No invented register facts.** Address, data type, scale, range and effect need a source: python-luxtronik, a
   measurement on a real installation (with a description), or the register is marked *open* and exposed as a raw value.

@@ -655,8 +655,8 @@ ruff check . && pytest --timeout=60
 Die Tests laufen gegen einen kleinen simulierten Modbus/TCP-Server (`tests/fake_shi.py`), der wie die echte SHI nur
 vorhandene Register beantwortet. Die Übersetzungen werden aus der Registerliste erzeugt:
 `python tools/gen_translations.py`. Die Entity-Schlüssel sind ein Vertrag (`tests/test_contract.py`). Hinweise für
-Beiträge stehen in [CONTRIBUTING.md](CONTRIBUTING.md), die Arbeitsregeln in [CLAUDE.md](CLAUDE.md), die Versionierung
-in [CHANGELOG.md](CHANGELOG.md).
+Beiträge stehen in [CONTRIBUTING.md](CONTRIBUTING.md), die Arbeitsregeln in [AGENTS.md](AGENTS.md) (gelten auch für die
+automatischen Agenten, die dieses Repository mitpflegen), die Versionierung in [CHANGELOG.md](CHANGELOG.md).
 
 Releases entstehen automatisch: Landet eine Versionserhöhung auf `main` und ist der Workflow *Validate* (hassfest,
 HACS-Action, Tests) grün, setzt ein GitHub-Actions-Workflow den Tag auf genau diesen Commit und veröffentlicht das

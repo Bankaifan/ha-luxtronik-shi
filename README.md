@@ -604,7 +604,8 @@ ruff check . && pytest --timeout=60
 Tests run against a small simulated Modbus/TCP server (`tests/fake_shi.py`) that, like the real SHI, only answers
 existing registers. Translations are generated from the register map: `python tools/gen_translations.py`.
 Entity keys are a contract (`tests/test_contract.py`). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributions,
-[CLAUDE.md](CLAUDE.md) for the working rules and [CHANGELOG.md](CHANGELOG.md) for versioning.
+[AGENTS.md](AGENTS.md) for the working rules (also used by the automated agents that help maintain this repository)
+and [CHANGELOG.md](CHANGELOG.md) for versioning.
 
 Releases are created automatically: when a version bump reaches `main` and the *Validate* workflow (hassfest, HACS
 action, tests) has passed, a GitHub Actions workflow tags that commit and publishes the release with the CHANGELOG

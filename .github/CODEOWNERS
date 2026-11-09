@@ -1,0 +1,11 @@
+/AGENTS.md @Bankaifan
+/CLAUDE.md @Bankaifan
+/.agents/ @Bankaifan
+/.github/ @Bankaifan
+/.github/workflows/release.yml @Bankaifan
+/.claude/ @Bankaifan
+/.mcp.json @Bankaifan
+/Makefile @Bankaifan
+/tools/check/ @Bankaifan
+/tools/ci/ @Bankaifan
+/tools/check_version.py @Bankaifan
