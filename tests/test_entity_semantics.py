@@ -174,6 +174,26 @@ async def test_setpoint_attributes_follow_the_mode(hass: HomeAssistant, shi: Fak
     assert "setpoint_active" not in other.attributes  # only the two setpoints with a known effective target
 
 
+async def test_number_writes_tenth_kelvin_values_exactly(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = await _setup(hass, shi)
+    setpoint = _entity_id(hass, entry, "number", "cfg_heating_setpoint")
+    await hass.services.async_call("number", "set_value", {"entity_id": setpoint, "value": 26.6}, blocking=True)
+    assert shi.holding_value(10001) == 266
+    assert float(hass.states.get(setpoint).state) == 26.6
+    offset = _entity_id(hass, entry, "number", "cfg_heating_offset")
+    await hass.services.async_call("number", "set_value", {"entity_id": offset, "value": -1.3}, blocking=True)
+    assert shi.holding_value(10002) == 0x10000 - 13  # signed, two's complement
+    assert float(hass.states.get(offset).state) == -1.3
+
+
+def test_firmware_range_numbers_use_the_tenth_step() -> None:
+    by_key = {r.key: r for r in ALL_REGISTERS}
+    keys = ["cfg_heating_setpoint", "cfg_heating_offset", "cfg_dhw_setpoint", "cfg_dhw_offset", "cfg_overall_offset"]
+    for n in (1, 2, 3):
+        keys += [f"cfg_mk{n}_{s}" for s in ("setpoint", "offset", "cool_setpoint", "cool_offset")]
+    assert all(by_key[k].step == 0.1 for k in keys)
+
+
 # ------------------------------------------------------------------ F4: effective target read after the write
 class _MirrorSHI(FakeSHI):
     """Models the controller taking over the hot water setpoint as its target in mode setpoint."""
