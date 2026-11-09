@@ -13,8 +13,12 @@ for g in "${gens[@]}"; do
   echo "check_drift: running $g"
   python3 "$g"
 done
-if ! git diff --exit-code || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+# CI-only output that is never generator output: the gitleaks action writes results.sarif into the checkout.
+untracked=$(git ls-files --others --exclude-standard -- . ':!results.sarif')
+if ! git diff --quiet || [ -n "$untracked" ]; then
   echo "check_drift: generated files are out of date, run the generators and commit" >&2
+  git status --porcelain -- . ':!results.sarif' >&2
+  git --no-pager diff --stat >&2
   exit 1
 fi
 echo "check_drift: ok"

@@ -311,3 +311,27 @@ def test_never_run_is_overdue_and_listed_in_body():
     body = st.build_body([], [], [], {}, None, [], [], NOW, "Bankaifan", succ)
     assert "- rule keeper: never OVERDUE" in body
     assert "- orchestrator: [60 min ago](u)" in body
+
+
+def test_never_run_new_workflow_gets_grace_from_add_date():
+    succ = fresh()
+    succ["scout.yml"] = None
+    # added 3 days ago, monthly interval: not overdue yet
+    assert st.liveness.overdue_runs(succ, NOW, {"scout.yml": ago(3 * 24 * 60)}) == []
+    # added 61 days ago: overdue
+    assert st.liveness.overdue_runs(succ, NOW, {"scout.yml": ago(61 * 24 * 60)}) == ["scout"]
+    body = st.build_body([], [], [], {}, None, [], [], NOW, "Bankaifan", succ, {"scout.yml": ago(60)})
+    assert "- scout: never\n" in body
+
+
+def test_added_dates_only_for_never_run_workflows():
+    succ = fresh()
+    succ["scout.yml"] = None
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        return "2026-11-09T10:00:00Z\n"
+
+    assert st.liveness.added_dates(succ, run) == {"scout.yml": "2026-11-09T10:00:00Z"}
+    assert len(calls) == 1 and "actions/workflows/scout.yml" in calls[0][1]
