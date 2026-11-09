@@ -11,6 +11,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Documentation
+
+- Installation now leads with the HACS default catalog search; adding the repository by link stays as a fallback.
+
 ## [0.18.0] – 2026-11-09
 
 This version corrects entity models of 0.17.0 that misled, based on the full analysis of the SHI firmware V3.92.3
