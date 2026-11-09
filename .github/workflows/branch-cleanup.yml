@@ -33,6 +33,8 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: read
       - name: Delete stale agent/* branches
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}

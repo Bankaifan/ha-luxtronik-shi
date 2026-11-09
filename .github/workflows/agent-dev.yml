@@ -2,7 +2,7 @@ name: agent-dev
 on:
   issues:
     types: [labeled]
-  issue_comment:
+  issue_comment:  # zizmor: ignore[dangerous-triggers] the /dev command; the job `if` gates on author_association OWNER/MEMBER/COLLABORATOR and on a plain issue (not a PR), and the agent works on the issue, not on PR code
     types: [created]
 permissions:
   contents: read
@@ -39,6 +39,11 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-workflows: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
         with:
           token: ${{ steps.app.outputs.token }}
