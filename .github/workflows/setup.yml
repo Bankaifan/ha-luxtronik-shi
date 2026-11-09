@@ -64,6 +64,7 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-issues: write
       - name: Create labels
         if: steps.check.outputs.author == 'true'
         env:

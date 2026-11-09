@@ -41,6 +41,8 @@ jobs:
         with:
           client-id: ${{ vars.APPROVER_CLIENT_ID }}
           private-key: ${{ secrets.APPROVER_APP_KEY }}
+          permission-pull-requests: write
+          permission-issues: write
       # main only, never the PR head.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

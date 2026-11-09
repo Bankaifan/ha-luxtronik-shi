@@ -45,6 +45,10 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: write
       - name: Update the status issue and un-stick agent work
         if: steps.gate.outputs.run == 'true'
         env:
