@@ -1,0 +1,92 @@
+name: agent-review
+# Review only on green CI: runs when `Validate` completed successfully on a same-repo agent/* branch.
+# The reviewer never runs PR code: it checks out main and reads the change with gh pr diff / gh pr view.
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] Validate gate only; checks out main, never PR code, and the reviewer cannot push
+    workflows: [Validate]
+    types: [completed]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: agent-review-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+jobs:
+  review:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'agent/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    env:
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+      APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APPROVER_APP_ID }}
+          private-key: ${{ secrets.APPROVER_APP_KEY }}
+      - name: Find the PR and count the review round (labels review:1..review:3)
+        id: round
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          skip() { echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          # Open PR whose head is exactly the SHA that went green; own branch, so same repo.
+          pr=$(gh api -X GET "repos/$GH_REPO/pulls" -f state=open -f head="${GH_REPO%%/*}:$BRANCH" \
+            | jq -c --arg s "$SHA" '[.[] | select(.head.sha == $s)] | first // empty')
+          if [ -z "$pr" ]; then echo "No open PR with head $SHA"; skip; fi
+          num=$(jq -r .number <<<"$pr")
+          labels=",$(jq -r '[.labels[].name] | join(",")' <<<"$pr"),"
+          # Bot-authored PRs (author app) and PRs labelled agent:review only.
+          if [ "$(jq -r .user.login <<<"$pr")" != "$AUTHOR_BOT" ]; then
+            case "$labels" in *,agent:review,*) ;; *) echo "Not an agent PR"; skip ;; esac
+          fi
+          # Validate can go green twice for one SHA (pull_request and dispatch): review once.
+          done_n=$(gh api "repos/$GH_REPO/pulls/$num/reviews" --paginate \
+            | jq -s --arg s "$SHA" --arg u "$APPROVER_BOT" '[.[][] | select(.commit_id == $s and .user.login == $u)] | length')
+          if [ "$done_n" -gt 0 ]; then echo "Already reviewed $SHA"; skip; fi
+          case "$labels" in
+            *,needs-human,*) skip ;;
+            *,review:3,*)
+              gh pr edit "$num" --add-label needs-human
+              gh pr comment "$num" --body "Review limit reached (3 reviews, 2 fix rounds). Needs the orchestrator or Daniel."
+              skip ;;
+            *,review:2,*) gh pr edit "$num" --add-label review:3 ;;
+            *,review:1,*) gh pr edit "$num" --add-label review:2 ;;
+            *) gh pr edit "$num" --add-label review:1 ;;
+          esac
+          echo "pr=$num" >> "$GITHUB_OUTPUT"
+      # main only, never the PR head.
+      - uses: actions/checkout@v4
+        if: steps.round.outputs.skip != 'true'
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        if: steps.round.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          prompt: |
+            Act as the reviewer described in .agents/roles/reviewer.md and follow AGENTS.md.
+            Review PR #${{ steps.round.outputs.pr }} in ${{ github.repository }} (CI is green on ${{ env.SHA }}).
+            The checkout is main, not the PR: never run or import code from the PR. Read the change with
+            `gh pr view` and `gh pr diff`, and the linked issue with `gh issue view`.
+            Submit exactly one review: `gh pr review ${{ steps.round.outputs.pr }} --approve --body "..."` or
+            `gh pr review ${{ steps.round.outputs.pr }} --request-changes --body "..."` (file, line, reason per point).
+            Do not push or edit files.
+          claude_args: >-
+            --model sonnet
+            --max-turns 12
+            --setting-sources user
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh issue view:*)"

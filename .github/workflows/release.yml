@@ -8,7 +8,7 @@ name: Release
 # Runs only after the Validate workflow finished successfully for a push to main, so every release is created
 # after hassfest, the HACS action and the tests have passed on exactly that commit.
 on:
-  workflow_run:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] runs only for a successful Validate run on a push to main; checks out that commit, runs only repository scripts, no PR code
     workflows: [Validate]
     types: [completed]
     branches: [main]
@@ -29,6 +29,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -45,7 +46,9 @@ jobs:
           fi
       - name: Check CHANGELOG
         if: steps.version.outputs.new == 'true'
-        run: python tools/check_version.py "refs/tags/v${{ steps.version.outputs.version }}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python tools/check_version.py "refs/tags/v$VERSION"
       - name: Create tag and release
         if: steps.version.outputs.new == 'true'
         env:

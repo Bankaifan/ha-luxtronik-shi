@@ -11,6 +11,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Development
+
+- Agent system for maintaining the repository (workflows for developer, reviewer, fix rounds, auto-merge, scout,
+  orchestrator, Dependabot), `AGENTS.md` as the single source of working rules (`CLAUDE.md` imports it), `make check`
+  mirroring *Validate*, workflow lint (actionlint, zizmor, gitleaks) as an extra *Validate* job, generator drift check.
+  *Validate* now also runs on `workflow_dispatch` and on pushes to `main` and `v*` tags only. No change for users.
+
 ### Documentation
 
 - Installation now leads with the HACS default catalog search; adding the repository by link stays as a fallback.

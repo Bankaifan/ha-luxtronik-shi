@@ -4,17 +4,25 @@ name: Validate
 permissions:
   contents: read
 
+# Push runs only on main (and release tags): a branch with a pull request is validated by the pull_request run, so
+# the agent workflows (workflow_run on Validate) see exactly one run per head commit and count fix rounds once.
 on:
   push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
   schedule:
     - cron: "0 4 * * 1"
+  # Fallback used by agent-dev / agent-fix when no run exists for a bot-pushed head SHA.
+  workflow_dispatch:
 
 jobs:
   hassfest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
@@ -24,6 +32,8 @@ jobs:
       pull-requests: write  # the HACS action posts its results as a PR comment
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: hacs/action@main
         with:
           category: integration
@@ -33,11 +43,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python tools/check_version.py "${{ github.ref }}"
+      - run: python tools/check_version.py "$GIT_REF"
+        env:
+          GIT_REF: ${{ github.ref }}
       # A pull request that bumps the version releases it on merge: the CHANGELOG section must be dated.
       - name: Release readiness
         run: |
@@ -53,18 +66,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: pip install -r requirements_test.txt pytest-timeout ruff
       - run: ruff check .
       - run: pytest --timeout=60
+      - name: Generators produce no drift, no tracked bytecode
+        run: |
+          python tools/check/check_no_bytecode.py
+          bash tools/check/check_drift.sh
+
+  # actionlint, zizmor (workflow security) and gitleaks (secret scan), pinned in tools/ci/install_tools.sh.
+  workflow-lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # gitleaks lists the commits of a pull request
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned tools
+        run: bash tools/ci/install_tools.sh lint
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: actionlint
+      - run: zizmor --no-progress .github/workflows
 
   # The minimum Home Assistant version declared in hacs.json must pass the tests too (read from hacs.json, not hard-coded).
   tests-min-ha:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -83,6 +127,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"

@@ -1,0 +1,56 @@
+name: branch-cleanup
+on:
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    env:
+      # Scheduled runs are real; manual runs follow the dry_run input (default true).
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - name: Delete stale agent/* branches
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '7 days ago' +%s)
+          gh api --paginate "repos/$REPO/branches?per_page=100" --jq '.[].name' | { grep '^agent/' || true; } | while read -r b; do
+            # Never touch anything outside agent/*.
+            case "$b" in agent/*) ;; *) continue ;; esac
+            enc=$(printf '%s' "$b" | jq -sRr @uri)
+            open=$(gh pr list --repo "$REPO" --head "$b" --state open --json number --jq 'length')
+            if [ "$open" -gt 0 ]; then echo "keep $b (open PR)"; continue; fi
+            total=$(gh pr list --repo "$REPO" --head "$b" --state all --json number --jq 'length')
+            if [ "$total" -eq 0 ]; then
+              date=$(gh api "repos/$REPO/commits/$enc" --jq '.commit.committer.date')
+              if [ "$(date -u -d "$date" +%s)" -gt "$cutoff" ]; then echo "keep $b (no PR, recent commit)"; continue; fi
+              why="no PR, last commit $date"
+            else
+              why="PR closed"
+            fi
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "would delete $b ($why)"
+            else
+              echo "delete $b ($why)"
+              gh api -X DELETE "repos/$REPO/git/refs/heads/$enc"
+            fi
+          done

@@ -1,0 +1,63 @@
+name: rule-keeper
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model (haiku by default; sonnet only on purpose, like model:sonnet)"
+        type: choice
+        options: [haiku, sonnet]
+        default: haiku
+permissions:
+  contents: read
+concurrency:
+  group: rule-keeper
+  cancel-in-progress: false
+jobs:
+  keep:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    env:
+      MODEL: ${{ inputs.model || 'haiku' }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - name: Git identity
+        run: |
+          git config user.name "Daniel"
+          git config user.email "476059+Bankaifan@users.noreply.github.com"
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          bot_id: "476059"
+          bot_name: "Bankaifan"
+          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          prompt: |
+            You are the rule keeper of ${{ github.repository }}. Read AGENTS.md, .agents/roles/*.md, tools/check/,
+            the last 30 merged PRs with reviews and comments (gh pr list --state merged --limit 30; gh pr view --comments)
+            and all PRs labeled needs-human. Look for:
+            1. rules a script could check (propose the script in tools/check/, remove the rule text),
+            2. rules that never mattered (propose removal),
+            3. repeated failures where a rule was missing,
+            4. contradictions between AGENTS.md, role files and CI.
+            If nothing is worth changing, do nothing. Otherwise first run `gh pr list --state open --search "head:agent/rule-keeper-"`
+            and stop if one is open. Then run `date +%F` on its own, and create the branch with the literal result
+            (`git checkout -b agent/rule-keeper-<that date>`, no shell substitution) from main, make the edits,
+            run `make check`, commit, push and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
+            Never edit main directly, never merge. Daniel merges.
+          claude_args: >-
+            --model ${{ env.MODEL }}
+            --max-turns 30
+            --setting-sources user
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(git checkout -b agent/rule-keeper-:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin agent/rule-keeper-:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"

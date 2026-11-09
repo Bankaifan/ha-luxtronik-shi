@@ -1,0 +1,159 @@
+name: agent-fix
+# Automatic fix round on an agent/* PR, started by
+#  - the approver app requesting changes (pull_request_review), or
+#  - a failed `Validate` run (workflow_run), which counts as a round too.
+# Both triggers run in the base repo context and get the repo secrets.
+# Rounds: labels review:1, review:2 -> fix; review:3 -> needs-human. A red CI bumps the label first.
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_run:  # zizmor: ignore[dangerous-triggers] Validate gate only; the job never executes PR code and checks out the PR branch only to push fixes with the app token
+    workflows: [Validate]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: agent-fix-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: >-
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'changes_requested' &&
+       github.event.review.user.login == vars.APPROVER_BOT &&
+       startsWith(github.event.pull_request.head.ref, 'agent/') &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'failure' &&
+       startsWith(github.event.workflow_run.head_branch, 'agent/') &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      fix: ${{ steps.round.outputs.fix }}
+      pr: ${{ steps.round.outputs.pr }}
+      branch: ${{ steps.round.outputs.branch }}
+      model: ${{ steps.round.outputs.model }}
+    env:
+      EVENT: ${{ github.event_name }}
+      REVIEW_PR: ${{ github.event.pull_request.number }}
+      REVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
+      RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APPROVER_APP_ID }}
+          private-key: ${{ secrets.APPROVER_APP_KEY }}
+      - id: round
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          limit() {
+            gh pr edit "$pr" --add-label needs-human
+            gh pr comment "$pr" --body "Review limit of 2 fix rounds reached. Needs the orchestrator or Daniel."
+            echo "fix=false" >> "$GITHUB_OUTPUT"
+          }
+          if [ "$EVENT" = pull_request_review ]; then
+            pr="$REVIEW_PR"; branch="$REVIEW_BRANCH"
+          else
+            branch="$RUN_BRANCH"
+            # Only the current head of an open PR; an older red run is obsolete.
+            pr=$(gh pr list --state open --head "$branch" --json number,headRefOid \
+              | jq -r --arg s "$RUN_SHA" '[.[] | select(.headRefOid == $s)] | first | .number // empty')
+            if [ -z "$pr" ]; then echo "No open PR with head $RUN_SHA"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          fi
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"; echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          labels=",$(gh pr view "$pr" --json labels --jq '[.labels[].name] | join(",")'),"
+          case "$labels" in *,model:sonnet,*) echo "model=sonnet" >> "$GITHUB_OUTPUT" ;; *) echo "model=haiku" >> "$GITHUB_OUTPUT" ;; esac
+          case "$labels" in *,needs-human,*) echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
+          if [ "$EVENT" = workflow_run ]; then
+            # A red CI is a round: bump the counter like the reviewer does.
+            case "$labels" in
+              *,review:3,*) limit; exit 0 ;;
+              *,review:2,*) gh pr edit "$pr" --add-label review:3; limit; exit 0 ;;
+              *,review:1,*) gh pr edit "$pr" --add-label review:2 ;;
+              *) gh pr edit "$pr" --add-label review:1 ;;
+            esac
+            echo "fix=true" >> "$GITHUB_OUTPUT"
+          else
+            # The reviewer already bumped the counter before reviewing.
+            case "$labels" in
+              *,review:3,*) limit ;;
+              *,review:1,*|*,review:2,*) echo "fix=true" >> "$GITHUB_OUTPUT" ;;
+              *) echo "fix=false" >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+  fix:
+    needs: prepare
+    if: needs.prepare.outputs.fix == 'true'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    env:
+      EVENT: ${{ github.event_name }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      PR: ${{ needs.prepare.outputs.pr }}
+      BRANCH: ${{ needs.prepare.outputs.branch }}
+      MODEL: ${{ needs.prepare.outputs.model }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+        with:
+          token: ${{ steps.app.outputs.token }}
+          ref: ${{ needs.prepare.outputs.branch }}
+          fetch-depth: 0
+      - name: Git identity
+        run: |
+          git config user.name "Daniel"
+          git config user.email "476059+Bankaifan@users.noreply.github.com"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
+        run: bash tools/ci/install_tools.sh
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          bot_id: "476059"
+          bot_name: "Bankaifan"
+          allowed_bots: ${{ vars.AUTHOR_BOT }},${{ vars.APPROVER_BOT }}
+          prompt: |
+            Act as the developer described in .agents/roles/developer.md and follow AGENTS.md.
+            PR #${{ env.PR }} in ${{ github.repository }} (branch ${{ env.BRANCH }}, already checked out) needs a fix.
+            Trigger: ${{ env.EVENT }}.
+            - pull_request_review: a review requests changes. Read it with `gh pr view ${{ env.PR }} --comments --json reviews,comments`.
+            - workflow_run: the Validate run ${{ env.RUN_ID }} failed. Read the log with
+              `gh run view ${{ env.RUN_ID }} --log-failed`.
+            Fix exactly what is raised, run `make check` and the tests, then squash the branch into ONE commit
+            authored by Daniel (no Co-authored-by) on top of current origin/main and `git push --force-with-lease`.
+            Do not open a new PR.
+          claude_args: >-
+            --model ${{ env.MODEL }}
+            --max-turns 60
+            --setting-sources user
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(make:*),Bash(python3:*),Bash(python:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*)"
+      # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
+      - name: Make sure CI runs on the PR head
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+          for _ in 1 2 3 4 5 6; do
+            n=$(gh run list --workflow validate.yml --commit "$sha" --json databaseId --jq length)
+            if [ "$n" -gt 0 ]; then echo "Validate already runs for $sha"; exit 0; fi
+            sleep 10
+          done
+          gh workflow run validate.yml --ref "$BRANCH"
+          gh pr edit "$PR" --add-label agent:review

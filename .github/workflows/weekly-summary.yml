@@ -1,0 +1,29 @@
+name: weekly-summary
+# No model: a script updates the issue "Weekly summary" on Mondays.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: weekly-summary
+  cancel-in-progress: false
+jobs:
+  summary:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Update the Weekly summary issue
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 tools/weekly_summary.py

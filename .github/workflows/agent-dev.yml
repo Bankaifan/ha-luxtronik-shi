@@ -1,0 +1,81 @@
+name: agent-dev
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+# One run per issue; the 2-job cap is kept by the orchestrator (at most 2 open agent:dev issues).
+concurrency:
+  group: agent-dev-${{ github.event.issue.number }}
+  cancel-in-progress: false
+jobs:
+  dev:
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'agent:dev') ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/dev') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    env:
+      MODEL: ${{ contains(github.event.issue.labels.*.name, 'model:sonnet') && 'sonnet' || 'haiku' }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - name: Git identity
+        run: |
+          git config user.name "Daniel"
+          git config user.email "476059+Bankaifan@users.noreply.github.com"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
+        run: bash tools/ci/install_tools.sh
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          bot_id: "476059"
+          bot_name: "Bankaifan"
+          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          prompt: |
+            Act as the developer described in .agents/roles/developer.md and follow AGENTS.md.
+            Task: GitHub issue #${{ env.ISSUE }} in ${{ github.repository }} (read it with gh issue view).
+            Create branch agent/${{ env.ISSUE }}-<slug> from main, implement, run `make check` and the tests,
+            squash the branch into ONE commit authored by Daniel without a Co-authored-by trailer, push, and open a PR with
+            `gh pr create` (English ASCII title, body max 8 lines with a "Proposed version:" line, "Closes #${{ env.ISSUE }}").
+          claude_args: >-
+            --model ${{ env.MODEL }}
+            --max-turns 60
+            --setting-sources user
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(make:*),Bash(python3:*),Bash(python:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr view:*)"
+      # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
+      - name: Make sure CI runs on the PR head
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          pr=$(gh pr list --state open --json number,headRefName,headRefOid \
+            | jq -c --arg p "agent/${ISSUE}-" '[.[] | select(.headRefName | startswith($p))] | first // empty')
+          if [ -z "$pr" ]; then echo "No open PR for issue $ISSUE"; exit 0; fi
+          num=$(jq -r .number <<<"$pr"); branch=$(jq -r .headRefName <<<"$pr"); sha=$(jq -r .headRefOid <<<"$pr")
+          for _ in 1 2 3 4 5 6; do
+            n=$(gh run list --workflow validate.yml --commit "$sha" --json databaseId --jq length)
+            if [ "$n" -gt 0 ]; then echo "Validate already runs for $sha"; exit 0; fi
+            sleep 10
+          done
+          gh workflow run validate.yml --ref "$branch"
+          gh pr edit "$num" --add-label agent:review

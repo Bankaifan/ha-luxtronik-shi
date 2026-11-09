@@ -1,0 +1,88 @@
+# Working rules
+
+Home Assistant integration `luxtronik_shi` for alpha innotec / Luxtronik heat pumps via the Smart Home Interface
+(SHI, Modbus/TCP). It **writes to a heating system in production** and is driven by the Heat Pump Optimizer (HPO).
+Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. Contributors: CONTRIBUTING.md.
+
+## Limits (not negotiable)
+1. No secrets in code, logs, issues or PRs. Credentials only from environment variables / GitHub Secrets.
+2. Nothing irreversible without Daniel's explicit OK: deleting repos or branches holding other people's work,
+   releases by hand, payments, permission changes.
+3. Never push to `main`, no tags by hand. Always branch + PR. Rebase and force-push are allowed on your own agent
+   branches, never on `main`.
+4. Read-only checks against the real installation and the real Home Assistant are allowed. Anything that writes to
+   the real heat pump or to Home Assistant needs Daniel's OK. Tests use the simulator.
+5. No changes to CI protection, rulesets, permissions, workflows or this file without OK.
+
+## Domain rules
+1. **Correctness before continuity.** The project is in testing and Daniel is its only user. An entity that models a
+   register wrongly (wrong platform, an option the firmware does not implement, a unit, state or name that gives a
+   wrong idea of what the register does) is **fixed**, not preserved: remove, rename or move it to another platform.
+   Reviewers recognise misleading models themselves and say so. Every such breaking change needs, in the same PR:
+   - a `### Action required` subsection **first** in the CHANGELOG section of the version, naming every removed,
+     renamed or moved entity and what the user must do, plus a migration note in both READMEs;
+   - orphan cleanup: a renamed key moves its registry entry (`RENAMED_KEYS`, `async_migrate_renamed_keys`), a removed
+     or moved entity deletes the old entry at setup (`REMOVED_KEYS`, `REMOVED_ENTITIES`,
+     `async_remove_obsolete_entities`);
+   - the hand-edited fixture `tests/fixtures/entity_contract.json` (unique IDs are `<entry_id>_<key>`).
+     `tests/test_contract.py` is a change detector, not a ban: new keys via `python tools/gen_contract.py`,
+     removals, renames and platform moves by hand, never silenced.
+
+   Keys the HPO depends on: `flow`, `return`, `outside`, `dhw`, `compressor_thermal_power`, `energy_el_heating`,
+   `aux_heater_1`, `cfg_heating_setpoint`, `cfg_mk1_setpoint`, `heating_block`, `dhw_block`, `circulation` (a button
+   since 0.17.0), the option keys of the mode selects. If one changes (key, platform, option set), the PR says so under
+   *Action required* so the HPO configuration is updated. They never depend on an optional equipment part other than
+   their own (`cfg_mk1_setpoint` -> `mk1`).
+2. **Display names may change freely** (`name_de`/`name_en`, no migration). Translations only via
+   `python tools/gen_translations.py`, never by hand.
+3. **No invented register facts.** Address, data type, scale, range and effect only with a source:
+   `python-luxtronik` (Bouni/python-luxtronik, `luxtronik/definitions/{inputs,holdings}.py`), the firmware analysis
+   `docs/firmware-3.92.3-shi-full-analysis.md` (graded *proven*), or a described measurement on the reference
+   installation (LWDV 91-1/3, FW 3.92.3). Otherwise it is **open** and exposed as a raw value (`raw_<address>`,
+   disabled by default).
+4. **Writable registers** only with a test against `tests/fake_shi.py` including read-back, and with a value range.
+   No untested change of any kind.
+5. **Do not increase polling load** without reason: block reads, `every` for rarely needed values.
+6. **Everything a user sees exists in English and German:** entity, option, state and attribute names, errors
+   (`translation_key`), repair issues, logbook, flow and option texts, both READMEs. No user-facing literal in code.
+
+## Versioning and release
+- `0.x.y` beta, `1.0.0` first complete version. `x.Y.0` feature, `x.y.Z` fix/docs/tests.
+- Every change gets a CHANGELOG entry under `## [Unreleased]` (or the upcoming version). The version lives in
+  `custom_components/luxtronik_shi/manifest.json`; `tools/check_version.py` checks manifest, CHANGELOG and tag.
+- **Releases are automatic.** To release, bump the manifest and rename `## [Unreleased]` to
+  `## [X.Y.Z] – YYYY-MM-DD` (keep an empty `## [Unreleased]` above, update the compare links). After the merge and a
+  green *Validate* run on `main`, `release.yml` tags and publishes from that section. Never tag by hand.
+- The section is the release note shown in Home Assistant: anything users must do goes first under
+  `### Action required`.
+- The PR body states the proposed version and why (feature/fix/breaking), or "no release".
+
+## How to work
+- Small PRs branched from current `main`, rebase-merged: no stacked PRs, no `git merge main` into a branch. If a
+  branch falls behind, rebase it (own branch) or cherry-pick onto a fresh one.
+- Before review squash the branch into ONE commit on current `origin/main`; force-push to your own branch is allowed.
+- Before the PR: `make check` (ruff, pytest, version, generator drift, actionlint, zizmor) is green. CI (*Validate*) is
+  the truth. Generators: `gen_translations`, `gen_contract`, `gen_entity_docs`, `gen_register_docs`, `gen_icons`,
+  `gen_dashboard`; a generator diff in CI means you forgot to run it.
+- Setup: `pip install -r requirements_test.txt pytest-timeout ruff` (CI: `bash tools/ci/install_tools.sh`).
+- Claim only what you measured (command + output). Unsure: ask in the issue, mark facts "open", never guess.
+- Read only the files the task names. Finish by overwriting HANDOVER.md (short, max 60 lines).
+- Everything on GitHub in English (files, commits, PR titles and bodies, issues, CHANGELOG, README, code comments);
+  German only in `README.de.md` and the German translations. Talking to Daniel: German.
+- README changes go into both `README.md` and `README.de.md`.
+
+## Commits and PRs
+- Author: `git config user.name "Daniel"` and `user.email "476059+Bankaifan@users.noreply.github.com"`.
+  No `Co-authored-by` trailer.
+- PR title: English, ASCII only, meaningful. Body: what and why in a few lines, link the issue, proposed version.
+
+## Review rounds and merging
+Developer -> CI -> reviewer (only on green CI) -> at most 2 fix rounds (started on `CHANGES_REQUESTED` or a red CI).
+Then `needs-human`. Merges are rebase merges done by auto-merge after the approver app's approval and green CI;
+PRs touching code-owner paths (`.github/`, `.agents/`, AGENTS.md, Makefile, `tools/check/`, `tools/ci/`,
+`tools/check_version.py`) need Daniel. Only trusted input drives agents (Daniel's issues, or `approved`/`auto-ok`
+set by Daniel); the reviewer never runs PR code.
+
+## Models (subscription quota is scarce)
+Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK. Max 2 agent jobs at once.
+Script first, then haiku, then sonnet. Short reports, never repeat the diff.

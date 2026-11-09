@@ -1,0 +1,68 @@
+name: scout
+# Monthly idea scout (adds only the label `idea`). Haiku by default, sonnet via dispatch input. IDEAS_PER_WEEK (repo variable, default 3)
+# caps the issues per run; 0 turns the scout off.
+on:
+  schedule:
+    - cron: "23 5 1 * *"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model (haiku by default; sonnet only on purpose)"
+        type: choice
+        options: [haiku, sonnet]
+        default: haiku
+permissions:
+  contents: read
+concurrency:
+  group: scout
+  cancel-in-progress: false
+jobs:
+  scout:
+    if: vars.IDEAS_PER_WEEK != '0'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    env:
+      MODEL: ${{ inputs.model || 'haiku' }}
+      IDEAS: ${{ vars.IDEAS_PER_WEEK || '3' }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - name: Count work and alerts (no model)
+        id: pre
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          IDEAS: ${{ env.IDEAS }}
+        run: python3 tools/prefilter.py scout
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        if: steps.pre.outputs.work == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          prompt: |
+            You are the scout of ${{ github.repository }}. Read AGENTS.md, HANDOVER.md, the code, tests and docs,
+            the last 30 merged PRs with review comments (gh pr list --state merged --limit 30; gh pr view --comments),
+            open Dependabot and code scanning alerts (gh api repos/${{ github.repository }}/dependabot/alerts?state=open and
+            .../code-scanning/alerts?state=open; skip silently if not readable) as a free idea source,
+            and dependency and platform versions (workflow action versions, tool versions) against upstream.
+            Look for improvements: code, tests, docs, recurring review remarks, upstream changes.
+            First list existing issues (gh issue list --state all --label idea --limit 100) and do not duplicate.
+            Open at most ${{ env.IDEAS }} issues with `gh issue create --label idea`: English, concrete title,
+            body with problem, proposal, files, acceptance (max 15 lines). Add only the label `idea`, never
+            `auto-ok` or `approved`: Daniel sets those himself. If nothing is worth doing, open nothing. Never edit files, never merge.
+          claude_args: >-
+            --model ${{ env.MODEL }}
+            --max-turns 30
+            --setting-sources user
+            --allowedTools "Read,Glob,Grep,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue create:*),Bash(gh api repos/${{ github.repository }}/dependabot/alerts:*),Bash(gh api repos/${{ github.repository }}/code-scanning/alerts:*)"
