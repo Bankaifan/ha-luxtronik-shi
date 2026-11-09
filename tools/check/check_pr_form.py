@@ -2,7 +2,7 @@
 
 Reads PR_TITLE and PR_BODY from the environment (pull_request events). On workflow_dispatch it reads
 title and body of the open PR for GITHUB_REF_NAME via `gh pr view` (needs GH_TOKEN); no PR means skipped.
-Also fails (when the PR file list is known): a design PR (only `docs/design/`) with a closing keyword
+Also fails an `agent/<N>-*` PR whose body does not mention `#<N>`. Also fails (when the PR file list is known): a design PR (only `docs/design/`) with a closing keyword
 (use `Refs #N`), and a PR touching HANDOVER.md that is not an orchestrator PR (`agent/orchestrator-handover-*`).
 Skipped for local runs and pushes to main. Whether the title is really English cannot be verified.
 """
@@ -12,7 +12,14 @@ import re
 import subprocess
 import sys
 
-CLOSING = re.compile(r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b\s*:?\s+(?:[\w.-]+/[\w.-]+)?#\d+", re.IGNORECASE)
+# One pattern for every GitHub closing form: `Closes #N`, `Closes owner/repo#N`, `Closes https://github.com/owner/repo/issues/N`.
+# agent-fix.yml runs `check_pr_form.py closing FILE` (from main) instead of keeping its own copy.
+CLOSING = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b\s*:?\s+"
+    r"(?:(?:[\w.-]+/[\w.-]+)?#\d+|(?:https?://)?(?:www\.)?github\.com/[\w.-]+/[\w.-]+/issues/\d+)",
+    re.IGNORECASE,
+)
+AGENT_BRANCH = re.compile(r"^agent/(\d+)-")
 ORCHESTRATOR_BRANCH = "agent/orchestrator-handover"
 
 
@@ -35,10 +42,16 @@ def form_errors(body, head_ref, files):
         errors.append("design PRs must use `Refs #N`, not a closing keyword (only the PR that completes an issue closes it)")
     if "HANDOVER.md" in files and not head_ref.startswith(ORCHESTRATOR_BRANCH):
         errors.append("HANDOVER.md belongs to the orchestrator; put your notes in the PR body")
+    m = AGENT_BRANCH.match(head_ref)
+    if m and not re.search(rf"#{m.group(1)}(?!\d)", body):
+        errors.append(f"branch {head_ref} works on issue #{m.group(1)}: the body must reference it (`Closes #{m.group(1)}` or `Refs #{m.group(1)}`)")
     return errors
 
 
 def main() -> int:
+    if sys.argv[1:2] == ["closing"]:  # exit 0 when the file holds a closing keyword
+        with open(sys.argv[2], encoding="utf-8", errors="replace") as f:
+            return 0 if CLOSING.search(f.read()) else 1
     event = os.environ.get("GITHUB_EVENT_NAME", "pull_request")
     head_ref, files = "", []
     if event == "workflow_dispatch":

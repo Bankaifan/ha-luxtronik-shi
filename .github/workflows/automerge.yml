@@ -2,17 +2,21 @@ name: automerge
 on:
   pull_request_review:
     types: [submitted]
+  # A security-review that finishes after the approval must still be able to release the merge.
+  status:  # zizmor: ignore[dangerous-triggers] runs from main, never checks out PR code, only enables auto-merge
 permissions:
   contents: read
 jobs:
   automerge:
     if: >-
+      (github.event_name == 'pull_request_review' &&
       github.event.review.state == 'approved' &&
       github.event.pull_request.user.type == 'Bot' &&
-      github.event.pull_request.user.login != 'dependabot[bot]'
+      github.event.pull_request.user.login != 'dependabot[bot]') ||
+      (github.event_name == 'status' && github.event.context == 'security-review' && github.event.state == 'success')
     # Two approvals in the same second start two runs for one PR; queue them per PR instead of racing.
     concurrency:
-      group: automerge-${{ github.event.pull_request.number }}
+      group: automerge-${{ github.event.pull_request.number || github.event.sha }}
       cancel-in-progress: false
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
@@ -31,23 +35,58 @@ jobs:
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
           permission-contents: write
           permission-pull-requests: write
+      # Review event: the PR is in the payload. Status event: find the open agent PR whose head is exactly that SHA
+      # and that is already approved; anything else ends quietly.
+      - name: Resolve the PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_FROM_REVIEW: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request_review" ]; then echo "number=$PR_FROM_REVIEW" >> "$GITHUB_OUTPUT"; exit 0; fi
+          n=$(gh api "repos/$GH_REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open" and .head.sha == "'"$SHA"'" and .user.type == "Bot" and .user.login != "dependabot[bot]")][0].number // empty')
+          if [ -z "$n" ]; then echo "No open agent PR with head $SHA"; exit 0; fi
+          if [ "$(gh pr view "$n" --json reviewDecision --jq .reviewDecision)" != "APPROVED" ]; then echo "PR #$n is not approved yet"; exit 0; fi
+          echo "number=$n" >> "$GITHUB_OUTPUT"
       # Design PRs (docs/design/) never auto-merge: the design reviewer approves; Daniel merges
       # (or the orchestrator when Owner decisions is empty).
       - name: Refuse design PRs
         id: design
+        if: steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.pr.outputs.number }}
         run: |
           n=$(gh api --paginate "repos/$GH_REPO/pulls/$PR/files" --jq '.[] | select(.filename | startswith("docs/design/")) | .filename' | wc -l)
           if [ "$n" -gt 0 ]; then echo "design=true" >> "$GITHUB_OUTPUT"; echo "PR touches docs/design/: no auto-merge"; fi
-      - name: Enable auto-merge (rebase, keeps Daniel as author); GitHub merges once the ruleset is satisfied
-        if: steps.design.outputs.design != 'true'
+      # A risk:security PR merges only when security-review is success for exactly the current head SHA.
+      # Pending or failed is not an error: the PR waits, and the status event re-runs this workflow on success.
+      - name: Wait for security-review on risk:security PRs
+        id: gate
+        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          view=$(gh pr view "$PR" --json labels,headRefOid)
+          if [ "$(jq '[.labels[].name] | index("risk:security") != null' <<<"$view")" != "true" ]; then exit 0; fi
+          sha=$(jq -r .headRefOid <<<"$view")
+          state=$(gh api "repos/$GH_REPO/commits/$sha/statuses" --jq '[.[] | select(.context == "security-review")][0].state // "none"')
+          if [ "$state" != "success" ]; then
+            echo "wait=true" >> "$GITHUB_OUTPUT"
+            echo "risk:security PR #$PR: security-review is $state for $sha; not merging yet"
+          fi
+      - name: Enable auto-merge (rebase, keeps Daniel as author); GitHub merges once the ruleset is satisfied
+        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true' && steps.gate.outputs.wait != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.number }}
         run: |
           # A second run on the same PR can find the merge already queued, running or done. That is success, not a failure mail.
           if out=$(gh pr merge "$PR" --auto --rebase 2>&1); then

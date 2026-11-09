@@ -1,6 +1,6 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "dd4dfcdbc0c70ed12205b280eedd30ecff2ae44c",
+  "synced_sha": "a73568f3cb496ebf5870cd08fb99f0851ea7a80c",
   "managed": [".github/workflows/", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
               ".agents/roles/", "tools/", "tests/", "AGENTS.md", "CLAUDE.md", "Makefile", "docs/design/README.md"],
   "overrides": [
