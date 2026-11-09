@@ -90,14 +90,24 @@ jobs:
             Review PR #${{ steps.pr.outputs.num }} in ${{ github.repository }} at commit ${{ env.SHA }} (risk class: ${{ steps.pr.outputs.level }}).
             The checkout is main, not the PR: never run or import code from the PR. Read the change with
             `gh pr view` and `gh pr diff`, and the linked issue with `gh issue view`.
-            Post your verdict as a PR comment whose first line is exactly
-            `security-review: approve ${{ env.SHA }}` or `security-review: changes ${{ env.SHA }}`, then the reasons (file, line).
-            Do not push or edit files. Do not use `gh pr review`. Do not post a note for Daniel (a script does).
+            Do not post anything yourself: end your final reply with your verdict, whose first line is exactly
+            `security-review: approve ${{ env.SHA }}` or `security-review: changes ${{ env.SHA }}`, followed by the
+            reasons (file, line). A script posts it as the PR comment. Do not post a note for Daniel (a script does).
           claude_args: >-
             --model sonnet
             --max-turns 12
             --setting-sources user
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*)"
+      # The model has no write or comment tools: a script posts the verdict from its final reply. `changes` also gets a
+      # request-changes review by the approver app, which starts a normal agent-fix round. No verdict: denials are logged.
+      - name: Post the verdict
+        if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.pr.outputs.num }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: python3 tools/ci/post_verdict.py "$PR" "$SHA"
       # A run that left no verdict fails the required status instead of ending silently.
       - name: Publish status security-review
         if: ${{ always() && steps.claude.conclusion != 'skipped' }}
