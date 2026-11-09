@@ -22,6 +22,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 - Installation now leads with the HACS default catalog search; adding the repository by link stays as a fallback.
 - One-click buttons (My Home Assistant) to open the integration in HACS and to start its setup.
+- The README entity overviews (English and German) use the 0.18.0 names: demand borders instead of limit
+  temperatures, and the circulation run is shown by the pump output *Pump: circulation (ZIP)*, not a
+  "circulation: run active" sensor that does not exist.
 
 ## [0.18.0] – 2026-11-09
 
