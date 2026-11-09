@@ -8,6 +8,7 @@ updates:
       actions:
         patterns: ["*"]
   - package-ecosystem: pip
+    # Reads requirements_test.txt and requirements-lint.txt (ruff, zizmor; installed by tools/ci/install_tools.sh).
     directory: /
     schedule:
       interval: weekly
