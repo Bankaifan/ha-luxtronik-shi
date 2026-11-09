@@ -1,5 +1,7 @@
 name: setup
-# Manual, no model. Creates the labels the workflows use (idempotent) and checks the 5 secrets and the 2 variables.
+# Manual, no model. Creates the labels the workflows use (idempotent) and checks the 3 secrets and the 4 variables.
+# Optional variables (never required): the table in the job summary shows each one with its effective value
+# (the set value, or the default when unset or empty). EXTRA_INSTALL is a shell command run by tools/ci/install_tools.sh.
 # Secret values are never printed; only the names of missing ones.
 on:
   workflow_dispatch:
@@ -13,31 +15,54 @@ jobs:
       - id: check
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          AUTHOR_APP_ID: ${{ secrets.AUTHOR_APP_ID }}
           AUTHOR_APP_KEY: ${{ secrets.AUTHOR_APP_KEY }}
-          APPROVER_APP_ID: ${{ secrets.APPROVER_APP_ID }}
           APPROVER_APP_KEY: ${{ secrets.APPROVER_APP_KEY }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
         run: |
           missing=""
-          for name in CLAUDE_CODE_OAUTH_TOKEN AUTHOR_APP_ID AUTHOR_APP_KEY APPROVER_APP_ID APPROVER_APP_KEY; do
+          for name in CLAUDE_CODE_OAUTH_TOKEN AUTHOR_APP_KEY APPROVER_APP_KEY; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           echo "missing=${missing# }" >> "$GITHUB_OUTPUT"
           missing_vars=""
-          for name in AUTHOR_BOT APPROVER_BOT; do
+          for name in AUTHOR_BOT APPROVER_BOT AUTHOR_CLIENT_ID APPROVER_CLIENT_ID; do
             if [ -z "${!name}" ]; then missing_vars="$missing_vars $name"; fi
           done
           echo "missing_vars=${missing_vars# }" >> "$GITHUB_OUTPUT"
-          if [ -n "$AUTHOR_APP_ID" ] && [ -n "$AUTHOR_APP_KEY" ]; then
+          if [ -n "$AUTHOR_CLIENT_ID" ] && [ -n "$AUTHOR_APP_KEY" ]; then
             echo "author=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Optional variables (effective values)
+        env:
+          RUNNER: ${{ vars.RUNNER }}
+          PYTHON_VERSION: ${{ vars.PYTHON_VERSION }}
+          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
+          ORCHESTRATOR_ENABLED: ${{ vars.ORCHESTRATOR_ENABLED }}
+          IDEAS_PER_WEEK: ${{ vars.IDEAS_PER_WEEK }}
+          STATUS_INTERVAL: ${{ vars.STATUS_INTERVAL }}
+        run: |
+          # row NAME DEFAULT VALUE: an unset or empty variable means the default, as in the workflows' || fallbacks
+          row() {
+            if [ -n "$3" ]; then echo "| $1 | $3 | repo variable |"; else echo "| $1 | $2 | default |"; fi
+          }
+          {
+            echo "| Variable | Effective value | Source |"
+            echo "| --- | --- | --- |"
+            row RUNNER ubuntu-latest "$RUNNER"
+            row PYTHON_VERSION 3.x "$PYTHON_VERSION"
+            if [ -n "$EXTRA_INSTALL" ]; then echo "| EXTRA_INSTALL | set (not shown) | repo variable |"; else echo "| EXTRA_INSTALL | not set | default |"; fi
+            row ORCHESTRATOR_ENABLED false "$ORCHESTRATOR_ENABLED"
+            row IDEAS_PER_WEEK 3 "$IDEAS_PER_WEEK"
+            row STATUS_INTERVAL "30 public / 60 private" "$STATUS_INTERVAL"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - id: app
         if: steps.check.outputs.author == 'true'
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
       - name: Create labels
         if: steps.check.outputs.author == 'true'
@@ -45,9 +70,28 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          for l in agent:dev agent:review model:sonnet review:1 review:2 review:3 needs-human idea auto-ok approved; do
+          for l in agent:dev agent:review model:sonnet review:1 review:2 review:3 needs-human idea auto-ok approved prio:1 prio:2 prio:3; do
             gh label create "$l" --force
           done
+      - name: Report Dependabot secrets (best effort)
+        if: steps.check.outputs.author == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! names=$(gh api "/repos/$GH_REPO/dependabot/secrets" --jq '.secrets[].name' 2>/dev/null); then
+            echo "::warning::Cannot read Dependabot secrets (the author app lacks that permission). Check Settings > Secrets and variables > Dependabot by hand: agent-smoke fails on Dependabot PRs without them."
+            exit 0
+          fi
+          missing=""
+          for name in CLAUDE_CODE_OAUTH_TOKEN AUTHOR_APP_KEY APPROVER_APP_KEY; do
+            printf '%s\n' "$names" | grep -qx "$name" || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::Missing Dependabot secrets:$missing (agent-smoke fails on Dependabot PRs until set)"
+          else
+            echo "All three Dependabot secrets exist."
+          fi
       - name: Fail if secrets or variables are missing
         if: steps.check.outputs.missing != '' || steps.check.outputs.missing_vars != ''
         env:
@@ -55,6 +99,6 @@ jobs:
           MISSING_VARS: ${{ steps.check.outputs.missing_vars }}
         run: |
           [ -z "$MISSING" ] || echo "::error::Missing secrets: $MISSING"
-          [ -z "$MISSING_VARS" ] || echo "::error::Missing variables: $MISSING_VARS (bot logins of the apps, e.g. my-author[bot])"
+          [ -z "$MISSING_VARS" ] || echo "::error::Missing variables: $MISSING_VARS (bot logins of the apps, e.g. my-author[bot]; client IDs of the apps)"
           echo "Set secrets and variables in Settings > Secrets and variables > Actions, then run this workflow again."
           exit 1

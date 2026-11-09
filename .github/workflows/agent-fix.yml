@@ -1,32 +1,40 @@
 name: agent-fix
 # Automatic fix round on an agent/* PR, started by
 #  - the approver app requesting changes (pull_request_review), or
-#  - a failed `Validate` run (workflow_run), which counts as a round too.
+#  - a failed `validate` run (workflow_run), which counts as a round too.
 # Both triggers run in the base repo context and get the repo secrets.
-# Rounds: labels review:1, review:2 -> fix; review:3 -> needs-human. A red CI bumps the label first.
+# Also started by `workflow_dispatch` with input `pr` (the status run, for a PR that conflicts with main; it has
+# already bumped the round label).
+# Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else needs-human.
+# A red CI bumps the label first.
 on:
   pull_request_review:
     types: [submitted]
-  workflow_run:  # zizmor: ignore[dangerous-triggers] Validate gate only; the job never executes PR code and checks out the PR branch only to push fixes with the app token
-    workflows: [Validate]
+  workflow_run:  # zizmor: ignore[dangerous-triggers] validate gate only; the job never executes PR code and checks out the PR branch only to push fixes with the app token
+    workflows: [validate]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Number of the agent/* PR that conflicts with main
+        required: true
+        type: string
 permissions:
   contents: read
-concurrency:
-  group: agent-fix-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
-  cancel-in-progress: false
 jobs:
   prepare:
     if: >-
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_review' &&
        github.event.review.state == 'changes_requested' &&
-       github.event.review.user.login == vars.APPROVER_BOT &&
        startsWith(github.event.pull_request.head.ref, 'agent/') &&
        github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'failure' &&
        startsWith(github.event.workflow_run.head_branch, 'agent/') &&
        github.event.workflow_run.head_repository.full_name == github.repository)
+    # No concurrency group here on purpose: any review by any user would take it and could replace a pending real
+    # fix run. The group lives on the `fix` job, which only starts after the approver check.
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
@@ -36,29 +44,57 @@ jobs:
       model: ${{ steps.round.outputs.model }}
     env:
       EVENT: ${{ github.event_name }}
+      DISPATCH_PR: ${{ inputs.pr }}
       REVIEW_PR: ${{ github.event.pull_request.number }}
       REVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
       RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
       RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+      REVIEWER: ${{ github.event.review.user.login }}
+      APPROVER_BOT: ${{ vars.APPROVER_BOT }}
     steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
+        run: |
+          for n in APPROVER_BOT APPROVER_CLIENT_ID; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
       - id: app
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.APPROVER_APP_ID }}
+          client-id: ${{ vars.APPROVER_CLIENT_ID }}
           private-key: ${{ secrets.APPROVER_APP_KEY }}
+      # main only: the label and login helper.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
       - id: round
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          guard() { python3 tools/agent_guard.py "$@"; }
+          # Only the approver app may start a round from a review (login forms x, app/x, x[bot] are the same).
+          if [ "$EVENT" = pull_request_review ] && ! guard same "$REVIEWER" "$APPROVER_BOT"; then
+            echo "Review not by the approver app"; exit 0
+          fi
           limit() {
-            gh pr edit "$pr" --add-label needs-human
-            gh pr comment "$pr" --body "Review limit of 2 fix rounds reached. Needs the orchestrator or Daniel."
+            # First limit of an issue: restart the task once (restart:1) and close this PR. Second: needs-human,
+            # review request to Daniel (unless author) and the German note, see tools/restart.py.
+            python3 tools/restart.py limit "$pr"
             echo "fix=false" >> "$GITHUB_OUTPUT"
           }
           if [ "$EVENT" = pull_request_review ]; then
             pr="$REVIEW_PR"; branch="$REVIEW_BRANCH"
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            case "$DISPATCH_PR" in ''|*[!0-9]*) echo "Bad PR number"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
+            pr="$DISPATCH_PR"
+            branch=$(gh pr view "$pr" --json state,headRefName,isCrossRepository \
+              --jq 'select(.state == "OPEN" and (.isCrossRepository | not) and (.headRefName | startswith("agent/"))) | .headRefName')
+            if [ -z "$branch" ]; then echo "Not an open agent/* PR of this repo"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           else
             branch="$RUN_BRANCH"
             # Only the current head of an open PR; an older red run is obsolete.
@@ -67,16 +103,29 @@ jobs:
             if [ -z "$pr" ]; then echo "No open PR with head $RUN_SHA"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           fi
           echo "pr=$pr" >> "$GITHUB_OUTPUT"; echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          # Model of the original task: sonnet if the PR or an issue it closes has model:sonnet.
           labels=",$(gh pr view "$pr" --json labels --jq '[.labels[].name] | join(",")'),"
-          case "$labels" in *,model:sonnet,*) echo "model=sonnet" >> "$GITHUB_OUTPUT" ;; *) echo "model=haiku" >> "$GITHUB_OUTPUT" ;; esac
+          model=haiku
+          case "$labels" in *,model:sonnet,*) model=sonnet ;; esac
+          body=$(gh pr view "$pr" --json body --jq .body)
+          for n in $(grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?) +#[0-9]+' <<< "$body" | grep -oE '[0-9]+' || true); do
+            ilabels=",$(gh issue view "$n" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || true),"
+            case "$ilabels" in *,model:sonnet,*) model=sonnet ;; esac
+          done
+          # A red CI on a PR that touches the agent rules or CI tooling always gets sonnet.
+          if [ "$EVENT" = workflow_run ]; then
+            files=$(gh pr view "$pr" --json files --jq '.files[].path')
+            if grep -qE '^(\.github/|tools/)' <<< "$files"; then model=sonnet; fi
+          fi
+          echo "model=$model" >> "$GITHUB_OUTPUT"
           case "$labels" in *,needs-human,*) echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
           if [ "$EVENT" = workflow_run ]; then
             # A red CI is a round: bump the counter like the reviewer does.
             case "$labels" in
               *,review:3,*) limit; exit 0 ;;
-              *,review:2,*) gh pr edit "$pr" --add-label review:3; limit; exit 0 ;;
-              *,review:1,*) gh pr edit "$pr" --add-label review:2 ;;
-              *) gh pr edit "$pr" --add-label review:1 ;;
+              *,review:2,*) guard label pr "$pr" review:3; limit; exit 0 ;;
+              *,review:1,*) guard label pr "$pr" review:2 ;;
+              *) guard label pr "$pr" review:1 ;;
             esac
             echo "fix=true" >> "$GITHUB_OUTPUT"
           else
@@ -90,6 +139,9 @@ jobs:
   fix:
     needs: prepare
     if: needs.prepare.outputs.fix == 'true'
+    concurrency:
+      group: agent-fix-${{ needs.prepare.outputs.branch }}
+      cancel-in-progress: false
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     env:
@@ -99,26 +151,47 @@ jobs:
       BRANCH: ${{ needs.prepare.outputs.branch }}
       MODEL: ${{ needs.prepare.outputs.model }}
     steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+        run: |
+          for n in AUTHOR_CLIENT_ID AUTHOR_BOT APPROVER_BOT; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
       - id: app
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
-      - uses: actions/checkout@v7  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
         with:
           token: ${{ steps.app.outputs.token }}
           ref: ${{ needs.prepare.outputs.branch }}
           fetch-depth: 0
+      - id: before
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # Nothing from an earlier run may be applied to this PR: remove the agent's body file before the agent runs.
+          rm -f "$RUNNER_TEMP/pr-body.md"
+          gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/body-before.txt"
       - name: Git identity
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.13"
+          python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
       - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
+        env:
+          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
-      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+      - id: claude
+        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -132,28 +205,81 @@ jobs:
             PR #${{ env.PR }} in ${{ github.repository }} (branch ${{ env.BRANCH }}, already checked out) needs a fix.
             Trigger: ${{ env.EVENT }}.
             - pull_request_review: a review requests changes. Read it with `gh pr view ${{ env.PR }} --comments --json reviews,comments`.
-            - workflow_run: the Validate run ${{ env.RUN_ID }} failed. Read the log with
+            - workflow_dispatch: the PR conflicts with main. Rebase the branch onto current origin/main, resolve
+              the conflicts keeping the intent of the PR (rebase, never merge main into the branch).
+            - workflow_run: the validate run ${{ env.RUN_ID }} failed. Read the log with
               `gh run view ${{ env.RUN_ID }} --log-failed`.
             Fix exactly what is raised, run `make check` and the tests, then squash the branch into ONE commit
             authored by Daniel (no Co-authored-by) on top of current origin/main and `git push --force-with-lease`.
+            Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
+            comment on the issue/PR saying which one instead of stopping silently.
+            If the review only asks for a change of the PR body (title or body text, e.g. `Closes #N` -> `Refs #N`),
+            write the complete new body (max 5 lines, ASCII, no Closes/Fixes/Resolves keywords) to ${{ runner.temp }}/pr-body.md
+            and do not run `gh pr edit` yourself: a fixed step after you applies that file to PR #${{ env.PR }}. Never change labels.
             Do not open a new PR.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 60
             --setting-sources user
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(make:*),Bash(python3:*),Bash(python:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)"
+      # Deterministic, fixed flags: the agent only writes the file, it never runs `gh pr edit`.
+      # Only after a successful agent run. The file must be a regular file (no symlink) and pass the checks below.
+      - name: Apply the PR body the agent wrote
+        if: ${{ !cancelled() && steps.claude.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BODY_FILE: ${{ runner.temp }}/pr-body.md
+        run: |
+          f="$BODY_FILE"
+          if [ ! -f "$f" ] || [ -L "$f" ]; then echo "No PR body file from the agent; PR body unchanged"; exit 0; fi
+          size=$(wc -c < "$f"); lines=$(grep -c '' "$f" || true)
+          if [ "$size" -lt 1 ] || [ "$size" -gt 4000 ] || [ "$lines" -gt 5 ]; then
+            echo "::error::PR body is empty, over 4000 bytes or over 5 lines; not applied"; exit 1
+          fi
+          if LC_ALL=C grep -q '[^[:print:]]' "$f"; then echo "::error::PR body must be plain ASCII; not applied"; exit 1; fi
+          if grep -qiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]*:?[[:space:]]+#[0-9]' "$f"; then
+            echo "::error::PR body must not contain Closes/Fixes/Resolves #N (use Refs #N); not applied"; exit 1
+          fi
+          if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_|AKIA[0-9A-Z]{16}|-----BEGIN' "$f"; then
+            echo "::error::PR body looks like it contains a secret; not applied"; exit 1
+          fi
+          gh pr edit "$PR" --body-file "$f"
       # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
       - name: Make sure CI runs on the PR head
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
           for _ in 1 2 3 4 5 6; do
             n=$(gh run list --workflow validate.yml --commit "$sha" --json databaseId --jq length)
-            if [ "$n" -gt 0 ]; then echo "Validate already runs for $sha"; exit 0; fi
+            if [ "$n" -gt 0 ]; then echo "validate already runs for $sha"; exit 0; fi
             sleep 10
           done
           gh workflow run validate.yml --ref "$BRANCH"
-          gh pr edit "$PR" --add-label agent:review
+          # The agent may edit the checkout: run the helper as it is on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
+          python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" label pr "$PR" agent:review
+      # Never end silently: no new commit on the PR head means a comment, needs-human and Daniel's review.
+      - name: Escalate a run that pushed no fix
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          HEAD_BEFORE: ${{ steps.before.outputs.sha }}
+        run: |
+          # The agent may edit the checkout: run the helper as it is on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
+          # Rule: the guard comes from main, this call from the PR branch. `silent` ignores extra trailing args and a
+          # usage error escalates ("guard error"); only ever append args, never reorder or remove them.
+          python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent fix "$PR" "$HEAD_BEFORE" "$RUNNER_TEMP/body-before.txt"

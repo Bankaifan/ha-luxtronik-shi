@@ -10,17 +10,53 @@ jobs:
       github.event.review.state == 'approved' &&
       github.event.pull_request.user.type == 'Bot' &&
       github.event.pull_request.user.login != 'dependabot[bot]'
+    # Two approvals in the same second start two runs for one PR; queue them per PR instead of racing.
+    concurrency:
+      group: automerge-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+        run: |
+          for n in AUTHOR_CLIENT_ID; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
       - id: app
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
-      - name: Enable auto-merge (rebase, keeps Daniel as author); GitHub merges once the ruleset is satisfied
+      # Design PRs (docs/design/) never auto-merge: the design reviewer approves; Daniel merges
+      # (or the orchestrator when Owner decisions is empty).
+      - name: Refuse design PRs
+        id: design
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr merge "$PR" --auto --rebase
+        run: |
+          n=$(gh api --paginate "repos/$GH_REPO/pulls/$PR/files" --jq '.[] | select(.filename | startswith("docs/design/")) | .filename' | wc -l)
+          if [ "$n" -gt 0 ]; then echo "design=true" >> "$GITHUB_OUTPUT"; echo "PR touches docs/design/: no auto-merge"; fi
+      - name: Enable auto-merge (rebase, keeps Daniel as author); GitHub merges once the ruleset is satisfied
+        if: steps.design.outputs.design != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # A second run on the same PR can find the merge already queued, running or done. That is success, not a failure mail.
+          if out=$(gh pr merge "$PR" --auto --rebase 2>&1); then
+            echo "$out"
+            exit 0
+          fi
+          # A failed state read is not evidence the PR is closed: it only counts when the state was read and is not OPEN.
+          state=$(gh pr view "$PR" --json state --jq .state 2>/dev/null) || state=""
+          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open'; then
+            echo "::notice::PR #$PR is ${state:-unknown}; nothing left to enable: $out"
+            exit 0
+          fi
+          echo "$out" >&2
+          exit 1

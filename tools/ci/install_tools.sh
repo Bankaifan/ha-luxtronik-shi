@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Install the pinned tools that `make check` and CI use. Used by Validate, agent-dev and agent-fix.
+# Install the pinned tools that `make check` and CI use. Used by validate, agent-dev and agent-fix.
 # ruff and zizmor are pinned in requirements-lint.txt (Dependabot's pip ecosystem reads it). actionlint is pinned here
 # together with its SHA-256; bump both (the checksum is in the release's actionlint_<version>_checksums.txt).
 #   install_tools.sh        everything: ruff, zizmor, pytest-timeout, requirements_test.txt, actionlint
-#   install_tools.sh lint   only the lint tools (ruff, zizmor, actionlint; workflow lint job, no test dependencies)
+#   install_tools.sh lint   only the lint tools (ruff, zizmor, actionlint; no test dependencies)
 set -euo pipefail
 ACTIONLINT=1.7.7
 # The override exists only to test that a wrong checksum fails the install.
@@ -17,6 +17,9 @@ else
     if [ -f "$f" ]; then pip install -r "$f"; fi
   done
 fi
+# Project-specific extra command: only from the environment (repo variable vars.EXTRA_INSTALL), never from a file in the
+# checkout, because a PR branch must not be able to change what runs here.
+if [ -n "${EXTRA_INSTALL:-}" ]; then bash -c "$EXTRA_INSTALL"; fi
 dir="${RUNNER_TEMP:-/tmp}/actionlint"
 mkdir -p "$dir"
 tarball="$dir/actionlint.tar.gz"

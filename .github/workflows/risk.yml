@@ -1,0 +1,36 @@
+name: risk
+# Classifies the PR diff (tools/ci/risk.py): label risk:security / risk:infra and the check `risk`.
+# A `security` diff fails the check until the owner approved the head SHA. The checkout is explicitly the default
+# branch and the PR is read through gh, PR code never runs. For pull_request_review the workflow file itself comes
+# from the PR merge ref, so a PR could alter this file: it must stay in CODEOWNERS (and in SECURITY_FILES).
+on:
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] checks out the default branch only and never runs PR code
+    types: [opened, synchronize, reopened, closed]
+  pull_request_review:
+    types: [submitted, dismissed]
+permissions:
+  contents: read
+jobs:
+  classify:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      statuses: write
+    concurrency:
+      group: risk-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          PR: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci/risk.py pr "$PR"

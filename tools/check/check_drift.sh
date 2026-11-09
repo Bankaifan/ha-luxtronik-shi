@@ -11,7 +11,7 @@ if [ ${#gens[@]} -eq 0 ]; then
 fi
 for g in "${gens[@]}"; do
   echo "check_drift: running $g"
-  python3 "$g" > /dev/null
+  python3 "$g"
 done
 if ! git diff --exit-code || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   echo "check_drift: generated files are out of date, run the generators and commit" >&2

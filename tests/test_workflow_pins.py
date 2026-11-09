@@ -1,6 +1,6 @@
 """Workflow action refs must not point at a branch: a branch can change without review and Dependabot cannot bump it.
 
-Issue #77: the Validate workflow pinned ``home-assistant/actions/hassfest@master`` and ``hacs/action@main``. Both must
+Issue #77: the validate workflow pinned ``home-assistant/actions/hassfest@master`` and ``hacs/action@main``. Both must
 now be commit SHAs (Dependabot's github-actions ecosystem proposes SHA bumps with the tag in a trailing comment).
 """
 
@@ -13,7 +13,7 @@ WORKFLOWS = pathlib.Path(__file__).resolve().parent.parent / ".github" / "workfl
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)", re.MULTILINE)
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BRANCH_NAMES = {"master", "main", "HEAD"}
-# Third-party actions in Validate that are pinned to a commit SHA (issue #77 acceptance).
+# Third-party actions in validate that are pinned to a commit SHA (issue #77 acceptance).
 MUST_BE_SHA = ("home-assistant/actions/", "hacs/action@")
 
 

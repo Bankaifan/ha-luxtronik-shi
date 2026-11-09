@@ -607,7 +607,7 @@ Entity keys are a contract (`tests/test_contract.py`). See [CONTRIBUTING.md](CON
 [AGENTS.md](AGENTS.md) for the working rules (also used by the automated agents that help maintain this repository)
 and [CHANGELOG.md](CHANGELOG.md) for versioning.
 
-Releases are created automatically: when a version bump reaches `main` and the *Validate* workflow (hassfest, HACS
+Releases are created automatically: when a version bump reaches `main` and the *validate* workflow (hassfest, HACS
 action, tests) has passed, a GitHub Actions workflow tags that commit and publishes the release with the CHANGELOG
 section as notes.
 

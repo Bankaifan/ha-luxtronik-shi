@@ -1,38 +1,72 @@
-name: Validate
+name: validate
 
-# Least privilege: jobs only read the repository unless they need more.
-permissions:
-  contents: read
-
-# Push runs only on main (and release tags): a branch with a pull request is validated by the pull_request run, so
-# the agent workflows (workflow_run on Validate) see exactly one run per head commit and count fix rounds once.
+# Project CI on top of the template's: the template's `validate` job (gitleaks, make check) and `agent-smoke` plus the
+# project jobs hassfest, hacs, version, tests, tests-min-ha, tests-latest-ha, workflow-lint. The ruleset requires the
+# job names, not the workflow name. A branch with a pull request is validated by the pull_request run only, so the
+# agent workflows (workflow_run on validate) see one run per head commit and count fix rounds once.
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
     tags: ["v*"]
-  pull_request:
   schedule:
     - cron: "0 4 * * 1"
   # Fallback used by agent-dev / agent-fix when no run exists for a bot-pushed head SHA.
   workflow_dispatch:
-
+permissions:
+  contents: read
+  pull-requests: read
 jobs:
-  hassfest:
-    runs-on: ubuntu-latest
+  validate:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # The Home Assistant test stack needs 3.13 (project override of the template's '3.x').
+          python-version: ${{ vars.PYTHON_VERSION || '3.13' }}
+      - name: Install pinned tools
+        env:
+          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
+        run: bash tools/ci/install_tools.sh
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Checks (ruff, pytest, actionlint, zizmor, repo checks)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # workflow_dispatch: check_pr_form reads title/body with `gh pr view`
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: make check
+
+  hassfest:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Pinned to the commit that `master` pointed to on 2026-11-09. The only upstream tag (1.0.0) is 166 commits older.
       - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master @ 2026-10-26
 
   hacs:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write  # the HACS action posts its results as a PR comment
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Pinned to the commit that `main` pointed to on 2026-11-09. The latest upstream tag (22.5.0) is from 2022.
@@ -41,13 +75,14 @@ jobs:
           category: integration
 
   version:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       - run: python tools/check_version.py "$GIT_REF"
@@ -65,15 +100,16 @@ jobs:
           fi
 
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
-      - run: pip install -r requirements_test.txt pytest-timeout ruff
+      - run: bash tools/ci/install_tools.sh
       - run: ruff check .
       - run: pytest --timeout=60
       - name: Generators produce no drift, no tracked bytecode
@@ -81,37 +117,31 @@ jobs:
           python tools/check/check_no_bytecode.py
           bash tools/check/check_drift.sh
 
-  # actionlint, zizmor (workflow security) and gitleaks (secret scan), pinned in tools/ci/install_tools.sh.
+  # actionlint and zizmor (workflow security), pinned in tools/ci/install_tools.sh. The secret scan runs in `validate`.
   workflow-lint:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read  # gitleaks lists the commits of a pull request
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       - name: Install pinned tools
         run: bash tools/ci/install_tools.sh lint
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
       - run: actionlint
       - run: zizmor --no-progress .github/workflows
 
   # The minimum Home Assistant version declared in hacs.json must pass the tests too (read from hacs.json, not hard-coded).
   tests-min-ha:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       # pytest-homeassistant-custom-component pins exactly one Home Assistant release, so pip picks the matching plugin.
@@ -129,15 +159,113 @@ jobs:
   # Same tests against the newest Home Assistant test harness (newer Python), to catch API changes early.
   # pymodbus is not installed by the test harness itself, so it is pinned here to the newest 3.x release line.
   tests-latest-ha:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
       - run: pip install --upgrade pytest-homeassistant-custom-component "pymodbus>=3.9,<4" pytest-timeout
       - run: python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
       - run: python -c "import pymodbus; print('pymodbus', pymodbus.__version__)"
       - run: pytest --timeout=120
+
+  # Decides whether agent-smoke is needed. A paths-filter step (not workflow-level `paths`),
+  # so the required check `agent-smoke` always reports: skipped counts as success.
+  changes:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      agents: ${{ steps.filter.outputs.agents }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          agents=false
+          if [ "$EVENT" = "pull_request" ] \
+            && git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq '^(\.github/workflows/|\.github/actions/|tools/ci/)'; then
+            agents=true
+          fi
+          echo "agents=$agents" >> "$GITHUB_OUTPUT"
+
+  # Proves the agent plumbing still works with this PR's workflow versions: both app tokens
+  # can be created and used, and the Claude OAuth secret exists. No model call, no PR code run.
+  agent-smoke:
+    needs: changes
+    if: needs.changes.outputs.agents == 'true'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
+        run: |
+          for n in AUTHOR_CLIENT_ID APPROVER_CLIENT_ID; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
+      - id: pre
+        env:
+          ACTOR: ${{ github.actor }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          AUTHOR_APP_KEY: ${{ secrets.AUTHOR_APP_KEY }}
+          APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
+          APPROVER_APP_KEY: ${{ secrets.APPROVER_APP_KEY }}
+        run: |
+          missing=""
+          for name in CLAUDE_CODE_OAUTH_TOKEN AUTHOR_APP_KEY APPROVER_APP_KEY; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          # Variables are readable in Dependabot runs too.
+          missing_vars=""
+          for name in AUTHOR_CLIENT_ID APPROVER_CLIENT_ID; do
+            if [ -z "${!name}" ]; then missing_vars="$missing_vars $name"; fi
+          done
+          if [ -n "$missing_vars" ]; then
+            echo "::error::Missing Actions variables:${missing_vars} (client IDs of the two apps; Settings > Secrets and variables > Actions > Variables)"
+            exit 1
+          fi
+          if [ -n "$missing" ]; then
+            if [ "$ACTOR" = "dependabot[bot]" ]; then
+              echo "::error::Dependabot PRs get no Actions secrets. Add these as Dependabot secrets (Settings > Secrets and variables > Dependabot):${missing}"
+            else
+              echo "::error::Missing secrets:${missing}"
+            fi
+            exit 1
+          fi
+      - id: author
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - id: approver
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.APPROVER_CLIENT_ID }}
+          private-key: ${{ secrets.APPROVER_APP_KEY }}
+      - name: Call the API with both tokens
+        env:
+          AUTHOR_TOKEN: ${{ steps.author.outputs.token }}
+          APPROVER_TOKEN: ${{ steps.approver.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for who in AUTHOR APPROVER; do
+            var="${who}_TOKEN"
+            names=$(GH_TOKEN="${!var}" gh api /installation/repositories --jq '.repositories[].full_name')
+            if ! printf '%s\n' "$names" | grep -qxF "$REPO"; then
+              echo "::error::$who app is not installed on $REPO"
+              exit 1
+            fi
+            echo "$who app token ok"
+          done

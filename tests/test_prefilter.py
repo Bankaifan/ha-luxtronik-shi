@@ -37,3 +37,11 @@ def test_scout_work():
     assert mod.scout_work(0, 3)
     assert not mod.scout_work(0, 0)
     assert not mod.scout_work(mod.MAX_OPEN_IDEAS, 3)
+
+
+def test_prio1_may_start_when_a_slot_is_stuck():
+    p1 = dict(item(7, ["prio:1"]), prio=1)
+    p3 = dict(item(8), prio=3)
+    assert mod.startable([p1, p3], 2) == []
+    assert mod.startable([p1, p3], 2, stuck=1) == [7]
+    assert mod.startable([p1, p3], 2, stuck=2) == [7]

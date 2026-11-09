@@ -1,0 +1,113 @@
+name: agent-security-review
+# Separate run (sonnet, own role) for agent PRs classified infra/security by tools/ci/risk.py. It only asks whether
+# anyone gains rights, a check gets weaker or untrusted input can reach a model or a token, and reports the
+# status `security-review` (required by the ruleset). PRs that do not need it get that status from the `risk` workflow.
+# Same gate as agent-review: validate green on a same-repo agent/* branch; checks out main, never PR code.
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] validate gate only; checks out main, never PR code, and the reviewer cannot push
+    workflows: [validate]
+    types: [completed]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  security-review:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'agent/') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    concurrency:
+      group: agent-security-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    env:
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+      APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
+        run: |
+          for n in APPROVER_BOT APPROVER_CLIENT_ID; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.APPROVER_CLIENT_ID }}
+          private-key: ${{ secrets.APPROVER_APP_KEY }}
+      # main only, never the PR head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Find the PR and its risk class
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          set -euo pipefail
+          skip() { echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          pr=$(gh api -X GET "repos/$GH_REPO/pulls" -f state=open -f head="${GH_REPO%%/*}:$BRANCH" \
+            | jq -c --arg s "$SHA" '[.[] | select(.head.sha == $s)] | first // empty')
+          if [ -z "$pr" ]; then echo "No open PR with head $SHA"; skip; fi
+          num=$(jq -r .number <<<"$pr")
+          labels=",$(jq -r '[.labels[].name] | join(",")' <<<"$pr"),"
+          python3 tools/agent_guard.py agent-pr "$(jq -r .user.login <<<"$pr")" "$labels" || { echo "Not an agent PR"; skip; }
+          level=$(gh pr diff "$num" | python3 tools/ci/risk.py classify AGENTS.md)
+          echo "Risk class: $level"
+          if [ "$level" = "none" ]; then echo "No infrastructure change"; skip; fi
+          # validate can go green twice for one SHA: one security review per commit.
+          # Only comments of the approver app count; anyone else could post such a line.
+          norm='ascii_downcase | sub("^app/";"") | sub("\\[bot\\]$";"")'
+          if gh pr view "$num" --json comments | jq -r --arg a "$APPROVER_BOT" \
+              ".comments[] | select((.author.login | $norm) == (\$a | $norm)) | .body" \
+              | grep -q "^security-review: .* ${SHA:0:7}"; then
+            echo "Already reviewed $SHA"; skip
+          fi
+          { echo "num=$num"; echo "level=$level"; } >> "$GITHUB_OUTPUT"
+      - id: claude
+        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          prompt: |
+            Act as the security reviewer described in .agents/roles/security-reviewer.md and follow AGENTS.md.
+            Review PR #${{ steps.pr.outputs.num }} in ${{ github.repository }} at commit ${{ env.SHA }} (risk class: ${{ steps.pr.outputs.level }}).
+            The checkout is main, not the PR: never run or import code from the PR. Read the change with
+            `gh pr view` and `gh pr diff`, and the linked issue with `gh issue view`.
+            Post your verdict as a PR comment whose first line is exactly
+            `security-review: approve ${{ env.SHA }}` or `security-review: changes ${{ env.SHA }}`, then the reasons (file, line).
+            Do not push or edit files. Do not use `gh pr review`. Do not post a note for Daniel (a script does).
+          claude_args: >-
+            --model sonnet
+            --max-turns 12
+            --setting-sources user
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
+      # A run that left no verdict fails the required status instead of ending silently.
+      - name: Publish status security-review
+        if: ${{ always() && steps.claude.conclusion != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.num }}
+        run: python3 tools/ci/risk.py verdict "$PR" "$SHA"
+      # Whichever of agent-review / agent-security-review finishes last marks the PR for Daniel (idempotent).
+      - name: Mark an approved PR that waits for Daniel
+        if: ${{ always() && steps.claude.conclusion != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.pr.outputs.num }}
+        run: python3 tools/ci/risk.py wait "$PR" "$SHA"

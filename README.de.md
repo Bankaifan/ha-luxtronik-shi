@@ -658,7 +658,7 @@ vorhandene Register beantwortet. Die Übersetzungen werden aus der Registerliste
 Beiträge stehen in [CONTRIBUTING.md](CONTRIBUTING.md), die Arbeitsregeln in [AGENTS.md](AGENTS.md) (gelten auch für die
 automatischen Agenten, die dieses Repository mitpflegen), die Versionierung in [CHANGELOG.md](CHANGELOG.md).
 
-Releases entstehen automatisch: Landet eine Versionserhöhung auf `main` und ist der Workflow *Validate* (hassfest,
+Releases entstehen automatisch: Landet eine Versionserhöhung auf `main` und ist der Workflow *validate* (hassfest,
 HACS-Action, Tests) grün, setzt ein GitHub-Actions-Workflow den Tag auf genau diesen Commit und veröffentlicht das
 Release mit dem passenden CHANGELOG-Abschnitt als Text.
 
