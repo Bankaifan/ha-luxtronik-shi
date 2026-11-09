@@ -13,6 +13,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ### Changed
 
+* The entity IDs of `heating_available` and `hot_water_available` (were `cap_heating`, `cap_hot_water`) are renamed
+  automatically at setup when they still carry the generated old name; user-chosen IDs and taken targets are skipped,
+  each rename and skip is logged, a second run does nothing (issue #101).
+
 * Agent system and CI brought up to `Bankaifan/agent-template` (`dd4dfcd`) and connected to its weekly template sync
   (`.agents/template.json`). The CI workflow is now named `validate` (job names and required checks unchanged); new
   checks `agent-smoke`, `risk` and `security-review`. No change to the integration.

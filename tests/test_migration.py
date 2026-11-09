@@ -32,6 +32,12 @@ OLD_ENTITY_IDS = {
     "cap_heating": "binary_sensor.warmepumpe_ausstattung_heizen",
     "cap_hot_water": "binary_sensor.warmepumpe_ausstattung_warmwasser",
 }
+# generated entity IDs follow the new name (test language: English); all others keep their ID
+NEW_ENTITY_IDS = {
+    **OLD_ENTITY_IDS,
+    "cap_heating": "binary_sensor.warmepumpe_heating_available_equipped_mode_not_off",
+    "cap_hot_water": "binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off",
+}
 
 
 def _domain(old_key: str) -> str:
@@ -74,7 +80,7 @@ async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     await hass.async_block_till_done()
 
 
-async def test_renamed_entities_keep_their_entity_id(hass: HomeAssistant, shi: FakeSHI) -> None:
+async def test_renamed_entities_keep_their_registry_entry(hass: HomeAssistant, shi: FakeSHI) -> None:
     entry = _entry(hass, shi)
     old = {key: _create_old(hass, entry, key) for key in RENAMED_KEYS}
     assert {key: reg.entity_id for key, reg in old.items()} == OLD_ENTITY_IDS
@@ -85,9 +91,9 @@ async def test_renamed_entities_keep_their_entity_id(hass: HomeAssistant, shi: F
     for old_key, new_key in RENAMED_KEYS.items():
         # same registry entry (same internal id), same entity ID, new unique ID
         domain = _domain(old_key)
-        assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{new_key}") == OLD_ENTITY_IDS[old_key]
+        assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{new_key}") == NEW_ENTITY_IDS[old_key]
         assert registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{old_key}") is None
-        migrated = registry.async_get(OLD_ENTITY_IDS[old_key])
+        migrated = registry.async_get(NEW_ENTITY_IDS[old_key])
         assert migrated.id == old[old_key].id
         assert migrated.unique_id == f"{entry.entry_id}_{new_key}"
         assert migrated.disabled_by is None
@@ -229,3 +235,54 @@ async def test_unused_sub_devices_can_be_removed(hass: HomeAssistant, shi: FakeS
     assert await async_remove_config_entry_device(hass, entry, device("cooling")) is True
     assert await async_remove_config_entry_device(hass, entry, device("heating")) is False
     assert await async_remove_config_entry_device(hass, entry, device(None)) is False
+
+
+def _entity_ids(hass: HomeAssistant, entry: MockConfigEntry, key: str) -> tuple[str, str]:
+    registry = er.async_get(hass)
+    new = BY_KEY[key]
+    entity_id = registry.async_get_entity_id(new.platform, DOMAIN, f"{entry.entry_id}_{key}")
+    return registry, entity_id
+
+
+async def test_generated_entity_id_of_renamed_key_is_renamed(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = _entry(hass, shi)
+    old = er.async_get(hass).async_get_or_create(
+        "binary_sensor", DOMAIN, f"{entry.entry_id}_cap_heating", config_entry=entry,
+        suggested_object_id="warmepumpe_ausstattung_heizen",
+    )
+    await _setup(hass, entry)
+    registry, entity_id = _entity_ids(hass, entry, "heating_available")
+    assert registry.async_get(entity_id).id == old.id
+    assert entity_id == "binary_sensor.warmepumpe_heating_available_equipped_mode_not_off"
+    assert registry.async_get("binary_sensor.warmepumpe_ausstattung_heizen") is None
+    # second run is a no-op
+    from custom_components.luxtronik_shi import async_migrate_renamed_entity_ids
+
+    async_migrate_renamed_entity_ids(hass, entry)
+    assert _entity_ids(hass, entry, "heating_available")[1] == entity_id
+
+
+async def test_user_chosen_entity_id_is_untouched(hass: HomeAssistant, shi: FakeSHI) -> None:
+    entry = _entry(hass, shi)
+    er.async_get(hass).async_get_or_create(
+        "binary_sensor", DOMAIN, f"{entry.entry_id}_cap_hot_water", config_entry=entry,
+        suggested_object_id="my_hot_water_flag",
+    )
+    await _setup(hass, entry)
+    assert _entity_ids(hass, entry, "hot_water_available")[1] == "binary_sensor.my_hot_water_flag"
+
+
+async def test_entity_id_rename_skipped_on_conflict(hass: HomeAssistant, shi: FakeSHI, caplog) -> None:
+    entry = _entry(hass, shi)
+    registry = er.async_get(hass)
+    target = "binary_sensor.warmepumpe_heating_available_equipped_mode_not_off"
+    registry.async_get_or_create(
+        "binary_sensor", "other", "x", suggested_object_id=target.removeprefix("binary_sensor.")
+    )
+    registry.async_get_or_create(
+        "binary_sensor", DOMAIN, f"{entry.entry_id}_cap_heating", config_entry=entry,
+        suggested_object_id="warmepumpe_ausstattung_heizen",
+    )
+    await _setup(hass, entry)
+    assert _entity_ids(hass, entry, "heating_available")[1] == "binary_sensor.warmepumpe_ausstattung_heizen"
+    assert "already taken" in caplog.text

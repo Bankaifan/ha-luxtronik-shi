@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
+from homeassistant.util import slugify
 
 from .const import (
     CONF_FEATURES,
@@ -25,9 +26,11 @@ from .modbus_client import LuxtronikModbusClient
 from .registers import (
     BLOCK_SELECT_KEYS,
     BLOCK_SWITCH_KEYS,
+    BY_KEY,
     CLIMATE_KEYS,
     REMOVED_ENTITIES,
     REMOVED_KEYS,
+    RENAMED_KEY_OLD_NAMES,
     RENAMED_KEYS,
     WATER_HEATER_KEYS,
     active_registers,
@@ -73,6 +76,39 @@ async def async_migrate_renamed_keys(hass: HomeAssistant, entry: ConfigEntry) ->
     await er.async_migrate_entries(hass, entry.entry_id, _migrate)
 
 
+def async_migrate_renamed_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rename the entity ID of renamed keys whose display name changed (``RENAMED_KEY_OLD_NAMES``).
+
+    Runs after ``async_migrate_renamed_keys``. An entity ID is renamed only while it still ends in the slug of
+    the old name (German or English), i.e. it was generated, never when the user chose it. A target that is
+    already taken is skipped. Each rename and each skip is logged; a second run finds nothing to do.
+    """
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+    german = hass.config.language.split("-")[0].lower() == "de"
+    for old_key, (old_de, old_en) in RENAMED_KEY_OLD_NAMES.items():
+        new_reg = BY_KEY[RENAMED_KEYS[old_key]]
+        entity_id = registry.async_get_entity_id(new_reg.platform, DOMAIN, f"{prefix}{new_reg.key}")
+        if entity_id is None:
+            continue
+        domain, object_id = entity_id.split(".", 1)
+        new_slug = slugify(new_reg.name_de if german else new_reg.name_en)
+        for old_name in (old_de, old_en):
+            old_slug = slugify(old_name)
+            if object_id != old_slug and not object_id.endswith(f"_{old_slug}"):
+                continue
+            new_entity_id = f"{domain}.{object_id.removesuffix(old_slug)}{new_slug}"
+            if registry.async_get(new_entity_id) is not None:
+                _LOGGER.warning(
+                    "%s: not renaming %s to %s, the new entity ID is already taken",
+                    entry.title, entity_id, new_entity_id
+                )
+            else:
+                _LOGGER.info("%s: renaming the entity ID %s to %s", entry.title, entity_id, new_entity_id)
+                registry.async_update_entity(entity_id, new_entity_id=new_entity_id)
+            break
+
+
 def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete the registry entries of entities that no longer exist.
 
@@ -95,6 +131,7 @@ def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> N
 async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -> bool:
     """Set up one heat pump."""
     await async_migrate_renamed_keys(hass, entry)
+    async_migrate_renamed_entity_ids(hass, entry)
     async_remove_obsolete_entities(hass, entry)
     client = LuxtronikModbusClient(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_SLAVE])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
