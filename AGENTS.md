@@ -52,7 +52,7 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
   `custom_components/luxtronik_shi/manifest.json`; `tools/check_version.py` checks manifest, CHANGELOG and tag.
 - **Releases are automatic.** To release, bump the manifest and rename `## [Unreleased]` to
   `## [X.Y.Z] – YYYY-MM-DD` (keep an empty `## [Unreleased]` above, update the compare links). After the merge and a
-  green *Validate* run on `main`, `release.yml` tags and publishes from that section. Never tag by hand.
+  green *validate* run on `main`, `release.yml` tags and publishes from that section. Never tag by hand.
 - The section is the release note shown in Home Assistant: anything users must do goes first under
   `### Action required`.
 - The PR body states the proposed version and why (feature/fix/breaking), or "no release".
@@ -61,12 +61,13 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
 - Small PRs branched from current `main`, rebase-merged: no stacked PRs, no `git merge main` into a branch. If a
   branch falls behind, rebase it (own branch) or cherry-pick onto a fresh one.
 - Before review squash the branch into ONE commit on current `origin/main`; force-push to your own branch is allowed.
-- Before the PR: `make check` (ruff, pytest, version, generator drift, actionlint, zizmor) is green. CI (*Validate*) is
-  the truth. Generators: `gen_translations`, `gen_contract`, `gen_entity_docs`, `gen_register_docs`, `gen_icons`,
+- Before the PR: `make check` (ruff, pytest, version, PR form, generator drift, actionlint, zizmor) is green. CI
+  (*validate*) is the truth. Generators: `gen_translations`, `gen_contract`, `gen_entity_docs`, `gen_register_docs`, `gen_icons`,
   `gen_dashboard`; a generator diff in CI means you forgot to run it.
 - Setup: `pip install -r requirements_test.txt pytest-timeout ruff` (CI: `bash tools/ci/install_tools.sh`).
 - Claim only what you measured (command + output). Unsure: ask in the issue, mark facts "open", never guess.
-- Read only the files the task names. Finish by overwriting HANDOVER.md (short, max 60 lines).
+- Read only the files the task names. HANDOVER.md (max 60 lines) is rewritten by the orchestrator only; developer and
+  fix runs put notes in the PR body.
 - Everything on GitHub in English (files, commits, PR titles and bodies, issues, CHANGELOG, README, code comments);
   German only in `README.de.md` and the German translations. Talking to Daniel: German.
 - README changes go into both `README.md` and `README.de.md`.
@@ -75,13 +76,35 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
 - Author: `git config user.name "Daniel"` and `user.email "476059+Bankaifan@users.noreply.github.com"`.
   No `Co-authored-by` trailer.
 - PR title: English, ASCII only, meaningful. Body: what and why in a few lines, link the issue, proposed version.
+  The form is enforced by CI (`tools/check/check_pr_form.py`).
 
 ## Review rounds and merging
-Developer -> CI -> reviewer (only on green CI) -> at most 2 fix rounds (started on `CHANGES_REQUESTED` or a red CI).
-Then `needs-human`. Merges are rebase merges done by auto-merge after the approver app's approval and green CI;
-PRs touching code-owner paths (`.github/`, `.agents/`, AGENTS.md, Makefile, `tools/check/`, `tools/ci/`,
-`tools/check_version.py`) need Daniel. Only trusted input drives agents (Daniel's issues, or `approved`/`auto-ok`
-set by Daniel); the reviewer never runs PR code.
+Developer -> CI -> reviewer (only on green CI) -> at most 2 fix rounds (started automatically on `CHANGES_REQUESTED`
+or on a red CI). Then the task restarts once on its own: the issue gets `restart:1` and a new slip, `agent:dev` is set
+again and the old PR is closed as superseded. If the issue already has `restart:1`, the PR gets `needs-human` plus a
+review request to Daniel (a label alone is not in his inbox) and waits for the orchestrator or Daniel. Do not start a
+third round. A newer agent PR for the same issue closes the older one.
+Merges are rebase merges done by auto-merge after the approver app's approval and green CI. Only security-relevant
+files need Daniel as code owner (`.github/CODEOWNERS`, the release workflow, rulesets, `AGENTS.md`, the guard and risk
+tools); other security diffs are caught by the `risk` check (`tools/ci/risk.py`), which fails until he approves the
+head SHA. Only trusted input drives agents: issues by Daniel or labelled `approved`/`auto-ok` by Daniel; the reviewer
+never runs PR code.
+Big work (architectural, breaking, release-relevant, multi-PR) starts with a design study in `docs/design/` (see its
+README); only its *Owner decisions* go to Daniel.
+
+## Waiting for Daniel
+Daniel approves only what needs him: PRs with risk class `security` (check `risk`, label `risk:security`, see
+`tools/ci/risk.py`), `needs-human`, design owner decisions, dependabot majors, product decisions. Whoever parks
+something with him leaves, as the LAST comment, a short plain-German note: what changes, the worst case, what the
+reviewers recommend, one exact yes/no question; technical terms explained in a few words. PRs get a review request to
+Bankaifan; only issues that wait for him mention `@Bankaifan` once in that note. No other comment mentions him. Every
+infra/security PR also needs the security reviewer (`.agents/roles/security-reviewer.md`, status `security-review`)
+besides the normal review, agent-smoke and zizmor.
+
+## Template sync
+This repo follows `Bankaifan/agent-template` (`.agents/template.json`). `template-sync.yml` opens a weekly
+`Template sync <sha>` issue; port `clean` files as they are, `overridden` files by hand keeping their intent, set
+`synced_sha`, one PR with `Closes #<issue>`.
 
 ## Models (subscription quota is scarce)
 Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK. Max 2 agent jobs at once.

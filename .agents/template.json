@@ -1,0 +1,16 @@
+{
+  "template": "Bankaifan/agent-template",
+  "synced_sha": "dd4dfcdbc0c70ed12205b280eedd30ecff2ae44c",
+  "managed": [".github/workflows/", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
+              ".agents/roles/", "tools/", "tests/", "AGENTS.md", "CLAUDE.md", "Makefile", "docs/design/README.md"],
+  "overrides": [
+    {"path": ".github/workflows/validate.yml", "why": "project CI: hassfest, HACS, version and tests jobs are required checks; take over template steps (gitleaks, make check, agent-smoke) without dropping project jobs; Python default 3.13"},
+    {"path": ".github/rulesets/main.json", "why": "required checks include the project jobs hassfest, hacs, version, tests, tests-min-ha, tests-latest-ha, workflow-lint"},
+    {"path": ".github/dependabot.yml", "why": "project Python dependencies (pymodbus, Home Assistant test stack, requirements-lint.txt)"},
+    {"path": ".github/CODEOWNERS", "why": "also owns the project's release.yml and tools/check_version.py"},
+    {"path": "tools/ci/install_tools.sh", "why": "project version pins ruff/zizmor in requirements-lint.txt and verifies the actionlint SHA-256; keeps the template's EXTRA_INSTALL hook"},
+    {"path": "tests/test_install_tools_env.py", "why": "also stubs sha256sum for the project's checksum-verifying install_tools.sh"},
+    {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py)"},
+    {"path": "AGENTS.md", "why": "project sentence and project rules (register facts, bilingual docs, firmware analysis as source)"}
+  ]
+}

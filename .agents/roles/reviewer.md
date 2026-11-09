@@ -1,19 +1,17 @@
 # Reviewer (sonnet, uses the approver app)
 Reads the PR and decides. Never pushes.
 
-- Input: `gh pr diff`, the issue slip. You run only on green CI and never run PR code (the checkout is `main`).
-- Check: acceptance criteria met; tests cover the change (a missing test is a change request: the reviewer is the
-  tester); no secrets; limits in AGENTS.md respected.
-- Project checks CI cannot do:
-  - misleading entity models (wrong platform, unit, option the firmware does not implement): say so even if not asked;
-  - breaking change: `### Action required` first in the CHANGELOG, migration note in both READMEs, orphan cleanup,
-    `tests/fixtures/entity_contract.json` updated deliberately (not silenced), HPO keys called out;
-  - register facts have a source (python-luxtronik, the firmware analysis, or a described measurement), else raw/open;
-  - every new write has a range and a fake_shi test with read-back; no added polling load;
-  - user-facing texts in English and German, translations generated not hand-edited, both READMEs updated;
-  - CHANGELOG entry present; version bump and release intent match the PR body ("Proposed version").
-- Do not re-check what CI already checks (lint, tests, generator drift, version, workflow lint).
-- Verdict: approve, or request changes with file, line and reason per point. No style nitpicks.
-- Reviews 1 and 2 (labels `review:1`, `review:2`) lead to a fix round; a request for changes at `review:3` gives
-  `needs-human`.
+- Input: `gh pr diff`, the issue slip. You run only on green CI and never run PR code (the checkout is `main`). Use a different model than the author where possible.
+- Check: does it meet the acceptance criteria, tests cover the change (a missing test is a change request: the reviewer is the tester), no secrets, limits in AGENTS.md respected.
+- Do not re-check what CI already checks (lint, tests, drift, PR form).
+- Verdict classes, one per point:
+  - `approve`: the slip is met.
+  - `changes`: a defect against the task slip, AGENTS.md or CI. Only this class requests changes (file, line, reason).
+  - `scope`: work outside the slip. Name it; the developer removes it or the orchestrator opens a follow-up issue.
+    Never silently accepted, never a blocker for the in-scope part (approve the rest).
+  - `carry:` non-blocking notes (prefix the line with `carry:`); the orchestrator turns them into issues.
+- No style nitpicks. Design PRs never auto-merge; they need the design reviewer's approval.
+- Reviews 1 and 2 (labels `review:1`, `review:2`) lead to a fix round; a request for changes at `review:3` gives `needs-human`.
+- Infra/security risk (`risk:*` label) is the security reviewer's job (`security-reviewer.md`); you do not repeat it.
+- At `review:3` or a `needs-human` hand-off the last comment is the German note for Daniel (see AGENTS.md, Waiting for Daniel).
 - Output: one review, short. Do not repeat the diff.

@@ -13,24 +13,34 @@ on:
         default: haiku
 permissions:
   contents: read
-concurrency:
-  group: scout
-  cancel-in-progress: false
 jobs:
   scout:
-    if: vars.IDEAS_PER_WEEK != '0'
+    # Effective value: an unset variable means the default 3 (vars alone would read as 0 and skip the job).
+    if: (vars.IDEAS_PER_WEEK || '3') != '0'
+    # Job level on purpose: a skipped run must not take over the group.
+    concurrency:
+      group: scout
+      cancel-in-progress: false
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
       MODEL: ${{ inputs.model || 'haiku' }}
       IDEAS: ${{ vars.IDEAS_PER_WEEK || '3' }}
     steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+        run: |
+          for n in AUTHOR_CLIENT_ID AUTHOR_BOT; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
       - id: app
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           token: ${{ steps.app.outputs.token }}
@@ -58,11 +68,13 @@ jobs:
             and dependency and platform versions (workflow action versions, tool versions) against upstream.
             Look for improvements: code, tests, docs, recurring review remarks, upstream changes.
             First list existing issues (gh issue list --state all --label idea --limit 100) and do not duplicate.
+            Run `gh label create idea --force` first (a missing label must not break the run).
             Open at most ${{ env.IDEAS }} issues with `gh issue create --label idea`: English, concrete title,
-            body with problem, proposal, files, acceptance (max 15 lines). Add only the label `idea`, never
+            body with problem, proposal, files, acceptance (max 15 lines). Add the label `idea` and a label `prio:2` (bug or missing guard) or `prio:3` (feature,
+            improvement), run `gh label create <label> --force` first; never
             `auto-ok` or `approved`: Daniel sets those himself. If nothing is worth doing, open nothing. Never edit files, never merge.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 30
             --setting-sources user
-            --allowedTools "Read,Glob,Grep,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue create:*),Bash(gh api repos/${{ github.repository }}/dependabot/alerts:*),Bash(gh api repos/${{ github.repository }}/code-scanning/alerts:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue create:*),Bash(gh label create:*),Bash(gh api repos/${{ github.repository }}/dependabot/alerts:*),Bash(gh api repos/${{ github.repository }}/code-scanning/alerts:*)"

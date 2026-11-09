@@ -1,17 +1,14 @@
 name: dependabot-automerge
-# No model. Trigger: workflow_run on `Validate` (not pull_request_target), because runs started by
+# No model. Trigger: workflow_run on `validate` (not pull_request_target), because runs started by
 # dependabot get no repo secrets and workflow_run always runs the default-branch version of this file.
 # PR code is never checked out. Open: whether workflow_run of a dependabot-triggered run sees the
-# Actions secrets; if not, add the 4 app secrets as Dependabot secrets too (see README).
+# Actions secrets; if not, add the 3 secrets as Dependabot secrets too (see README).
 on:
   workflow_run:  # zizmor: ignore[dangerous-triggers] needs repo secrets that dependabot runs lack; checks out main only, no PR code runs
-    workflows: [Validate]
+    workflows: [validate]
     types: [completed]
 permissions:
   contents: read
-concurrency:
-  group: dependabot-automerge-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: false
 jobs:
   dependabot:
     if: >-
@@ -19,6 +16,10 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.actor.login == 'dependabot[bot]' &&
       github.event.workflow_run.head_repository.full_name == github.repository
+    # Job level on purpose: runs skipped by `if` must not take over the group.
+    concurrency:
+      group: dependabot-automerge-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     env:
@@ -26,25 +27,41 @@ jobs:
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
     steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+        run: |
+          for n in APPROVER_CLIENT_ID AUTHOR_CLIENT_ID; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
       # Only the script is checked out, from the default branch.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
       - id: approver
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.APPROVER_APP_ID }}
+          client-id: ${{ vars.APPROVER_CLIENT_ID }}
           private-key: ${{ secrets.APPROVER_APP_KEY }}
       - id: author
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.AUTHOR_APP_ID }}
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      # Metadata of the update (also for grouped PRs). If the action cannot read the PR from a
+      # workflow_run event it fails softly and the script falls back to the title (open: not verified).
+      - id: meta
+        continue-on-error: true
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ github.token }}
       - name: Approve and auto-merge patch/minor, label majors
         env:
           APPROVER_TOKEN: ${{ steps.approver.outputs.token }}
           AUTHOR_TOKEN: ${{ steps.author.outputs.token }}
+          METADATA: ${{ steps.meta.outputs.updated-dependencies-json }}
         run: |
           set -euo pipefail
           # The PR whose head is the validated commit (workflow_run.pull_requests can be empty).
@@ -53,11 +70,14 @@ jobs:
           if [ -z "$pr" ]; then echo "no open PR with head $HEAD_SHA, nothing to do"; exit 0; fi
           number=$(jq -r .number <<<"$pr")
           title=$(jq -r .title <<<"$pr")
-          kind=$(python3 tools/dependabot_update_type.py "$title")
+          kind=$(python3 tools/dependabot_update_type.py "$title" "${METADATA:-}")
           echo "PR #$number: $kind"
           if [ "$kind" = "major" ]; then
-            GH_TOKEN="$APPROVER_TOKEN" gh pr edit "$number" --add-label needs-human
+            GH_TOKEN="$APPROVER_TOKEN" python3 tools/agent_guard.py label pr "$number" needs-human
+            # A label alone is not in Daniel's inbox: request his review (the author is dependabot).
+            GH_TOKEN="$APPROVER_TOKEN" gh pr edit "$number" --add-reviewer Bankaifan || echo "review request failed"
+            GH_TOKEN="$APPROVER_TOKEN" gh pr comment "$number" --body "Hallo Daniel, das ist ein Hauptversions-Update einer Abhaengigkeit (kann Dinge veraendern, die bisher funktionierten). Schlimmster Fall: ein Workflow bricht, Zurueckdrehen ist per Revert moeglich. Die Tests sind gruen; ohne dein Ja wird nichts gemergt. Frage: Soll das Update uebernommen werden (ja/nein)?"
             exit 0
           fi
-          GH_TOKEN="$APPROVER_TOKEN" gh pr review "$number" --approve --body "Dependabot $kind update, Validate is green."
+          GH_TOKEN="$APPROVER_TOKEN" gh pr review "$number" --approve --body "Dependabot $kind update, validate is green."
           GH_TOKEN="$AUTHOR_TOKEN" gh pr merge "$number" --auto --rebase

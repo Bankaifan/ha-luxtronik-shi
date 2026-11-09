@@ -1,0 +1,55 @@
+name: status
+# No model: tools/status.py keeps the issue "Agent status" up to date, re-triggers orphans, approves held runs of
+# the author app and starts a fix round for PRs with merge conflicts.
+# Schedule: the cron ticks every 30 min; the gate step skips ticks according to repo variable STATUS_INTERVAL
+# (minutes, rounded up to a multiple of 30). Default: public repos 30 min, private repos 60 min (Actions minutes
+# are limited on private repos). Also on workflow_dispatch and after every agent workflow.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] no PR code runs; the job checks out the default branch only
+    workflows: [agent-dev, agent-fix, agent-review]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: status
+  cancel-in-progress: false
+jobs:
+  status:
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+        run: |
+          for n in AUTHOR_CLIENT_ID AUTHOR_BOT; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          PRIVATE: ${{ github.event.repository.private }}
+          STATUS_INTERVAL: ${{ vars.STATUS_INTERVAL }}
+        run: python3 tools/status.py gate
+      - id: app
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+      - name: Update the status issue and un-stick agent work
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: Bankaifan
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+        run: python3 tools/status.py

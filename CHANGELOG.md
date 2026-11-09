@@ -13,6 +13,10 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ### Changed
 
+* Agent system and CI brought up to `Bankaifan/agent-template` (`dd4dfcd`) and connected to its weekly template sync
+  (`.agents/template.json`). The CI workflow is now named `validate` (job names and required checks unchanged); new
+  checks `agent-smoke`, `risk` and `security-review`. No change to the integration.
+
 - Writable temperature numbers (heating, hot water, mixing circuits 1-3 heat/cool, overall offset) use a 0.1 K step
   instead of 0.5, as the firmware ranges allow (issue #83). Optimizers writing e.g. return + 0.5 K are no longer
   rounded to the coarse step. Keys, unique IDs, platforms and ranges are unchanged.

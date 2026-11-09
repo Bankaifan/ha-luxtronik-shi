@@ -65,6 +65,15 @@
           },
           {
             "context": "workflow-lint"
+          },
+          {
+            "context": "agent-smoke"
+          },
+          {
+            "context": "risk"
+          },
+          {
+            "context": "security-review"
           }
         ]
       }

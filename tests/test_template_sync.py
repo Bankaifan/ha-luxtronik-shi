@@ -1,0 +1,136 @@
+import importlib.util
+import json
+import pathlib
+
+import pytest
+
+_path = pathlib.Path(__file__).parent.parent / "tools" / "template_sync.py"
+_spec = importlib.util.spec_from_file_location("template_sync", _path)
+mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(mod)
+
+MANAGED = ["tools/", "AGENTS.md"]
+SHA = "a" * 40
+
+
+def files(*items):
+    return {"files": [{"filename": n, "status": s, **({"previous_filename": p} if p else {})}
+                      for n, s, p in items]}
+
+
+def many(n):
+    return files(*[(f"tools/f{i}.py", "added", None) for i in range(n)])
+
+
+def test_changed_files_ignores_unmanaged():
+    cmp_json = files(("tools/a.py", "modified", None), ("README.md", "modified", None), ("AGENTS.md", "added", None))
+    assert mod.changed_files(cmp_json, MANAGED) == [
+        {"path": "tools/a.py", "status": "modified"}, {"path": "AGENTS.md", "status": "added"}]
+
+
+def test_changed_files_counts_rename_both_paths():
+    got = mod.changed_files(files(("tools/new.py", "renamed", "tools/old.py")), MANAGED)
+    assert [c["path"] for c in got] == ["tools/new.py", "tools/old.py"]
+    got = mod.changed_files(files(("tools/new.py", "renamed", "docs/old.py")), MANAGED)
+    assert [c["path"] for c in got] == ["tools/new.py"]
+
+
+def test_changed_files_empty():
+    assert mod.changed_files({}, MANAGED) == []
+
+
+def test_truncated_compare_raises_at_300_not_299():
+    with pytest.raises(mod.TruncatedCompare):
+        mod.changed_files(many(300), MANAGED)
+    assert len(mod.changed_files(many(299), MANAGED)) == 299
+
+
+def run_main(tmp_path, monkeypatch, cfg, compare):
+    cfg_file = tmp_path / "t.json"
+    cfg_file.write_text(json.dumps(cfg))
+    monkeypatch.setattr(mod, "CONFIG", cfg_file)
+    monkeypatch.setenv("GH_REPO", "o/project")
+    calls = []
+
+    def fake_gh(*args):
+        calls.append(args)
+        return "b" * 40 if "commits/main" in args[1] else json.dumps(compare)
+
+    monkeypatch.setattr(mod, "gh", fake_gh)
+    return mod.main(), calls
+
+
+def test_truncated_compare_creates_no_issue(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "managed": MANAGED}
+    code, calls = run_main(tmp_path, monkeypatch, cfg, many(300))
+    assert code == 1
+    assert not any(a[0] == "issue" for a in calls)
+
+
+def test_empty_compare_creates_nothing(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "managed": MANAGED}
+    code, calls = run_main(tmp_path, monkeypatch, cfg, files(("README.md", "modified", None)))
+    assert code == 0
+    assert not any(a[0] == "issue" for a in calls)
+
+
+def test_template_repo_and_missing_config_skip(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(mod, "CONFIG", tmp_path / "none.json")
+    assert mod.main() == 0
+    assert "no .agents/template.json" in capsys.readouterr().out
+    (tmp_path / "t.json").write_text(json.dumps({"template": "O/T", "synced_sha": SHA}))
+    monkeypatch.setattr(mod, "CONFIG", tmp_path / "t.json")
+    monkeypatch.setenv("GH_REPO", "o/t")
+    assert mod.main() == 0
+    assert "this repo is the template" in capsys.readouterr().out
+
+
+def test_empty_synced_sha_is_noop(tmp_path, monkeypatch):
+    (tmp_path / "t.json").write_text(json.dumps({"template": "o/t", "synced_sha": ""}))
+    monkeypatch.setattr(mod, "CONFIG", tmp_path / "t.json")
+    assert mod.main() == 0
+
+
+def test_invalid_config_file_exits_1(tmp_path, monkeypatch, capsys):
+    (tmp_path / "t.json").write_text("{")
+    monkeypatch.setattr(mod, "CONFIG", tmp_path / "t.json")
+    assert mod.main() == 1
+    assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_split_overrides_exact_match():
+    changed = [{"path": "AGENTS.md", "status": "modified"}, {"path": "AGENTS.md.bak", "status": "added"},
+               {"path": "tools/a.py", "status": "modified"}]
+    clean, over = mod.split_overrides(changed, [{"path": "AGENTS.md", "why": "project rules"}])
+    assert [c["path"] for c in clean] == ["AGENTS.md.bak", "tools/a.py"]
+    assert over == [{"path": "AGENTS.md", "status": "modified", "why": "project rules"}]
+
+
+def test_render_issue_contents():
+    title, body = mod.render_issue(
+        "c" * 40, [{"path": "tools/a.py", "status": "modified"}],
+        [{"path": "AGENTS.md", "status": "modified", "why": "project rules"}], "2 commits ahead.", "https://x/cmp")
+    assert title == "Template sync ccccccc"
+    assert "`tools/a.py`" in body and "`AGENTS.md` (modified): project rules" in body
+    assert "https://x/cmp" in body
+    assert body.rstrip().endswith("Template-Sync: " + "c" * 40)
+
+
+def test_pick_issue_returns_first_open_only():
+    issues = [{"number": 1, "title": "Other"}, {"number": 2, "title": "Template sync abc1234"},
+              {"number": 3, "title": "Template sync def5678"}]
+    assert mod.pick_issue(issues)["number"] == 2
+    assert mod.pick_issue(issues[:1]) is None
+
+
+def test_bump_changes_only_synced_sha():
+    text = '{\n  "template": "o/t",\n  "synced_sha": "' + SHA + '",\n  "managed": ["tools/"]\n}\n'
+    assert mod.bump(text, "b" * 40) == text.replace(SHA, "b" * 40)
+
+
+def test_parse_config_errors():
+    for bad in ("", "{", "[]", '{"template": ""}', '{"template": "o/t", "synced_sha": "xyz"}',
+                '{"template": "o/t", "managed": "tools/"}', '{"template": "o/t", "overrides": [{"why": "x"}]}'):
+        with pytest.raises(mod.ConfigError):
+            mod.parse_config(bad)
+    assert mod.parse_config('{"template": "o/t", "synced_sha": ""}')["template"] == "o/t"

@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import pathlib
+import sys
 from collections.abc import AsyncGenerator
 
 import pytest
 
 from .fake_shi import FakeSHI
+
+# Template tests import the tools by module name (tools/<name>.py).
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "tools"))
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
