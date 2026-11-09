@@ -101,6 +101,15 @@ jobs:
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
+      # The model cannot match a branch name in its allow list (prefix rules stop at whole words), so the
+      # handover branch is created here; the model only commits and runs `git push origin HEAD`.
+      - name: Handover branch
+        id: handover
+        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        run: |
+          branch="agent/orchestrator-handover-$(date -u +%F)"
+          git checkout -b "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
       - id: started
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -152,10 +161,11 @@ jobs:
                (new issue comment starting with "Rewritten slip:") and re-add agent:dev; otherwise comment in the
                issue asking Daniel for a decision. Do not touch it a third time.
             3. If HANDOVER.md is stale: run `gh pr list --state open --search "head:agent/orchestrator-handover"`
-               and skip if one is open. Else run `date +%F` on its own, create branch
-               agent/orchestrator-handover-<that date> from main (literal date, no shell substitution), overwrite
-               HANDOVER.md (max 60 lines, facts you measured, unknowns marked "open"), run `make check`,
-               commit as Daniel (no Co-authored-by), push and open ONE PR (English, ASCII title, body max 5 lines).
+               and skip if one is open. Else you are already on branch ${{ steps.handover.outputs.branch }}
+               (created from main; do not create or switch branches). Overwrite HANDOVER.md (max 60 lines, facts
+               you measured, unknowns marked "open"), run `make check`, commit as Daniel (no Co-authored-by),
+               push with exactly `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines).
+               To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
             Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects (they do not match
             the allow list and are denied). Use gh's --json/--jq flags instead of pipes.
             Never push to main, never merge, no secrets in comments. Finish with a short status report.
@@ -163,7 +173,7 @@ jobs:
             --model sonnet
             --max-turns 40
             --setting-sources user
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(git checkout -b agent/orchestrator-handover-:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin agent/orchestrator-handover-:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git restore:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"
       # A run with denied tool calls, or with a startable issue and no visible action, must not end green.
       - name: Fail a silent run
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}

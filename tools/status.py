@@ -280,8 +280,8 @@ def section(heading, rows):
     return "\n".join([f"## {heading}", *(rows or ["- none"])])
 
 
-def scheduled_rows(successes, now):
-    late = set(liveness.overdue_runs(successes, now))
+def scheduled_rows(successes, now, added=None):
+    late = set(liveness.overdue_runs(successes, now, added))
     rows = []
     for wf, (label, _) in liveness.SCHEDULED.items():
         last = successes.get(wf)
@@ -290,7 +290,7 @@ def scheduled_rows(successes, now):
     return rows
 
 
-def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner, scheduled=None):
+def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner, scheduled=None, added=None):
     run_rows = [f"- [{r['workflowName']}]({r['url']}) {r.get('displayTitle', '')} ({r['status']}, "
                 f"{age(r['createdAt'], now)})" for r in runs]
     pr_rows = [pr_line(p, owner) for p in prs]
@@ -306,7 +306,7 @@ def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner
              section("Issues with agent:dev", issue_rows), section("Last orchestrator run", [orch]),
              section("Open ideas", idea_rows)]
     if scheduled is not None:
-        parts.append(section("Last successful scheduled runs", scheduled_rows(scheduled, now)))
+        parts.append(section("Last successful scheduled runs", scheduled_rows(scheduled, now, added)))
     parts.append(section("Actions of this run", [f"- {a}" for a in actions]))
     return "\n\n".join(parts) + "\n"
 
@@ -416,10 +416,12 @@ def run_status(env, now, run=gh):
             actions.append(f"conflict PR #{p['number']}: {handle_conflict(p, owner, run)}")
     ages = {i["number"]: age(labeled_at(i), now) for i in issues}
     successes = safe(liveness.last_successes, run)
+    added = {}
     if successes is not None:
-        late, new = liveness.flag_overdue(successes, now, run)
+        added = safe(liveness.added_dates, successes, run) or {}
+        late, new = liveness.flag_overdue(successes, now, run, added)
         actions += [f"overdue run: {label}" for label in late] + [f"opened overdue issue #{n}" for n in new]
-    number = update_issue(build_body(runs, prs, issues, ages, orch, ideas, actions, now, owner, successes), run)
+    number = update_issue(build_body(runs, prs, issues, ages, orch, ideas, actions, now, owner, successes, added), run)
     print(f"status issue #{number}; actions: {len(actions)}")
     for a in actions:
         print(a)

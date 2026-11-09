@@ -64,17 +64,34 @@ def last_successes(run=gh):
     return {wf: last_success(wf, run) for wf in SCHEDULED}
 
 
-def is_overdue(created_at, interval_min, now):
-    """No successful run at all, or older than OVERDUE_FACTOR intervals."""
-    if not created_at:
+def added_at(workflow, run=gh):
+    """When the workflow file was added to the repo (GitHub's created_at), or None if unknown."""
+    try:
+        return run("api", f"repos/{{owner}}/{{repo}}/actions/workflows/{workflow}", "--jq", ".created_at").strip() or None
+    except (subprocess.CalledProcessError, OSError):
+        return None
+
+
+def added_dates(successes, run=gh):
+    """{workflow: created_at} for the scheduled workflows that never succeeded (the grace baseline)."""
+    return {wf: added_at(wf, run) for wf in SCHEDULED if not successes.get(wf)}
+
+
+def is_overdue(created_at, interval_min, now, since=None):
+    """Last success (or, if there is none, the date the workflow was added) older than OVERDUE_FACTOR intervals.
+    No success and no known add date counts as overdue."""
+    ref = created_at or since
+    if not ref:
         return True
-    return (now - _ts(created_at)).total_seconds() / 60 > OVERDUE_FACTOR * interval_min
+    return (now - _ts(ref)).total_seconds() / 60 > OVERDUE_FACTOR * interval_min
 
 
-def overdue_runs(successes, now):
-    """Labels of scheduled workflows that are overdue."""
+def overdue_runs(successes, now, added=None):
+    """Labels of scheduled workflows that are overdue. `added`: {workflow: created_at} for never-run workflows,
+    so a new monthly workflow is not flagged before its first chance to run."""
+    added = added or {}
     return [label for wf, (label, interval) in SCHEDULED.items()
-            if is_overdue((successes.get(wf) or {}).get("createdAt"), interval, now)]
+            if is_overdue((successes.get(wf) or {}).get("createdAt"), interval, now, added.get(wf))]
 
 
 def overdue_title(label):
@@ -93,9 +110,9 @@ def ensure_overdue_issue(label, detail, run=gh):
     return out.strip().rsplit("/", 1)[-1]
 
 
-def flag_overdue(successes, now, run=gh):
+def flag_overdue(successes, now, run=gh, added=None):
     """One issue per overdue run, none for runs that already have one. Returns (overdue labels, new issue numbers)."""
-    late = overdue_runs(successes, now)
+    late = overdue_runs(successes, now, added)
     new = [n for n in (ensure_overdue_issue(label, "Check the workflow runs.", run) for label in late) if n]
     return late, new
 
