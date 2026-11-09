@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 # Install the pinned tools that `make check` and CI use. Used by Validate, agent-dev and agent-fix.
-# Bump versions here only; one place for every workflow.
-#   install_tools.sh        everything: ruff, pytest-timeout, requirements_test.txt, actionlint, zizmor
-#   install_tools.sh lint   only actionlint and zizmor (workflow lint job, no test dependencies)
+# ruff and zizmor are pinned in requirements-lint.txt (Dependabot's pip ecosystem reads it). actionlint is pinned here
+# together with its SHA-256; bump both (the checksum is in the release's actionlint_<version>_checksums.txt).
+#   install_tools.sh        everything: ruff, zizmor, pytest-timeout, requirements_test.txt, actionlint
+#   install_tools.sh lint   only the lint tools (ruff, zizmor, actionlint; workflow lint job, no test dependencies)
 set -euo pipefail
-RUFF=0.17.4
-ZIZMOR=1.5.2
 ACTIONLINT=1.7.7
+# The override exists only to test that a wrong checksum fails the install.
+ACTIONLINT_SHA256="${ACTIONLINT_SHA256_OVERRIDE:-023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757}"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [ "${1:-}" = lint ]; then
-  pip install "zizmor==$ZIZMOR"
+  pip install -r "$root/requirements-lint.txt"
 else
-  pip install "ruff==$RUFF" "zizmor==$ZIZMOR" pytest-timeout
+  pip install -r "$root/requirements-lint.txt" pytest-timeout
   for f in requirements.txt requirements_test.txt; do
     if [ -f "$f" ]; then pip install -r "$f"; fi
   done
 fi
 dir="${RUNNER_TEMP:-/tmp}/actionlint"
 mkdir -p "$dir"
-curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT}/actionlint_${ACTIONLINT}_linux_amd64.tar.gz" \
-  | tar -xz -C "$dir" actionlint
+tarball="$dir/actionlint.tar.gz"
+curl -fsSL -o "$tarball" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT}/actionlint_${ACTIONLINT}_linux_amd64.tar.gz"
+echo "${ACTIONLINT_SHA256}  $tarball" | sha256sum -c -
+tar -xz -C "$dir" -f "$tarball" actionlint
 if [ -n "${GITHUB_PATH:-}" ]; then echo "$dir" >> "$GITHUB_PATH"; fi

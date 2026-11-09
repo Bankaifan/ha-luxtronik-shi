@@ -20,6 +20,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
   *Validate* now also runs on `workflow_dispatch` and on pushes to `main` and `v*` tags only. No change for users.
 - *Validate* pins `home-assistant/actions/hassfest` and `hacs/action` to commit SHAs instead of the `master` and `main`
   branches (issue #77), so Dependabot can propose updates. No change for users.
+- The ruff and zizmor pins moved from `tools/ci/install_tools.sh` into `requirements-lint.txt`, so Dependabot's pip
+  ecosystem proposes updates; the actionlint tarball is verified against a pinned SHA-256 before extraction (issue #78).
+  No change for users.
 
 ### Documentation
 

@@ -1,0 +1,4 @@
+# Lint tools pinned for CI and make check (installed by tools/ci/install_tools.sh).
+# Lives in a requirements file so the Dependabot pip ecosystem opens update PRs for it.
+ruff==0.17.4
+zizmor==1.5.2
