@@ -59,6 +59,22 @@ jobs:
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
+      # A template sync issue (line `Template-Sync: <40 hex>`) needs the template files: the developer has no tool to
+      # fetch them. Download the template (repo from .agents/template.json, public) at that SHA into .template/,
+      # kept out of git via .git/info/exclude. Only a 40-hex SHA from the issue is used; nothing else from it.
+      - name: Template files for a sync issue
+        id: template
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          sha=$(printf '%s\n' "$ISSUE_BODY" | tr -d '\r' | grep -oE '^Template-Sync: [0-9a-f]{40}$' | tail -1 | cut -d' ' -f2 || true)
+          tpl=$(python3 -c 'import json; print(json.load(open(".agents/template.json")).get("template", ""))' 2>/dev/null || true)
+          if [ -z "$sha" ] || ! [[ "$tpl" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then echo "No template sync"; exit 0; fi
+          mkdir -p .template
+          curl -fsSL "https://codeload.github.com/$tpl/tar.gz/$sha" | tar -xz --strip-components=1 -C .template
+          echo ".template/" >> .git/info/exclude
+          echo "dir=.template" >> "$GITHUB_OUTPUT"
+          echo "Template $tpl at $sha in .template/"
       - id: started
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - id: claude
@@ -79,6 +95,8 @@ jobs:
             `gh pr create` (English ASCII title, body max 5 lines, "Closes #${{ env.ISSUE }}").
             Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
             comment on the issue/PR saying which one instead of stopping silently.
+            Template sync issue: the template files at the issue's `Template-Sync` SHA are in .template/
+            (${{ steps.template.outputs.dir || 'not present: this is no sync issue' }}). Read them from there, never commit .template/.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 60
