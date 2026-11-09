@@ -14,6 +14,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 ### Documentation
 
 - Installation now leads with the HACS default catalog search; adding the repository by link stays as a fallback.
+- One-click buttons (My Home Assistant) to open the integration in HACS and to start its setup.
 
 ## [0.18.0] – 2026-11-09
 

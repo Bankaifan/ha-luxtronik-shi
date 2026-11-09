@@ -40,6 +40,12 @@ Other Luxtronik controllers with SHI should work but are untested. If yours work
 
 The integration is in the HACS default catalog.
 
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Bankaifan&repository=ha-luxtronik-shi&category=integration)
+[![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=luxtronik_shi)
+
+One click: the first button opens the integration in HACS of your Home Assistant, the second sets it up after the
+installation and restart (both via My Home Assistant).
+
 **Home Assistant 2026.11 or newer (Marketplace):** **Settings → Marketplace**, search for "Luxtronik SHI", install
 "Luxtronik SHI (Modbus)", restart Home Assistant.
 
