@@ -11,6 +11,12 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Changed
+
+- Writable temperature numbers (heating, hot water, mixing circuits 1-3 heat/cool, overall offset) use a 0.1 K step
+  instead of 0.5, as the firmware ranges allow (issue #83). Optimizers writing e.g. return + 0.5 K are no longer
+  rounded to the coarse step. Keys, unique IDs, platforms and ranges are unchanged.
+
 ### Development
 
 - ADR 0002 proposes moving the protocol code into a PyPI library (design only, no code change, no release).
