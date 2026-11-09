@@ -27,6 +27,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
   temperatures, and the circulation run is shown by the pump output *Pump: circulation (ZIP)*, not a
   "circulation: run active" sensor that does not exist.
 
+### Fixed
+
+- The pymodbus floor is one story again: the manifest, the test requirements and CI all use pymodbus 3.9 (`>=3.9.0`).
+  The fallbacks for the 3.9 API (`slave` keyword, reconnect counting without a connect trace) are covered by tests
+  that run on every pymodbus version. Test requirements no longer pin pymodbus 3.16; the minimum Home Assistant job
+  runs on pymodbus 3.9.2, the latest one on the pymodbus of the newest Home Assistant. No change for users.
+
 ## [0.18.0] – 2026-11-09
 
 This version corrects entity models of 0.17.0 that misled, based on the full analysis of the SHI firmware V3.92.3
