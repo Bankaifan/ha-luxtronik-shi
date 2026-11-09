@@ -18,6 +18,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
   orchestrator, Dependabot), `AGENTS.md` as the single source of working rules (`CLAUDE.md` imports it), `make check`
   mirroring *Validate*, workflow lint (actionlint, zizmor, gitleaks) as an extra *Validate* job, generator drift check.
   *Validate* now also runs on `workflow_dispatch` and on pushes to `main` and `v*` tags only. No change for users.
+- *Validate* pins `home-assistant/actions/hassfest` and `hacs/action` to commit SHAs instead of the `master` and `main`
+  branches (issue #77), so Dependabot can propose updates. No change for users.
 
 ### Documentation
 

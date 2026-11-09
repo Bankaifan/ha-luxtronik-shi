@@ -13,6 +13,9 @@ Agent system (from Bankaifan/agent-template) ported into this repository: PR `in
 - pymodbus floor (issue #76, option b): manifest, test requirements and CI use pymodbus 3.9 (`>=3.9.0`). The
   tests-min-ha job runs on pymodbus 3.9.2 (what HA 2025.8 ships). The 3.9 API fallbacks in `modbus_client.py` are
   covered by fake-client tests in `tests/test_client.py`. Dependabot ignores pymodbus in the pip group.
+- Validate pins `home-assistant/actions/hassfest` and `hacs/action` to commit SHAs (issue #77, PR pending). The SHAs
+  are the commits `master` / `main` pointed to on 2026-11-09, not upstream tags (hassfest's only tag is 1.0.0, HACS's
+  is 22.5.0). `tests/test_workflow_pins.py` guards against branch refs.
 
 ## Open
 - Entity IDs still carry old names for entities whose keys were renamed; the entity IDs should be renamed to the
@@ -30,3 +33,5 @@ Agent system (from Bankaifan/agent-template) ported into this repository: PR `in
 ## Known traps
 - The ruleset file is not applied automatically; re-import it when `.github/rulesets/main.json` changes.
 - Required checks are the job ids of `Validate`; renaming a job needs a ruleset update.
+- Expected, not yet measured: Dependabot proposes bumps for these SHA pins only when upstream publishes newer tags
+  (it follows tags, not branches). Until then, check the upstream repos by hand.
