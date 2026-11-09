@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
+from custom_components.luxtronik_shi import sensor as sensor_module
 from custom_components.luxtronik_shi.registers import (
     COP_MAX_PLAUSIBLE,
     COP_MIN_ELECTRIC_ENERGY_KWH,
@@ -15,6 +18,30 @@ from custom_components.luxtronik_shi.registers import (
 
 from .fake_shi import FakeSHI
 from .test_integration import _entity_id, _setup
+
+
+class Clock:
+    """Controllable replacement for dt_util.utcnow, which stamps the COP samples in the sensor module.
+
+    The pytest freezer is not used: it also freezes the monotonic clock that asyncio and pymodbus rely on, and a
+    real connection then never gives up its retry loop (pymodbus 3.9 hangs; see tests/test_repairs.py).
+    """
+
+    def __init__(self) -> None:
+        self.now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    def tick(self, seconds: float) -> None:
+        self.now += timedelta(seconds=seconds)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    fake = Clock()
+    monkeypatch.setattr(sensor_module.dt_util, "utcnow", fake)
+    return fake
 
 
 async def _refresh(hass: HomeAssistant, entry) -> None:
@@ -136,18 +163,18 @@ def test_overall_unknown(thermal, electric, previous) -> None:
 # ------------------------------------------------------------------ entities
 
 
-async def _run_entity(hass, entry, freezer, polls: int) -> None:
+async def _run_entity(hass, entry, clock, polls: int) -> None:
     for _ in range(polls):
-        freezer.tick(30)
+        clock.tick(30)
         await entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
 
 
-async def test_cop_entities_with_simulated_values(hass: HomeAssistant, shi: FakeSHI, freezer) -> None:
+async def test_cop_entities_with_simulated_values(hass: HomeAssistant, shi: FakeSHI, clock) -> None:
     entry = await _setup(hass, shi)
     # 10300 = 12 -> 1200 W thermal, 10301 = 5 -> 500 W electric; the window needs 60 Wh = 7.2 minutes at 500 W
     assert _state(hass, entry, "cop") == "unknown"
-    await _run_entity(hass, entry, freezer, 30)
+    await _run_entity(hass, entry, clock, 30)
     assert float(_state(hass, entry, "cop")) == pytest.approx(2.4)
     # heating: 15.0 kWh thermal / 10.0 kWh electric; hot water: 7.0 / 5.0
     assert float(_state(hass, entry, "cop_heating")) == pytest.approx(1.5)
@@ -174,7 +201,7 @@ def test_cop_sources_are_existing_registers_and_add_none() -> None:
 
 
 async def test_cop_entity_ignores_a_start_spike_and_goes_unknown_when_idle(
-    hass: HomeAssistant, shi: FakeSHI, freezer
+    hass: HomeAssistant, shi: FakeSHI, clock
 ) -> None:
     shi.input[10300] = 0
     shi.input[10301] = 0
@@ -182,18 +209,18 @@ async def test_cop_entity_ignores_a_start_spike_and_goes_unknown_when_idle(
     assert _state(hass, entry, "cop") == "unknown"
     shi.input[10300] = 80  # 8000 W thermal while electric power is still 1000 W: per-sample COP 8.0
     shi.input[10301] = 10
-    await _run_entity(hass, entry, freezer, 1)
+    await _run_entity(hass, entry, clock, 1)
     assert _state(hass, entry, "cop") == "unknown"
     shi.input[10300] = 50
     shi.input[10301] = 12
     for _ in range(20):
-        await _run_entity(hass, entry, freezer, 1)
+        await _run_entity(hass, entry, clock, 1)
         state = _state(hass, entry, "cop")
         assert state == "unknown" or float(state) < 6.0
     assert float(_state(hass, entry, "cop")) == pytest.approx(5000 / 1200, rel=0.05)
     shi.input[10300] = 0
     shi.input[10301] = 0
-    await _run_entity(hass, entry, freezer, 40)  # 20 minutes of standstill
+    await _run_entity(hass, entry, clock, 40)  # 20 minutes of standstill
     assert _state(hass, entry, "cop") == "unknown"
 
 

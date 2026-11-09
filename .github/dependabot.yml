@@ -14,3 +14,7 @@ updates:
     groups:
       python:
         patterns: ["*"]
+    # The pymodbus floor is the manifest's (>=3.9.0). Newer versions reach the tests through Home Assistant's own pin
+    # (tests-min-ha / tests-latest-ha), so Dependabot does not raise it on its own.
+    ignore:
+      - dependency-name: "pymodbus"

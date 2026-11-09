@@ -114,15 +114,18 @@ jobs:
           python-version: "3.13"
       # pytest-homeassistant-custom-component pins exactly one Home Assistant release, so pip picks the matching plugin.
       # pycares 5 is incompatible with aiodns 3.5.0 (pinned by Home Assistant 2025.8), hence the upper bound.
+      # pymodbus 3.9.2 is what Home Assistant 2025.8 ships: the manifest floor (>=3.9.0) is tested with it.
       - name: Install test dependencies for the minimum Home Assistant version
         run: |
           min_ha="$(python -c 'import json; print(json.load(open("hacs.json"))["homeassistant"])')"
           echo "Minimum Home Assistant version from hacs.json: $min_ha"
-          pip install -r requirements_test.txt pytest-timeout "homeassistant==$min_ha" "pycares<5"
+          pip install -r requirements_test.txt pytest-timeout "homeassistant==$min_ha" "pycares<5" "pymodbus==3.9.2"
       - run: python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
+      - run: python -c "import pymodbus; print('pymodbus', pymodbus.__version__)"
       - run: pytest --timeout=60
 
   # Same tests against the newest Home Assistant test harness (newer Python), to catch API changes early.
+  # pymodbus is not installed by the test harness itself, so it is pinned here to the newest 3.x release line.
   tests-latest-ha:
     runs-on: ubuntu-latest
     steps:
@@ -134,4 +137,5 @@ jobs:
           python-version: "3.14"
       - run: pip install --upgrade pytest-homeassistant-custom-component "pymodbus>=3.9,<4" pytest-timeout
       - run: python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
+      - run: python -c "import pymodbus; print('pymodbus', pymodbus.__version__)"
       - run: pytest --timeout=120
