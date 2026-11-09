@@ -631,8 +631,10 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   es ändert sich nur das Ende der Unique-ID.
 * **Verfügbarkeits-Flags umbenannt (0.18.0):** `cap_heating` heißt jetzt `heating_available` und `cap_hot_water`
   jetzt `hot_water_available` (Discrete Inputs 10000/10001: an, solange der Teil ausgestattet **und** die Betriebsart
-  der Regelung dafür nicht *Aus* ist; belegt). Die Registry-Einträge werden übertragen, Entity-IDs, Verlauf und
-  Einstellungen bleiben erhalten.
+  der Regelung dafür nicht *Aus* ist; belegt). Die Registry-Einträge werden übertragen, Verlauf und Einstellungen
+  bleiben erhalten. Eine Entity-ID, die aus dem alten Namen erzeugt wurde (z. B. `..._ausstattung_heizen`), wird
+  automatisch auf den neuen Namen umbenannt; selbst gewählte IDs oder bereits belegte Ziel-IDs bleiben unverändert
+  (das Log nennt es).
 * **Pool-Sperre und Leistungsbegrenzung:** Der Schalter für die Pool-Sperre (Register 10053) existiert nur mit gewähltem
   Pool. Die Leistungsbegrenzung besteht aus einer Auswahl für den Modus (keine / weich / hart, Register 10040) und einer
   Zahl für den Wert (0–30 kW, Register 10041).

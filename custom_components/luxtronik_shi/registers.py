@@ -860,6 +860,14 @@ RENAMED_KEYS: dict[str, str] = {
     "cap_hot_water": "hot_water_available",
 }
 
+# Display names (German, English) that the renamed keys had before 0.18.0, for the entities whose name changed with
+# the key (the demand borders and ``raw_10113`` kept their names). ``async_migrate_renamed_entity_ids`` uses them to
+# tell an auto-generated entity ID from one the user chose.
+RENAMED_KEY_OLD_NAMES: dict[str, tuple[str, str]] = {
+    "cap_heating": ("Ausstattung: Heizen", "Equipment: heating"),
+    "cap_hot_water": ("Ausstattung: Warmwasser", "Equipment: hot water"),
+}
+
 # Raw values are disabled by default; handy for analysis and for reverse engineering of new firmware versions.
 # The proven digital outputs and inputs 10350-10356, 10360 and 10361 were raw values up to 0.17.x; since 0.18.0
 # they are only the binary sensors ``OUTPUT_FLAGS`` (REMOVED_KEYS).

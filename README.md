@@ -582,7 +582,9 @@ those who deliberately stay on YAML, no longer used in production and not tested
   changes.
 * **Availability flags renamed (0.18.0):** `cap_heating` is now `heating_available` and `cap_hot_water` is now
   `hot_water_available` (discrete inputs 10000/10001: on while the part is equipped **and** the controller's operating
-  mode for it is not *off*; proven). The registry entries move over, so entity IDs, history and settings stay.
+  mode for it is not *off*; proven). The registry entries move over, so history and settings stay. An entity ID
+  that was generated from the old name (e.g. `..._equipment_heating`) is renamed automatically to the new name; an ID
+  you chose yourself, or one whose new name is already taken, is left alone (the log says so).
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve
