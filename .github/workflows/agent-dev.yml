@@ -24,11 +24,11 @@ jobs:
       ISSUE: ${{ github.event.issue.number }}
     steps:
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTHOR_APP_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
-      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+      - uses: actions/checkout@v7  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
         with:
           token: ${{ steps.app.outputs.token }}
           fetch-depth: 0
@@ -36,7 +36,7 @@ jobs:
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)

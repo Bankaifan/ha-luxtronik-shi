@@ -22,7 +22,7 @@ jobs:
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
     steps:
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTHOR_APP_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
