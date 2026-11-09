@@ -38,18 +38,23 @@ Other Luxtronik controllers with SHI should work but are untested. If yours work
 
 ## Installation
 
-The integration is not in the HACS default catalog yet (the request is pending), so it is added by link.
+The integration is in the HACS default catalog.
 
-**Home Assistant 2026.11 or newer (Marketplace):**
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Bankaifan&repository=ha-luxtronik-shi&category=integration)
+[![Add integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=luxtronik_shi)
 
-1. **Settings → Marketplace → Add from link** → `https://github.com/Bankaifan/ha-luxtronik-shi`. Adding a repository by
-   link needs a GitHub connection (device sign-in, read-only access to public data).
-2. Install "Luxtronik SHI (Modbus)", restart Home Assistant.
+One click: the first button opens the integration in HACS of your Home Assistant, the second sets it up after the
+installation and restart (both via My Home Assistant).
 
-**Older Home Assistant (HACS):**
+**Home Assistant 2026.11 or newer (Marketplace):** **Settings → Marketplace**, search for "Luxtronik SHI", install
+"Luxtronik SHI (Modbus)", restart Home Assistant.
 
-1. HACS → ⋮ → **Custom repositories** → `https://github.com/Bankaifan/ha-luxtronik-shi`, category **Integration**.
-2. Install "Luxtronik SHI (Modbus)", restart Home Assistant.
+**Older Home Assistant (HACS):** open HACS, search for "Luxtronik SHI", install "Luxtronik SHI (Modbus)", restart
+Home Assistant.
+
+**Fallback (if the search does not find it yet):** add the repository by link (Marketplace → **Add from link**, needs a
+GitHub connection) or in HACS → ⋮ → **Custom repositories**, category **Integration**:
+`https://github.com/Bankaifan/ha-luxtronik-shi`.
 
 **Then, in both cases:**
 
