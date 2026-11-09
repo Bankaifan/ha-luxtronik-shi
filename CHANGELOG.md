@@ -13,6 +13,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ### Development
 
+- ADR 0002 proposes moving the protocol code into a PyPI library (design only, no code change, no release).
 - Agent system for maintaining the repository (workflows for developer, reviewer, fix rounds, auto-merge, scout,
   orchestrator, Dependabot), `AGENTS.md` as the single source of working rules (`CLAUDE.md` imports it), `make check`
   mirroring *Validate*, workflow lint (actionlint, zizmor, gitleaks) as an extra *Validate* job, generator drift check.
