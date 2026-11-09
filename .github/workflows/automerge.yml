@@ -29,6 +29,8 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       # Design PRs (docs/design/) never auto-merge: the design reviewer approves; Daniel merges
       # (or the orchestrator when Owner decisions is empty).
       - name: Refuse design PRs

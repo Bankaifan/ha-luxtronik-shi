@@ -45,11 +45,15 @@ jobs:
         with:
           client-id: ${{ vars.APPROVER_CLIENT_ID }}
           private-key: ${{ secrets.APPROVER_APP_KEY }}
+          permission-pull-requests: write
+          permission-issues: write
       - id: author
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       # Metadata of the update (also for grouped PRs). If the action cannot read the PR from a
       # workflow_run event it fails softly and the script falls back to the title (open: not verified).
       - id: meta
