@@ -22,11 +22,11 @@ jobs:
       MODEL: ${{ inputs.model || 'haiku' }}
     steps:
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTHOR_APP_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
-      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+      - uses: actions/checkout@v7  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
         with:
           token: ${{ steps.app.outputs.token }}
           fetch-depth: 0

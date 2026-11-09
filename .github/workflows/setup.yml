@@ -35,7 +35,7 @@ jobs:
           fi
       - id: app
         if: steps.check.outputs.author == 'true'
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTHOR_APP_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}

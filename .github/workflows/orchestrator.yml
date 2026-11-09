@@ -31,7 +31,7 @@ jobs:
       SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.AUTHOR_APP_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
@@ -47,7 +47,7 @@ jobs:
             echo "Only HANDOVER.md changed: nothing to do"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+      - uses: actions/checkout@v7  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
         if: steps.gate.outputs.skip != 'true'
         with:
           token: ${{ steps.app.outputs.token }}

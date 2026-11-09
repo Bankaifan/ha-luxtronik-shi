@@ -26,7 +26,7 @@ jobs:
       APPROVER_BOT: ${{ vars.APPROVER_BOT }}
     steps:
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APPROVER_APP_ID }}
           private-key: ${{ secrets.APPROVER_APP_KEY }}
@@ -64,7 +64,7 @@ jobs:
           esac
           echo "pr=$num" >> "$GITHUB_OUTPUT"
       # main only, never the PR head.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.round.outputs.skip != 'true'
         with:
           persist-credentials: false

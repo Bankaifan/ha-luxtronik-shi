@@ -20,7 +20,7 @@ jobs:
   hassfest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: home-assistant/actions/hassfest@master
@@ -31,7 +31,7 @@ jobs:
       contents: read
       pull-requests: write  # the HACS action posts its results as a PR comment
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: hacs/action@main
@@ -41,11 +41,11 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: python tools/check_version.py "$GIT_REF"
@@ -65,10 +65,10 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: pip install -r requirements_test.txt pytest-timeout ruff
@@ -86,17 +86,17 @@ jobs:
       contents: read
       pull-requests: read  # gitleaks lists the commits of a pull request
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Install pinned tools
         run: bash tools/ci/install_tools.sh lint
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - run: actionlint
@@ -106,10 +106,10 @@ jobs:
   tests-min-ha:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       # pytest-homeassistant-custom-component pins exactly one Home Assistant release, so pip picks the matching plugin.
@@ -126,10 +126,10 @@ jobs:
   tests-latest-ha:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - run: pip install --upgrade pytest-homeassistant-custom-component "pymodbus>=3.9,<4" pytest-timeout
