@@ -111,7 +111,7 @@ jobs:
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
             --model ${{ env.MODEL }}
-            --max-turns 30
+            --max-turns 200
             --setting-sources user
             --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(python3 tools/idea_route.py create:*),Bash(gh label create:*),Bash(gh api repos/${{ github.repository }}/dependabot/alerts?state=open),Bash(gh api repos/${{ github.repository }}/code-scanning/alerts?state=open)"

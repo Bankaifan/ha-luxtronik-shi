@@ -3,6 +3,9 @@ on:
   pull_request_review:
     types: [submitted]
   # A security-review that finishes after the approval must still be able to release the merge.
+  # GitHub cannot filter `status` by context before a run exists, so every commit status creates one run that the job
+  # `if:` below skips at once (no runner, no token). workflow_run was rejected: it fires on every completion of the
+  # risk and security-review workflows, not only on success, and the success status is posted by two workflows.
   status:  # zizmor: ignore[dangerous-triggers] runs from main, never checks out PR code, only enables auto-merge
 permissions:
   contents: read
