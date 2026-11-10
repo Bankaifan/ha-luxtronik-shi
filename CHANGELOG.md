@@ -17,6 +17,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
   at setup, but only while they still carry the generated old name: `binary_sensor.warmepumpe_ausstattung_heizen`
   becomes `binary_sensor.warmepumpe_heating_available_equipped_mode_not_off`, and
   `binary_sensor.warmepumpe_ausstattung_warmwasser` becomes `binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off`.
+  On a German-language Home Assistant the new ID is derived from the German name instead: `binary_sensor.warmepumpe_heizen_verfugbar_ausgestattet_betriebsart_nicht_aus`
+  and `binary_sensor.warmepumpe_warmwasser_verfugbar_ausgestattet_betriebsart_nicht_aus`.
   Automations and dashboards that reference the old IDs must be updated to the new ones. User-chosen IDs and IDs whose
   target is already taken are not renamed (see the log); for those, nothing changes (issue #103).
 
@@ -24,10 +26,6 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 * The orchestrator workflow installs the CI tools before its run and tells the model to use a plain `git commit`,
   so runs no longer end silently with denied tool calls (issue #104).
-
-* The entity IDs of `heating_available` and `hot_water_available` (were `cap_heating`, `cap_hot_water`) are renamed
-  automatically at setup when they still carry the generated old name; user-chosen IDs and taken targets are skipped,
-  each rename and skip is logged, a second run does nothing (issue #101).
 
 * Agent system and CI brought up to `Bankaifan/agent-template` (`dd4dfcd`) and connected to its weekly template sync
   (`.agents/template.json`). The CI workflow is now named `validate` (job names and required checks unchanged); new
