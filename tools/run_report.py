@@ -166,8 +166,9 @@ def report(workflow, env=None, run=liveness.gh):
         token = env.get("TEMPLATE_GH_TOKEN")
         if token:
             other = repo
-            issue_run = lambda *a: subprocess.run(["gh", *a], check=True, capture_output=True, text=True,
-                                                  env={**os.environ, "GH_TOKEN": token}).stdout
+            def issue_run(*a):
+                return subprocess.run(["gh", *a], check=True, capture_output=True, text=True,
+                                      env={**os.environ, "GH_TOKEN": token}).stdout
     new = [ensure_denial_issue(workflow, k, repo=other, run=issue_run) for k in required_denials(workflow, text)]
     return body, [n for n in new if n]
 

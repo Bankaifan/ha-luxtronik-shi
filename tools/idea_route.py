@@ -80,7 +80,8 @@ def found_in(project, context):
 
 
 def is_duplicate(title, open_titles):
-    norm = lambda s: " ".join(s.lower().split())
+    def norm(s):
+        return " ".join(s.lower().split())
     return norm(title) in {norm(t) for t in open_titles}
 
 
