@@ -104,6 +104,16 @@ jobs:
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        with:
+          python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
+      # `make check` needs ruff, pytest, actionlint and zizmor; without them the run was denied and ended silently.
+      - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
+        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        env:
+          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
+        run: bash tools/ci/install_tools.sh
       # The model cannot match a branch name in its allow list (prefix rules stop at whole words), so the
       # handover branch is created here; the model only commits and runs `git push origin HEAD`.
       - name: Handover branch
@@ -169,6 +179,9 @@ jobs:
                you measured, unknowns marked "open"), run `make check`, commit as Daniel (no Co-authored-by),
                push with exactly `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines).
                To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
+            The git identity (user.name, user.email) is already configured and the tools for `make check` are
+            installed. Commit with a plain `git commit -m "..."`: never `git -c ...` and never a `cd` prefix
+            (they do not match the allow list and are denied).
             Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects (they do not match
             the allow list and are denied). Use gh's --json/--jq flags instead of pipes.
             Never push to main, never merge, no secrets in comments. Finish with a short status report.
