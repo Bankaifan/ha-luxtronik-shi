@@ -237,7 +237,7 @@ async def test_unused_sub_devices_can_be_removed(hass: HomeAssistant, shi: FakeS
     assert await async_remove_config_entry_device(hass, entry, device(None)) is False
 
 
-def _entity_ids(hass: HomeAssistant, entry: MockConfigEntry, key: str) -> tuple[str, str]:
+def _entity_ids(hass: HomeAssistant, entry: MockConfigEntry, key: str) -> tuple[er.EntityRegistry, str]:
     registry = er.async_get(hass)
     new = BY_KEY[key]
     entity_id = registry.async_get_entity_id(new.platform, DOMAIN, f"{entry.entry_id}_{key}")

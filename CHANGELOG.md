@@ -11,6 +11,15 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Action required
+
+* The entity IDs of `heating_available` and `hot_water_available` (were `cap_heating`, `cap_hot_water`) are renamed
+  at setup, but only while they still carry the generated old name: `binary_sensor.warmepumpe_ausstattung_heizen`
+  becomes `binary_sensor.warmepumpe_heating_available_equipped_mode_not_off`, and
+  `binary_sensor.warmepumpe_ausstattung_warmwasser` becomes `binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off`.
+  Automations and dashboards that reference the old IDs must be updated to the new ones. User-chosen IDs and IDs whose
+  target is already taken are not renamed (see the log); for those, nothing changes (issue #103).
+
 ### Changed
 
 * The entity IDs of `heating_available` and `hot_water_available` (were `cap_heating`, `cap_hot_water`) are renamed
