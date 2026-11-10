@@ -90,10 +90,10 @@ jobs:
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
             --model ${{ env.MODEL }}
-            --max-turns 30
+            --max-turns 200
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(make:*),Bash(date:*),Bash(wc:*),Bash(ls:*),Bash(rm:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(make check),Bash(date:*),Bash(wc:*),Bash(ls:*)"
       - name: Run report (script, no model)
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
         env:

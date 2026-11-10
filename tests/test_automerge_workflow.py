@@ -166,6 +166,13 @@ def test_security_gate_waits_without_error_unless_success(tmp_path, label, state
     assert ("wait=true" in out.read_text()) is wait
 
 
+def test_status_runs_are_skipped_by_the_job_filter_and_documented():
+    text = _text()
+    assert "GitHub cannot filter `status` by context" in text
+    # The filter keeps the exact context and state; other statuses never reach a runner.
+    assert "github.event_name == 'status' && github.event.context == 'security-review'" in text
+
+
 def test_merge_step_is_skipped_while_waiting_and_status_event_reruns():
     text = _text()
     assert "steps.gate.outputs.wait != 'true'" in text

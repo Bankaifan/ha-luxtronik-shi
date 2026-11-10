@@ -29,3 +29,15 @@ def test_allow_list_has_no_branch_commands_and_keeps_commit_and_push():
         assert f"Bash({call}" not in ALLOWED, call
     assert "Bash(git commit:*)" in ALLOWED
     assert "Bash(git push origin HEAD)" in ALLOWED
+
+
+def test_allow_list_is_exact_and_has_no_make_wildcard_or_rm():
+    assert "make:*" not in ALLOWED
+    assert "rm:*" not in ALLOWED
+    assert ALLOWED.split(",") == [
+        "Read", "Glob", "Grep", "Edit", "Write",
+        "Bash(gh pr list:*)", "Bash(gh pr view:*)", "Bash(gh issue list:*)", "Bash(gh issue view:*)",
+        "Bash(git add:*)", "Bash(git commit:*)", "Bash(git push origin HEAD)",
+        "Bash(git status:*)", "Bash(git diff:*)", "Bash(gh pr create:*)",
+        "Bash(make check)", "Bash(date:*)", "Bash(wc:*)", "Bash(ls:*)",
+    ]
