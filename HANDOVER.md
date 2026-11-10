@@ -18,7 +18,11 @@ routine work: issue -> dev -> review -> merge, with Daniel deciding only what ne
 - hassfest and HACS actions are pinned to commit SHAs (#77, PR #80); `tests/test_workflow_pins.py` guards it. Closed.
 - Orchestrator runs no longer end silently: CI tools are installed first, plain `git commit` is required (#104, PR #107).
 
+- Issue #118 (prio:1, orchestrator runs ending silently after denied tool calls): slip written 2026-11-10, `agent:dev` set.
+  No open PRs at that time; main CI had no red run in the last 10 runs.
+
 ## Open
+- #118: root cause of the denied call is open (run 42889616904); the developer reads the log.
 - ADR 0003 (entity ID rename): Daniel's approval is still marked open in the file.
 - Next release not cut yet; it carries the entity ID rename, so the release notes must lead with *Action required*.
 - Agent setup not verified for everything: rule keeper and weekly summary have never run (status issue #89).
