@@ -62,13 +62,35 @@ def test_error_stages_full_diff(tmp_path):
     assert staged == diff
 
 
-def test_unsafe_paths_are_skipped(tmp_path):
+def test_unsafe_paths_stay_in_diff_but_are_not_fetched(tmp_path):
     diff = block("tools/x.py") + block("tools/../evil.py") + block("/tools/abs.py")
     seen = []
     _, staged, skipped = run(tmp_path, diff, lambda p: seen.append(p) or "x")
     assert seen == ["tools/x.py"]
-    assert "evil.py" not in staged and "abs.py" not in staged
-    assert "tools/../evil.py\tunsafe path" in skipped and "/tools/abs.py\tunsafe path" in skipped
+    assert "evil.py" in staged and "abs.py" in staged
+    assert skipped == ""
+
+
+def test_quoted_non_ascii_path_under_github_is_staged(tmp_path):
+    q = '"a/.github/workflows/\\303\\244.yml" "b/.github/workflows/\\303\\244.yml"'
+    quoted = f"diff --git {q}\nindex 1..2 100644\n--- {q.split(' ')[0]}\n+++ {q.split(' ')[1]}\n@@ -1,1 +1,1 @@\n+new\n"
+    seen = []
+    _, staged, skipped = run(tmp_path, block("docs/a.md") + quoted, lambda p: seen.append(p) or "x")
+    assert quoted in staged and "docs/a.md" not in staged
+    assert seen == [".github/workflows/ä.yml"]
+    assert skipped == "docs/a.md\tmodified\t+1/-0\n"
+
+
+def test_parse_header_forms():
+    from_risk = sr.risk.parse_header
+    assert from_risk("diff --git a/x y b/x y\n") == ("x y", "x y")
+    assert from_risk('diff --git "a/\\303\\244\\t\\"q\\"" b/plain') == ('ä\t"q"', "plain")
+    assert from_risk("diff --git garbage") == ("", "")
+
+
+def test_risk_classifies_quoted_workflow_path():
+    q = '"a/.github/workflows/\\303\\244.yml" "b/.github/workflows/\\303\\244.yml"'
+    assert sr.risk.classify(f"diff --git {q}\n--- a\n+++ b\n@@ -1 +1 @@\n+x\n") == "infra"
 
 
 def test_main_prints_turns(tmp_path, monkeypatch, capsys):

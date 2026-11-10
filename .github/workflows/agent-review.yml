@@ -146,7 +146,7 @@ jobs:
             Do not push or edit files.
           claude_args: >-
             --model sonnet
-            --max-turns 12
+            --max-turns 20
             --setting-sources user
             --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr review:*),Bash(gh issue view:*)"
