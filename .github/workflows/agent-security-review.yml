@@ -1,4 +1,5 @@
 name: agent-security-review
+run-name: "security-review: ${{ github.event.workflow_run.display_title || github.event.workflow_run.head_branch }}"
 # Separate run (sonnet, own role) for agent PRs classified infra/security by tools/ci/risk.py. It only asks whether
 # anyone gains rights, a check gets weaker or untrusted input can reach a model or a token, and reports the
 # status `security-review` (required by the ruleset). PRs that do not need it get that status from the `risk` workflow.
@@ -76,6 +77,21 @@ jobs:
             echo "Already reviewed $SHA"; skip
           fi
           { echo "num=$num"; echo "level=$level"; } >> "$GITHUB_OUTPUT"
+      # The change as plain files, so the reviewer reads it with Read instead of shell output that can be cut off or
+      # denied (#267). tools/ci/stage_review.py (design 0010) keeps the security-relevant files in pr.diff, lists the
+      # rest in skipped.txt and prints `turns=<n>` (a number computed from the diff size, never model text).
+      # Data only: nothing here is run, the checkout stays main.
+      - name: Stage the change as files
+        id: stage
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.pr.outputs.num }}
+        run: |
+          set -euo pipefail
+          rm -rf .review && mkdir -p .review/files
+          gh pr diff "$PR" | python3 tools/ci/stage_review.py .review >> "$GITHUB_OUTPUT"
+          wc -l .review/pr.diff .review/skipped.txt
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         if: steps.pr.outputs.skip != 'true'
@@ -88,14 +104,19 @@ jobs:
           prompt: |
             Act as the security reviewer described in .agents/roles/security-reviewer.md and follow AGENTS.md.
             Review PR #${{ steps.pr.outputs.num }} in ${{ github.repository }} at commit ${{ env.SHA }} (risk class: ${{ steps.pr.outputs.level }}).
-            The checkout is main, not the PR: never run or import code from the PR. Read the change with
-            `gh pr view` and `gh pr diff`, and the linked issue with `gh issue view`.
+            The checkout is main, not the PR: never run or import code from the PR. The change is staged as files:
+            `.review/pr.diff` (the diff of the security-relevant files), `.review/skipped.txt` (the other changed paths
+            with status and +/- counts, left out of the diff) and `.review/files/<path>` (a staged file at the PR head).
+            Read them with Read (long files in parts with offset/limit); open a skipped path with `gh pr diff` only if
+            its name makes it relevant. Use `gh pr view` for the body and `gh issue view` for the linked issue.
+            If you could not read the change, give no verdict line at all (the run then fails and can be re-run);
+            `changes` is only for findings in the code.
             Do not post anything yourself: end your final reply with your verdict, whose first line is exactly
             `security-review: approve ${{ env.SHA }}` or `security-review: changes ${{ env.SHA }}`, followed by the
             reasons (file, line). A script posts it as the PR comment. Do not post a note for Daniel (a script does).
           claude_args: >-
             --model sonnet
-            --max-turns 12
+            --max-turns ${{ steps.stage.outputs.turns }}
             --setting-sources user
             --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*)"
