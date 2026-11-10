@@ -57,6 +57,22 @@ def test_cancelled_runs_report_nothing():
         assert "always()" not in text.split("jobs:")[1]
 
 
+def test_reviewer_reads_staged_files_before_the_model_runs():
+    assert step_index("id: reapprove") < step_index("Stage the change as files") < step_index("id: claude")
+    block = TEXT[step_index("Stage the change as files"):step_index("id: claude")]
+    assert "> .review/pr.diff" in block and ".review/files/" in block
+    prompt = TEXT[step_index("id: claude"):]
+    assert ".review/pr.diff" in prompt and "Bash(gh pr diff" not in prompt
+
+
+def test_staging_loops_url_encode_the_path():
+    # agent-review keeps its inline loop; the security review stages through tools/ci/stage_review.py (urllib quote)
+    assert "@uri" in TEXT
+    assert "contents/$enc?ref=$SHA" in TEXT
+    assert "contents/$f?ref" not in TEXT
+    assert "contents/$f?ref" not in SEC
+
+
 def test_review_round_is_counted_per_head_not_per_label_case():
     block = TEXT[step_index("id: round"):step_index("id: reapprove")]
     assert 'guard round "$num" "$SHA"' in block

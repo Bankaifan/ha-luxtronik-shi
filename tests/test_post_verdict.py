@@ -169,3 +169,10 @@ def test_verdict_for_a_superseded_head_is_discarded(tmp_path):
     calls, run = _labelled("", head="2" * 40)
     assert pv.post(5, SHA, exec_file(f"security-review: changes {SHA}\n- x"), run, tmp_path) == 0
     assert not any(c[:2] in (("pr", "comment"), ("pr", "review")) or "--add-label" in c for c in calls)
+
+
+def test_changes_without_reason_is_no_verdict(tmp_path):
+    # #292: a bare `changes` line gave the fix run nothing to fix and blocked a re-run for the same SHA.
+    calls = []
+    assert pv.post(5, SHA, exec_file(f"security-review: changes {SHA}"), lambda *a: calls.append(a) or "", tmp_path) == 1
+    assert calls == []
