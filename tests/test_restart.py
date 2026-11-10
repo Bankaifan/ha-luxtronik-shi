@@ -7,10 +7,11 @@ import restart as r
 class Fake:
     """Records gh calls; answers pr view, issue view and the reviews api from a state dict."""
 
-    def __init__(self, body="Closes #68", state="OPEN", issue_labels=(), author="app/x", reviews=()):
+    def __init__(self, body="Closes #68", state="OPEN", issue_labels=(), author="app/x", reviews=(), labelled=None):
         self.calls = []
         self.body, self.state, self.issue_labels, self.author = body, state, list(issue_labels), author
         self.reviews = list(reviews)
+        self.labelled = labelled or {}  # issue number -> labels, overrides issue_labels for that issue
         self.posted, self.lossy = [], False
 
     def __call__(self, *args):
@@ -24,7 +25,8 @@ class Fake:
         if args[:2] == ("pr", "view"):
             return json.dumps({"body": self.body, "state": self.state, "labels": []})
         if args[:2] == ("issue", "view"):
-            return json.dumps({"labels": [{"name": n} for n in self.issue_labels]})
+            names = self.labelled.get(int(args[2]), self.issue_labels)
+            return json.dumps({"labels": [{"name": n} for n in names]})
         if args[0] == "api":
             return json.dumps([self.reviews])
         return ""
@@ -89,6 +91,14 @@ def test_one_restart_max_second_limit_never_restarts_again():
     assert not second.has("issue", "edit")
 
 
+def test_limit_restarts_the_closed_issue_not_the_parent_ref():
+    # the parent #352 already carries restart:1 (a sibling restarted it); this PR closes #357 and must still restart it
+    f = Fake(body="Refs #352\n\nCloses #357", labelled={352: ["restart:1"]})
+    assert r.handle_limit("364", "Bankaifan", f) == "restarted"
+    assert "issue edit 357 --add-label restart:1" in f.flat()
+    assert not f.has("issue", "edit", "352") and not f.has("pr", "edit")
+
+
 def test_no_review_request_when_daniel_is_the_author():
     f = Fake(issue_labels=["restart:1"], author="Bankaifan")
     r.handle_limit("70", "Bankaifan", f)
@@ -121,6 +131,12 @@ def test_older_agent_pr_for_same_issue_is_closed_with_superseded_comment():
 def test_superseded_ignores_non_agent_and_cross_repo_prs():
     prs = [pr(1, "Closes #2", "feature/z"), pr(3, "Closes #2"), pr(4, "Closes #2", cross=True)]
     assert r.superseded(prs) == []
+
+
+def test_sibling_prs_sharing_only_a_parent_ref_do_not_replace_each_other():
+    prs = [pr(360, "Closes #357. Refs #352"), pr(361, "Closes #358. Refs #352"), pr(362, "Closes #355. Refs #352")]
+    assert r.superseded(prs) == []
+    assert r.superseded(prs + [pr(363, "Closes #357")]) == [(360, 363)]
 
 
 def test_three_prs_chain_to_the_newest():

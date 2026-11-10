@@ -14,6 +14,7 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
    the real heat pump or to Home Assistant needs Daniel's OK. Tests use the simulator.
 5. Changes to CI protection, permissions, workflows or this file go through the security reviewer. Changes to the
    CODEOWNERS paths (CODEOWNERS, rulesets, trust logic, release workflow) need Daniel's OK.
+   Scout app token: contents, pull-requests, vulnerability-alerts, security-events read; issues write.
 
 ## Domain rules
 1. **Correctness before continuity.** The project is in testing and Daniel is its only user. An entity that models a
@@ -98,7 +99,9 @@ README); only its *Owner decisions* go to Daniel.
 Daniel approves only what needs him: PRs that change his CODEOWNERS paths (check `risk`, see `tools/ci/risk.py`),
 `needs-human`, design owner decisions, dependabot majors, product decisions. Whoever parks
 something with him leaves, as the LAST comment, a short plain-German note: what changes, the worst case, what the
-reviewers recommend, one exact yes/no question; technical terms explained in a few words. PRs get a review request to
+reviewers recommend, one exact yes/no question that names what "ja" and what "nein" do; technical terms explained in
+a few words. The same comment carries one hidden decision marker line,
+`<!-- decision: yes=<action> no=<action> -->` (grammar and action ids: `tools/decision.py`). PRs get a review request to
 Bankaifan; only issues that wait for him mention `@Bankaifan` once in that note. No other comment mentions him. Every
 infra/security PR also needs the security reviewer (`.agents/roles/security-reviewer.md`, status `security-review`)
 besides the normal review, agent-smoke and zizmor.
@@ -109,6 +112,7 @@ This repo follows `Bankaifan/agent-template` (`.agents/template.json`). `templat
 `synced_sha`, one PR with `Closes #<issue>`.
 
 ## Models (subscription quota is scarce)
-Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK. Max 2 agent jobs at once (PRs
-waiting only for Daniel's approval do not count, max 5 of them, see orchestrator.md).
+Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK.
+Agent jobs at once: repo variable MAX_DEV (default 2); open PRs: MAX_PRS (default 3). PRs waiting only for Daniel's
+approval do not count (max 5 of them, see orchestrator.md).
 Script first, then haiku, then sonnet. Short reports, never repeat the diff.

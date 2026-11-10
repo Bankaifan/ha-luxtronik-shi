@@ -29,6 +29,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
+          permission-actions: read
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -36,6 +37,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # verifies the failure issues; script step only, never a model step
+          # same defaults as orchestrator.yml (queue section and proposal thresholds); read-only use
+          MAX_DEV: ${{ vars.MAX_DEV || (github.repository == 'Bankaifan/agent-template' && '4' || '2') }}
+          MAX_PRS: ${{ vars.MAX_PRS || (github.repository == 'Bankaifan/agent-template' && '5' || '3') }}
         run: python3 tools/weekly_summary.py
       - name: Open a PR for the new metrics row
         env:

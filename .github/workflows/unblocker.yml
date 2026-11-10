@@ -81,7 +81,8 @@ jobs:
             --max-turns 10
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Glob,Grep,Write(verdict.json)"
+            --allowedTools "Read,Glob,Grep,Edit(verdict.json)"
+      # Path rules only work as Edit(...), which also covers Write; Write(verdict.json) denied every write (#226).
       # The model step may have written anywhere in the checkout: keep only the verdict, restore everything else.
       - name: Keep the verdict, restore a clean checkout
         id: clean

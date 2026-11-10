@@ -89,6 +89,12 @@ def test_agent_branch_must_reference_its_issue(monkeypatch):
     assert check(monkeypatch, "no issue", ["tools/a.py"], head="feature/x") == 0
 
 
+def test_friction_section_is_optional(monkeypatch):
+    assert check(monkeypatch, "Refs #53\n\n## Friction\n- slow lint", ["tools/a.py"], head="agent/53-x") == 0
+    assert check(monkeypatch, "Refs #53\n\n## Friction\nnone", ["tools/a.py"], head="agent/53-x") == 0
+    assert check(monkeypatch, "Refs #53", ["tools/a.py"], head="agent/53-x") == 0
+
+
 def test_closing_subcommand_reads_file(tmp_path, monkeypatch):
     f = tmp_path / "b.md"
     for text, rc in (("Refs #5", 1), ("Closes #5", 0), ("closes https://github.com/o/r/issues/5", 0)):

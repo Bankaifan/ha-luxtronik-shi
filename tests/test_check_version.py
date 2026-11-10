@@ -1,70 +1,87 @@
-"""Tests for tools/check_version.py (run against a temporary fake repo root)."""
-
-from __future__ import annotations
-
-import json
-import os
+import importlib.util
 import pathlib
-import subprocess
-import sys
 
 import pytest
 
-SCRIPT = pathlib.Path(__file__).resolve().parent.parent / "tools" / "check_version.py"
+_path = pathlib.Path(__file__).parent.parent / "tools" / "check" / "check_version.py"
+_spec = importlib.util.spec_from_file_location("check_version", _path)
+mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(mod)
+
+CHANGELOG_OK = "# Changelog\n\n## [Unreleased]\n\n## [1.2.3] - 2026-01-01\n"
 
 
-def run(tmp_path: pathlib.Path, version: str, changelog: str, *args: str):
-    manifest = tmp_path / "custom_components" / "luxtronik_shi" / "manifest.json"
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(json.dumps({"version": version}))
-    (tmp_path / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
-    env = {**os.environ, "CHECK_VERSION_ROOT": str(tmp_path)}
-    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, check=False)
+@pytest.fixture
+def repo(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("VERSION_FILE", raising=False)
+    monkeypatch.delenv("VERSION_REGEX", raising=False)
+    return tmp_path
 
 
-def log(version: str) -> str:
-    return f"# Changelog\n\n## [Unreleased]\n\n## [{version}] – 2026-11-06\n\n### Added\n- Thing\n"
+def _version(repo, text="1.2.3\n", name="VERSION.txt"):
+    (repo / name).write_text(text, encoding="utf-8")
+    return name
 
 
-def test_stable_ok(tmp_path):
-    r = run(tmp_path, "0.8.0", log("0.8.0"), "refs/tags/v0.8.0")
-    assert r.returncode == 0, r.stdout
-    assert run(tmp_path, "0.8.0", log("0.8.0"), "--prerelease").stdout.strip() == "false"
+def test_no_version_source_is_skipped(repo, capsys):
+    (repo / "CHANGELOG.md").write_text(CHANGELOG_OK, encoding="utf-8")
+    assert mod.main() == 0
+    assert "skipped" in capsys.readouterr().out
 
 
-def test_beta_ok(tmp_path):
-    r = run(tmp_path, "0.8.0-beta.1", log("0.8.0-beta.1"), "refs/tags/v0.8.0-beta.1")
-    assert r.returncode == 0, r.stdout
-    assert "beta pre-release" in r.stdout
-    assert run(tmp_path, "0.8.0-beta.1", log("0.8.0-beta.1"), "--prerelease").stdout.strip() == "true"
-    assert run(tmp_path, "0.8.0-beta.1", log("0.8.0-beta.1"), "--version").stdout.strip() == "0.8.0-beta.1"
-    assert "Thing" in run(tmp_path, "0.8.0-beta.1", log("0.8.0-beta.1"), "--notes").stdout
+def test_no_changelog_is_skipped(repo, capsys, monkeypatch):
+    monkeypatch.setenv("VERSION_FILE", _version(repo))
+    assert mod.main() == 0
+    assert "skipped" in capsys.readouterr().out
 
 
-def test_beta_missing_changelog_section_fails(tmp_path):
-    r = run(tmp_path, "0.8.0-beta.1", log("0.8.0"))
-    assert r.returncode == 1
-    assert "no section" in r.stdout
+def test_version_file_env_missing_exits(repo, monkeypatch):
+    (repo / "CHANGELOG.md").write_text(CHANGELOG_OK, encoding="utf-8")
+    monkeypatch.setenv("VERSION_FILE", "nope.txt")
+    with pytest.raises(SystemExit, match="VERSION_FILE nope.txt does not exist"):
+        mod.main()
 
 
-def test_beta_not_matched_by_stable_section(tmp_path):
-    r = run(tmp_path, "0.8.0", log("0.8.0-beta.1"))
-    assert r.returncode == 1
+def test_bad_regex_no_match_exits(repo, monkeypatch):
+    (repo / "CHANGELOG.md").write_text(CHANGELOG_OK, encoding="utf-8")
+    monkeypatch.setenv("VERSION_FILE", _version(repo))
+    monkeypatch.setenv("VERSION_REGEX", r"version=(\d+)")
+    with pytest.raises(SystemExit, match="no version found in"):
+        mod.main()
 
 
-def test_tag_mismatch_fails(tmp_path):
-    r = run(tmp_path, "0.8.0-beta.1", log("0.8.0-beta.1"), "refs/tags/v0.8.0")
-    assert r.returncode == 1
-    assert "does not match" in r.stdout
+def test_non_semver_version_fails(repo, capsys, monkeypatch):
+    (repo / "CHANGELOG.md").write_text(CHANGELOG_OK, encoding="utf-8")
+    monkeypatch.setenv("VERSION_FILE", _version(repo, "release v12\n"))
+    monkeypatch.setenv("VERSION_REGEX", r"(v\d+)")
+    assert mod.main() == 1
+    assert "'v12' is not x.y.z" in capsys.readouterr().out
 
 
-def test_beta_release_requires_date(tmp_path):
-    r = run(tmp_path, "0.8.0-beta.1", log("0.8.0-beta.1").replace(" – 2026-11-06", " – unreleased"), "--release")
-    assert r.returncode == 1
+def test_missing_unreleased_section_fails(repo, capsys, monkeypatch):
+    (repo / "CHANGELOG.md").write_text("## [1.2.3] - 2026-01-01\n", encoding="utf-8")
+    monkeypatch.setenv("VERSION_FILE", _version(repo))
+    assert mod.main() == 1
+    assert "no '## [Unreleased]' section" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("bad", ["0.8", "0.8.0-beta", "0.8.0-rc.1", "0.8.0-beta.x"])
-def test_invalid_format_fails(tmp_path, bad):
-    r = run(tmp_path, bad, log(bad))
-    assert r.returncode == 1
-    assert "not X.Y.Z" in r.stdout
+def test_missing_version_section_fails(repo, capsys, monkeypatch):
+    (repo / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [1.2.2] - 2025-12-01\n", encoding="utf-8")
+    monkeypatch.setenv("VERSION_FILE", _version(repo))
+    assert mod.main() == 1
+    assert "no '## [1.2.3]' section" in capsys.readouterr().out
+
+
+def test_matching_sections_pass(repo, capsys, monkeypatch):
+    (repo / "CHANGELOG.md").write_text(CHANGELOG_OK, encoding="utf-8")
+    monkeypatch.setenv("VERSION_FILE", _version(repo))
+    assert mod.main() == 0
+    assert "check_version: ok (1.2.3)" in capsys.readouterr().out
+
+
+def test_default_version_file_in_root_is_used(repo, capsys):
+    (repo / "CHANGELOG.md").write_text(CHANGELOG_OK, encoding="utf-8")
+    _version(repo, "1.2.3\n", name="VERSION")
+    assert mod.main() == 0
+    assert "check_version: ok (1.2.3)" in capsys.readouterr().out

@@ -73,6 +73,11 @@ def test_staging_loops_url_encode_the_path():
     assert "contents/$f?ref" not in SEC
 
 
+def test_developer_role_names_the_current_pr_body_file():
+    role = (WORKFLOW.parent.parent.parent / ".agents" / "roles" / "developer.md").read_text(encoding="utf-8")
+    assert ".agent-out/pr-body.md" in role and "/tmp/pr-body.md" not in role
+
+
 def test_review_round_is_counted_per_head_not_per_label_case():
     block = TEXT[step_index("id: round"):step_index("id: reapprove")]
     assert 'guard round "$num" "$SHA"' in block

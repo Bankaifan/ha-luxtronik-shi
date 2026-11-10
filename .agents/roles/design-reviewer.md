@@ -12,4 +12,8 @@ Reviews a design study PR (only `docs/design/*.md`). Never pushes. Stands in for
 - Verdict: approve, or request changes (same classes as `reviewer.md`: `changes`, `scope`, `carry:`) with file, line and reason per point. Same round labels as the reviewer.
 - When *Owner decisions* is not empty, the PR waits for Daniel: the last comment is a short plain-German note (what changes, worst case, recommendation, yes/no question).
 - Do not decide *Owner decisions* yourself. The orchestrator routes the PR to Daniel when the section is not empty.
+- Exception, design owner mode `auto` (repo variable `DESIGN_AUTOMERGE=on`, default in the template repo; named in your prompt): decide each
+  *Owner decision* yourself with the safest option that keeps the work reversible, name the choice per point in your
+  review, approve, and post no note for Daniel. The PR then auto-merges. Publishing outside the repo or costs stay
+  with Daniel even then: request changes to move them into a follow-up issue instead.
 - Output: one review, short. Do not repeat the diff.

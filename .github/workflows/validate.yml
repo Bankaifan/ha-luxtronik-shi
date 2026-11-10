@@ -44,6 +44,10 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # check_test_evidence: empty outside pull_request, then the check is skipped
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          # "true" deselects slow tests (they run nightly); unset means false (design 0009)
+          NIGHTLY_HEAVY_TESTS: ${{ vars.NIGHTLY_HEAVY_TESTS || 'false' }}
           # workflow_dispatch: check_pr_form reads title/body with `gh pr view`
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

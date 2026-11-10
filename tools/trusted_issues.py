@@ -48,9 +48,15 @@ def is_sync_issue(issue, author_bot):
     return (issue.get("title") or "").startswith(SYNC_PREFIX) and bool(_SYNC.search(issue.get("body") or ""))
 
 
+GUARD_TITLES = ("Overdue scheduled run: ", "Denied command in ", "Failing workflow: ")
+
+
 def is_guard_issue(issue, author_bot, key):
-    """True for an issue a guard script signed with GUARD_KEY, authored by the author app, not an idea."""
+    """True for an issue a guard script signed with GUARD_KEY, authored by the author app, not an idea,
+    with a known guard title prefix (a leaked key alone does not make any title trusted)."""
     if not key or not same_login((issue.get("author") or {}).get("login"), author_bot):
+        return False
+    if not (issue.get("title") or "").startswith(GUARD_TITLES):
         return False
     if any(lab["name"] == "idea" for lab in issue.get("labels", [])):
         return False

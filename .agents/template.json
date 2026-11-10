@@ -1,6 +1,6 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "2d88d007245c6e5de75982e8101c1be8a45243af",
+  "synced_sha": "c2f3006fb4fc33ee9006440ba57fd3f627982846",
   "managed": [".github/workflows/", ".github/claude-judge-settings.json", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
               ".agents/roles/", "tools/", "tests/", "AGENTS.md", "CLAUDE.md", "Makefile", "docs/design/README.md"],
   "overrides": [
@@ -10,6 +10,15 @@
     {"path": ".github/CODEOWNERS", "why": "also owns the project's release.yml and tools/check_version.py"},
     {"path": "tools/ci/install_tools.sh", "why": "project version pins ruff/zizmor in requirements-lint.txt and verifies the actionlint SHA-256; keeps the template's EXTRA_INSTALL hook"},
     {"path": "tests/test_install_tools_env.py", "why": "also stubs sha256sum for the project's checksum-verifying install_tools.sh"},
+    {"path": "tests/test_design_parents.py", "why": "imports test_status as tests.test_status because the project's tests/ is a package"},
+    {"path": "tests/test_orchestrator_events_docs.py", "why": "skipped at module level: it checks the template's ADR 0012 and README, which this project does not have"},
+    {"path": "tests/conftest.py", "why": "also holds the project's Home Assistant fixtures (FakeSHI, custom integrations, poll tolerance); keeps the template's slow marker and _no_ci_repo"},
+    {"path": "tests/test_scope_tests.py", "why": "NO_TEST_TOOLS lists the project's generator tools (no same-name test, full run)"},
+    {"path": "tests/test_ruleset.py", "why": "required checks are the project jobs (hassfest, hacs, version, tests, tests-min-ha, tests-latest-ha, workflow-lint) instead of validate"},
+    {"path": "tests/test_answer.py", "why": "lambda assignments replaced by def (ruff E731 in this project)"},
+    {"path": "tests/test_variables_doc.py", "why": "skipped at module level: it checks the template's docs/variables.md and README links, which this project does not have"},
+    {"path": "tests/test_check_test_evidence.py", "why": "the temporary test repo gets a pytest.ini with asyncio_mode = auto: the Home Assistant pytest plugin (latest) errors on sync tests without it"},
+    {"path": ".github/workflows/agent-fix.yml", "why": "the fix agent keeps no `gh pr edit` and `gh pr comment` rights (the security reviewer: it could strip risk:security from a PR); the PR body is applied by the fixed step after it"},
     {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py)"},
     {"path": "AGENTS.md", "why": "project sentence and project rules (register facts, bilingual docs, firmware analysis as source)"}
   ]

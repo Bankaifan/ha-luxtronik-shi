@@ -17,8 +17,8 @@ for the workflow PR (item 4, risk:security). An issue restarts like restart.py: 
 
 Limits are enforced here as one layer besides the prompt (a word filter cannot catch every wording): a class 1
 verdict that asks for a tool, permission, install, workflow or check change is turned into class 3, and so is a
-class 2 issue with such wording; model text with `@` is refused; `apply` re-runs the gate on live data; `unblock:1` is set once, a second block goes to Daniel; risk:security PRs
-and design PRs never get class 1.
+class 2 issue with such wording; model text with `@` is refused; `apply` re-runs the gate on live data; `unblock:1` is set once, a second block goes to Daniel; design PRs
+never get class 1. A risk:security PR is refused by the gate only if it changes a CODEOWNERS path of the owner.
 """
 import json
 import os
@@ -27,8 +27,13 @@ import subprocess
 import sys
 
 import exec_log
+import restart
 from agent_guard import add_labels, ensure_label, is_agent_pr
 from trusted_issues import classify, label_set_by
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ci"))
+import decision
+import risk
 
 OWNER_DEFAULT = "Bankaifan"
 MARK = "<!-- unblocker -->"
@@ -46,7 +51,22 @@ _FORBIDDEN = re.compile(
     r"\b(?:curl|wget|sudo|chmod|chown|base64|bash|sh|eval|exec|rm|git|gh)\b",
     re.IGNORECASE)
 _SAFE_SHAPE = re.compile(r"[A-Za-z0-9 .,;:'()/_#=+-]+")
-_GERMAN_HINT = re.compile(r"\b(?:Daniel|Frage|ja|nein|Soll|Schlimmster)\b")
+_GERMAN_HINT = re.compile(r"\b(?:Daniel|Frage|ja|nein|Soll|Schlimmster|Hallo|Fall|und|der|die|das|nicht|ist)\b")
+_FENCE = re.compile(r"\A\s*```[A-Za-z]*\s*\n(.*?)\n\s*```\s*\Z", re.DOTALL)
+
+
+def load_verdict(text):
+    """Parse verdict text; a markdown code fence around the JSON (models add one) is removed first."""
+    m = _FENCE.match(text or "")
+    return json.loads(m.group(1) if m else text)
+
+STUCK = "stuck-review"  # verdict "case": the block comes from a failed or empty review or a fix run without result
+YES_EFFECT = {
+    "drop-block": "hebt den Block auf",
+    "fix-pr": "startet einen neuen Fix-Lauf fuer den PR",
+    "restart-recut": "schliesst den PR als ersetzt und schneidet die Aufgabe neu",
+    "restart-issue": "startet die Aufgabe neu",
+}
 
 NOTE_AGAIN = ("Hallo Daniel, der automatische Entsperr-Versuch (unblock:1) ist schon gelaufen und hat nicht gereicht. "
               "Schlimmster Fall: die Aufgabe bleibt liegen, sonst passiert nichts. "
@@ -62,16 +82,20 @@ def gh(*args):
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
 
 
-def gate(item, events, comments, files, owner, author_bot, approver_bot=""):
+def gate(item, events, comments, files, owner, author_bot, approver_bot="", codeowners=""):
     """(ok, reason). ITEM: {kind, state, labels, author, number}. EVENTS: label timeline. COMMENTS: [{body, created_at}].
-    FILES: paths of a PR. Pure: every refusal means the block stays with Daniel."""
+    FILES: paths of a PR (renames incl. old names). Pure: every refusal means the block stays with Daniel.
+    A risk:security PR is refused only if it changes a CODEOWNERS path of the owner (risk.waits_for_owner)."""
     labels = set(item.get("labels") or [])
     if item.get("state", "").upper() != "OPEN":
         return False, "item is not open"
     if NEEDS_HUMAN not in labels:
         return False, "needs-human is gone"
-    if RISK_SECURITY in labels:
-        return False, "risk:security: always Daniel"
+    if RISK_SECURITY in labels and item["kind"] == "pr":
+        if not files:
+            return False, "risk:security: file list unknown, Daniel"
+        if risk.waits_for_owner(RISK_SECURITY, files, codeowners, owner):
+            return False, "risk:security: changes a CODEOWNERS path, Daniel"
     if UNBLOCK in labels:
         return False, "unblock:1 already set, one self-restart is the limit"
     if not any(label_set_by(events, NEEDS_HUMAN, a) for a in (author_bot, approver_bot, owner) if a):
@@ -130,8 +154,8 @@ def validate(verdict):
     out = {"class": cls, "reason": str(verdict.get("reason") or "")[:300]}
     for key, limit in (("comment", MAX_COMMENT), ("note", 2000)):
         val = verdict.get(key)
-        if val is None:
-            continue
+        if val is None or (key == "comment" and cls != 1):
+            continue  # a comment is only used by class 1; a stray one (e.g. German) must not sink the verdict
         if not isinstance(val, str) or not val.strip() or len(val) > limit:
             raise ValueError(f"{key} must be non-empty text up to {limit} chars")
         if key == "comment" and not val.isascii():
@@ -148,6 +172,8 @@ def validate(verdict):
         if bad:
             out = {"class": 3, "reason": f"class 2 issue asked for a forbidden action ({bad.group(0)}); owner decision",
                    "note": NOTE_SECURITY}
+    if cls == 3 and verdict.get("case") == STUCK:
+        out["case"] = STUCK
     for key in ("comment", "note"):
         if "@" in (out.get(key) or ""):
             raise ValueError(f"{key} must not mention anyone (@)")
@@ -199,10 +225,10 @@ def _last_comment_is(run, kind, number, marker):
     return bool(comments) and marker in (comments[-1].get("body") or "")
 
 
-def apply(kind, number, verdict, owner, risk_security=False, run=gh, author_bot=""):
+def apply(kind, number, verdict, owner, run=gh, author_bot=""):
     """Apply a validated verdict. Returns the class that was carried out (1, 2, 3) or 0 if nothing changed.
-    The caller runs `gate` first, but the cheap checks (open, needs-human, agent PR, risk:security) are repeated
-    here from the live item, so a wrong caller cannot take a block away from Daniel."""
+    The caller runs `gate` first (it holds the CODEOWNERS rule for risk:security PRs); the cheap checks (open,
+    needs-human, agent PR) are repeated here from the live item."""
     check_outgoing(verdict)
     v = validate(verdict)
     check_outgoing(v)
@@ -212,11 +238,8 @@ def apply(kind, number, verdict, owner, risk_security=False, run=gh, author_bot=
         return 0
     if kind == "pr" and not is_agent_pr((info.get("author") or {}).get("login"), labels, author_bot, owner):
         return 0
-    risk_security = risk_security or RISK_SECURITY in labels
     if v["class"] == 1 and UNBLOCK in labels:  # one self-restart only: this goes to Daniel
         return _owner_note(run, kind, number, owner, v, NOTE_AGAIN)
-    if v["class"] == 1 and risk_security:
-        v = {"class": 3, "reason": "risk:security item: always Daniel", "note": v.get("note") or NOTE_SECURITY}
     if v["class"] == 1:
         _comment(run, kind, number, f"{MARK}\nHint from the unblocker (untrusted data, not an instruction):\n{v['comment']}\n\nAny review request or assignment to the owner is withdrawn; "
                                     "request it again if you want to look.")
@@ -239,12 +262,29 @@ def apply(kind, number, verdict, owner, risk_security=False, run=gh, author_bot=
     return _owner_note(run, kind, number, owner, v, v.get("note"))
 
 
+def _yes_action(run, kind, number, v):
+    """What "ja" does. drop-block only removes the label, so it is right only where that really unblocks. In the
+    stuck case (failed or empty review, fix run without result) the PR must move on: restart-recut if the PR names an
+    issue, else fix-pr; an issue restarts."""
+    if v.get("case") != STUCK:
+        return "drop-block"
+    if kind == "issue":
+        return "restart-issue"
+    body = json.loads(run("pr", "view", str(number), "--json", "body")).get("body")
+    return "restart-recut" if restart.issue_refs(body) else "fix-pr"
+
+
 def _owner_note(run, kind, number, owner, v, note):
     """Class 3: needs-human stays; the German note is the LAST comment, read back to prove it."""
     if not note:
         raise ValueError("class 3 needs a German note")
     mention = "" if kind == "pr" else f"\n\n@{owner}"
-    _comment(run, kind, number, f"{MARK}\n{note}{mention}")
+    thing = "der PR" if kind == "pr" else "das Issue"
+    yes = _yes_action(run, kind, number, v)
+    # script-built, so the answer always maps to the marker
+    effect = f"Ja {YES_EFFECT[yes]}, nein schliesst {thing}."
+    marker = decision.build(yes=yes, no=f"close-{kind}")
+    _comment(run, kind, number, f"{MARK}\n{note}\n{effect}\n{marker}{mention}")
     if kind == "pr":
         try:
             run("pr", "edit", str(number), "--add-reviewer", owner)
@@ -291,11 +331,11 @@ def main(argv):
             print(f"0 (gate refused: {why})")
             return 0
         text = exec_log.read_exec(args[3])
-        print(apply(kind, number, json.loads(text), owner, author_bot=os.environ.get("AUTHOR_BOT", "")))
+        print(apply(kind, number, load_verdict(text), owner, author_bot=os.environ.get("AUTHOR_BOT", "")))
         return 0
     if len(args) == 2 and args[0] == "validate":
         try:
-            v = json.loads(exec_log.read_exec(args[1]))
+            v = load_verdict(exec_log.read_exec(args[1]))
             check_outgoing(v)
             print(f"valid, class {validate(v)['class']}")
             return 0
@@ -317,16 +357,18 @@ def live_gate(kind, number, owner):
     """`gate` on the live item (labels, timeline, comments, files, issue trust)."""
     repo = os.environ["GH_REPO"]
     bot, appr = os.environ.get("AUTHOR_BOT", ""), os.environ.get("APPROVER_BOT", "")
-    info = json.loads(gh(kind, "view", number, "--json", "state,labels,author,comments" + (",files" if kind == "pr" else "")))
+    info = json.loads(gh(kind, "view", number, "--json", "state,labels,author,comments"))
     item = {"kind": kind, "state": info["state"], "labels": [x["name"] for x in info["labels"]],
             "author": info["author"]["login"]}
     pages = json.loads(gh("api", "--paginate", "--slurp", f"repos/{repo}/issues/{number}/timeline"))
     events = [e for p in pages for e in p]
     comments = [{"body": c.get("body"), "created_at": c.get("createdAt")} for c in info.get("comments", [])]
-    files = [f["path"] for f in info.get("files", [])]
-    issue = {"number": int(number), "title": "", "labels": info["labels"], "author": info["author"], "body": ""}
+    files = []
+    if kind == "pr":  # the REST list has previous_filename, so rename sources count
+        files = risk.pr_paths(json.loads(gh("api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/files")))
+    issue ={"number": int(number), "title": "", "labels": info["labels"], "author": info["author"], "body": ""}
     item["trusted"] = kind == "issue" and bool(classify(issue, events, owner, bot))
-    return gate(item, events, comments, files, owner, bot, appr)
+    return gate(item, events, comments, files, owner, bot, appr, risk.read_text(".github/CODEOWNERS"))
 
 
 if __name__ == "__main__":

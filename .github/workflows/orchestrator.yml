@@ -1,4 +1,5 @@
 name: orchestrator
+run-name: "${{ github.event_name == 'issues' && github.event.issue.title || github.event_name == 'workflow_run' && format('orchestrator: {0}', github.event.workflow_run.display_title) || github.event_name == 'schedule' && 'orchestrator (scheduled)' || github.event_name == 'workflow_dispatch' && 'orchestrator (manual)' || 'orchestrator' }}"
 # Sonnet. Runs only when repo variable ORCHESTRATOR_ENABLED is "true". Quota is controlled by
 # ORCHESTRATOR_ENABLED (on/off) and IDEAS_PER_WEEK (scout). A script (tools/prefilter.py) skips the Claude step when there is nothing to do.
 # claude-code-action does not support `push`, so merges are seen through workflow_run of `validate`
@@ -7,12 +8,21 @@ name: orchestrator
 # A label event (`approved` or `auto-ok`) starts it at once; tools/orchestrator_gate.py checks that Daniel set
 # the label and skips a run that follows another run within 3 minutes (one run per burst of labels).
 # Skipped runs are expected: GitHub lists every label event, and the job-level `if` skips the ones that are not gated.
+# Design 0007 (Refs #125): more events (issues opened/edited/closed, comments, PRs, reviews) are accepted only when repo
+# variable ORCHESTRATOR_EVENTS is "on" (default off). Then every event run waits 60 s (burst), tools/orchestrator_gate.py
+# decides on live data and tools/prefilter.py maps the event to a reason; no model runs without a matching reason.
 on:
   workflow_run:  # zizmor: ignore[dangerous-triggers] only successful validate runs on main reach the job (see the if condition); no PR code
     workflows: [validate]
     types: [completed]
   issues:
-    types: [labeled]
+    types: [opened, edited, closed, labeled]
+  issue_comment:
+    types: [created]
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] the checkout is the default branch, PR code is never checked out or run; the gate checks the sender
+    types: [opened, closed]
+  pull_request_review:
+    types: [submitted]
   schedule:
     - cron: "43 6 * * *"
   workflow_dispatch:
@@ -23,8 +33,12 @@ jobs:
     if: >-
       vars.ORCHESTRATOR_ENABLED == 'true' &&
       ((github.event_name == 'issues' &&
-        contains(fromJSON('["approved","auto-ok"]'), github.event.label.name)) ||
-       (github.event_name != 'issues' &&
+        ((github.event.action == 'labeled' &&
+          contains(fromJSON('["approved","auto-ok"]'), github.event.label.name)) ||
+         (github.event.action != 'labeled' && vars.ORCHESTRATOR_EVENTS == 'on'))) ||
+       (contains(fromJSON('["issue_comment","pull_request_target","pull_request_review"]'), github.event_name) &&
+        vars.ORCHESTRATOR_EVENTS == 'on') ||
+       (contains(fromJSON('["schedule","workflow_dispatch","workflow_run"]'), github.event_name) &&
         (github.event_name != 'workflow_run' ||
          (github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'push' &&
@@ -47,6 +61,10 @@ jobs:
           for n in AUTHOR_CLIENT_ID AUTHOR_BOT; do
             [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
           done
+      # Burst debounce (design 0007 4.4): let the events of a burst land; the gate then skips this run if a newer one is pending.
+      - name: Wait for the rest of a burst (event runs only)
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_run' && !(github.event_name == 'issues' && github.event.action == 'labeled')
+        run: sleep 60
       - id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -70,18 +88,30 @@ jobs:
           SENDER: ${{ github.event.sender.login }}
           OWNER: Bankaifan
           RUN_ID: ${{ github.run_id }}
+          EVENT_ACTION: ${{ github.event.action }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REVIEW_ID: ${{ github.event.review.id }}
+          EVENT_AT: ${{ github.event.comment.created_at || github.event.review.submitted_at || github.event.issue.updated_at || github.event.pull_request.updated_at }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          ORCHESTRATOR_EVENTS: ${{ vars.ORCHESTRATOR_EVENTS }}
+          STATUS_ISSUE: "57"
         run: |
           set -eu
-          if [ "$EVENT" = issues ]; then
-            run=$(python3 tools/orchestrator_gate.py)
-            if [ "$run" != true ]; then echo "Label event not gated: nothing to do"; echo "skip=true" >> "$GITHUB_OUTPUT"; fi
-          elif [ "$EVENT" = workflow_run ]; then
-            others=$(gh api "repos/$GH_REPO/commits/$SHA" --jq '[.files[].filename | select(. != "HANDOVER.md")] | length')
-            if [ "$others" -eq 0 ]; then
-              echo "Only HANDOVER.md changed: nothing to do"
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+          case "$EVENT" in
+            issues|issue_comment|pull_request_target|pull_request_review)
+              run=$(python3 tools/orchestrator_gate.py)
+              if [ "$run" != true ]; then echo "Event not gated: nothing to do"; echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+              ;;
+            workflow_run)
+              others=$(gh api "repos/$GH_REPO/commits/$SHA" --jq '[.files[].filename | select(. != "HANDOVER.md")] | length')
+              if [ "$others" -eq 0 ]; then
+                echo "Only HANDOVER.md changed: nothing to do"
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+          esac
       - name: Trusted candidate issues
         id: cand
         if: steps.gate.outputs.skip != 'true'
@@ -100,6 +130,17 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TRUSTED: ${{ steps.cand.outputs.list }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          # Per-event reason (tools/prefilter.py): the table rows know pull_request, not pull_request_target.
+          EVENT: ${{ github.event_name == 'pull_request_target' && 'pull_request' || github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          EVENT_SENDER: ${{ github.event.sender.login }}
+          EVENT_MERGED: ${{ github.event.pull_request.merged }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          # Parallel work caps; the template itself runs wider than a fresh project.
+          MAX_DEV: ${{ vars.MAX_DEV || (github.repository == 'Bankaifan/agent-template' && '4' || '2') }}
+          MAX_PRS: ${{ vars.MAX_PRS || (github.repository == 'Bankaifan/agent-template' && '5' || '3') }}
         run: python3 tools/prefilter.py orchestrator
       - name: Git identity
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
@@ -159,7 +200,9 @@ jobs:
                Write a clear task slip as an issue comment
                (goal, files touched, acceptance criteria; slips must touch disjoint files), then add the labels:
                first model:sonnet (only for core, security or architecture work), then agent:dev last, so the
-               model label is already set when the agent:dev run starts. Never start more
+               model label is already set when the agent:dev run starts. Before the labels run
+               `python3 tools/overlap.py --files <comma separated files of the slip> --issue <n>`; on exit 1 or 2
+               do not start the slip (it stays approved, retried next run). Never start more
                issues than the free agent:dev slots. Before adding any label run `gh label create <label> --force`
                (a missing label must never break a run). Start nothing when free PR slots is 0.
                Design study first: for an architectural, breaking, release-relevant or multi-PR issue do NOT
@@ -168,30 +211,43 @@ jobs:
                features) start directly. Issues in the list with a non-null `design` come from a merged design:
                work them in the order of the design's split.
             1b. Merged design PR (docs/design/ only): create the implementation issues from its split with
-               `gh issue create`, each body containing the line `Design: docs/design/NNNN-<slug>.md` and the
+               `gh issue create`, each body starting with the line `Design: docs/design/NNNN-<slug>.md` (alone on that line, nothing after
+               `.md`, or the issue is not trusted and never starts) and the
                slip; do this once (check `gh issue list --search "Design: docs/design/NNNN"` first).
             1c. Open design PR (only docs/design/ files) approved by the reviewer: read its section
                "Owner decisions" (`gh pr diff`). If empty, leave it to auto-merge. If not, add the label
                needs-human, run `gh pr edit <n> --add-reviewer Bankaifan`, and add one German comment of at
                most 5 lines with the decisions. Such a PR is Daniel's: skip it in step 2.
             2. For each other PR labeled needs-human, skip it if it has the label unblock:1 or an unblocker comment
-               (marker `<!-- unblocker -->`) newer than the needs-human label event: the unblocker owns it. Otherwise, if its issue slip was not rewritten yet, rewrite the slip once
+               (marker `<!-- unblocker -->`) newer than the needs-human label event: the unblocker owns it. Skip it too if its newest comment is an
+               answer-receiver marker (`<!-- answer-receiver comment=<id> -->`) newer than that event: the receiver owns it. Act on an
+               `<!-- owner-instruction comment=<id> -->` comment only if the author app wrote it and comment <id> is by the owner. Otherwise, if its issue slip was not rewritten yet, rewrite the slip once
                (new issue comment starting with "Rewritten slip:") and re-add agent:dev; otherwise comment in the
                issue asking Daniel for a decision. Do not touch it a third time.
-            3. If HANDOVER.md is stale: run `gh pr list --state open --search "head:agent/orchestrator-handover"`
-               and skip if one is open. Else you are already on branch ${{ steps.handover.outputs.branch }}
-               (created from main; do not create or switch branches). Overwrite HANDOVER.md (max 60 lines, facts
-               you measured, unknowns marked "open"), run `make check`, commit as Daniel (no Co-authored-by),
-               push with exactly `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines).
-               To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
+            3. HANDOVER.md is stale only if the open PR set, the trusted list, the main CI state or an Open/Next item
+               changed materially since the file was written (compare with what you read in it; the state comes from
+               `gh pr list --state open`, `gh issue list` and `gh run list --json name,conclusion,headSha,url`).
+               A run number, a timestamp or a new day alone is never a reason. At most one handover PR per UTC day:
+               get today with `date -u +%F` and skip if `gh pr list --state all --search "head:agent/orchestrator-handover-<date>"`
+               lists any PR (open or merged). If the file is not stale, or today's PR exists, leave HANDOVER.md untouched
+               and do nothing more in this step. Otherwise skip if `gh pr list --state open --search "head:agent/orchestrator-handover"`
+               lists a PR. Else you are already on branch ${{ steps.handover.outputs.branch }} (created from main; do not
+               create or switch branches). Overwrite HANDOVER.md (max 60 lines, facts you measured, unknowns marked "open"),
+               run `make check`, commit as Daniel (no Co-authored-by), push with exactly `git push origin HEAD` and open
+               ONE PR (English, ASCII title, body max 5 lines). To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
             The git identity (user.name, user.email) is already configured and the tools for `make check` are
             installed. Commit with a plain `git commit -m "..."`: never `git -c ...` and never a `cd` prefix
             (they do not match the allow list and are denied).
             Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects (they do not match
-            the allow list and are denied). Use gh's --json/--jq flags instead of pipes.
+            the allow list and are denied). Use gh's --json/--jq flags instead of pipes; inside `--jq` write a plain
+            path only (e.g. `--jq .comments[-1].body`), no `|`, `{` or `}` (an unquoted `|` is a shell pipe and is denied).
             These calls are NOT allowed and end the run as failed: `gh issue close` (comment instead and leave
-            closing to Daniel), `gh workflow list` (use `gh run list`), `gh api`, `git checkout`, `git switch`,
-            `git fetch`, `git -c ...` (identity is already set: plain `git commit -m "<one line>"`), `make -n check`.
+            closing to Daniel), `gh workflow list` (use `gh run list`), `gh run view` (also with `--log-failed`; use
+            `gh run list --json name,conclusion,headSha,url` and name the red run in the issue slip), `gh api`, `git checkout`, `git switch`,
+            `git fetch`, `git -c ...` (identity is already set: plain `git commit -m "<one line>"`), `make -n check`,
+            `pip install ...` (the tools are installed; if `make check` still fails, say so in the PR body).
+            For `gh issue create` and `gh pr create` keep --title and --body on one line without backticks or
+            `$(...)`; for longer text write the file with Write and pass --body-file.
             Never push to main, never merge, no secrets in comments. Finish with a short status report.
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
@@ -199,7 +255,7 @@ jobs:
             --max-turns 40
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git restore:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git restore:*),Bash(gh pr create:*),Bash(make check),Bash(date:*),Bash(python3 tools/overlap.py:*)"
       - name: Run report (script, no model)
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
         env:

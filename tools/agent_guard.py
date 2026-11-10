@@ -27,7 +27,9 @@ import re
 import subprocess
 import sys
 
+import decision
 import liveness
+import owner_hold
 
 # Execution-file helpers live in exec_log.py; re-exported here so `agent_guard.X` keeps working.
 from exec_log import (  # noqa: F401
@@ -71,14 +73,22 @@ def ensure_label(name, run=gh):
 
 
 def add_labels(kind, number, labels, run=gh):
+    """Add labels (created first). `needs-human` and `review:N` that OWNER removed are not set again (owner_hold):
+    one comment says so, the rest of the labels are still added."""
+    refused = owner_hold.held(kind, number, labels, run)
+    if refused:
+        liveness.post_comment(kind, number, f"Daniel removed {', '.join(refused)}; not set again for this head.", run)
+    labels = [name for name in labels if name not in refused]
     for name in labels:
         ensure_label(name, run)
-    run(kind, "edit", str(number), *[a for name in labels for a in ("--add-label", name)])
+    if labels:
+        run(kind, "edit", str(number), *[a for name in labels for a in ("--add-label", name)])
 
 
 def count_round(number, sha, run=gh):
     """One review round per head SHA, shared by both reviewers. Marker label `round:<sha7>` (older markers are removed).
-    Returns "already" (this head was counted), "limit" (review:3 is set, nothing bumped) or "counted" (review:N bumped)."""
+    Returns "already" (this head was counted), "limit" (review:3 is set, nothing bumped), "held" (OWNER removed that
+    review label, nothing bumped) or "counted" (review:N bumped)."""
     labels = set(run("pr", "view", str(number), "--json", "labels", "--jq", ".labels[].name").split())
     mark = f"round:{sha[:7]}"
     if mark in labels:
@@ -86,6 +96,9 @@ def count_round(number, sha, run=gh):
     if "review:3" in labels:
         return "limit"
     nxt = "review:3" if "review:2" in labels else "review:2" if "review:1" in labels else "review:1"
+    if owner_hold.held("pr", number, [nxt], run):
+        add_labels("pr", number, [nxt], run)  # refuses and comments
+        return "held"
     add_labels("pr", number, [nxt, mark], run)
     for old in sorted(n for n in labels if n.startswith("round:")):
         try:
@@ -241,8 +254,14 @@ def read_body_before(path):
 def escalate(kind, number, is_pr, what, owner, run=gh):
     body = report(kind, what, os.environ.get("RUN_URL", ""), read_exec(os.environ.get("EXEC_FILE", "")))
     thing = "pr" if is_pr else "issue"
+    body += (f"\n\nHallo Daniel, ein Agenten-Lauf ist ohne Ergebnis geendet. Frage: Soll der Block aufgehoben werden (ja) "
+             f"oder {'der PR' if is_pr else 'das Issue'} geschlossen werden (nein)?\n"
+             + decision.build(yes="drop-block", no=f"close-{thing}"))
+    blocked = bool(owner_hold.held(thing, number, ["needs-human"], run, owner))
     add_labels(thing, number, ["needs-human"], run)
     liveness.post_comment(thing, number, body, run)
+    if blocked:  # Daniel removed needs-human: comment only, no review request or assignment
+        return
     if is_pr:
         author = json.loads(run("pr", "view", str(number), "--json", "author"))["author"]["login"]
         if not same_login(author, owner):  # nobody can review their own PR

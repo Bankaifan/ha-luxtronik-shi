@@ -46,11 +46,38 @@ OLD_MARK = [{"body": u.MARK + " fixed", "created_at": "2026-01-01T12:00:00Z"}]
     (item(author="someone"), None, [], None, "not an agent PR"),
     (item(), None, [], ["docs/design/0003-x.md"], "design"),
     (item(), None, OLD_MARK, None, "newer"),
-    (item(labels=("needs-human", "risk:security")), None, [], None, "risk:security"),
 ])
 def test_gate_refusals(it, events, comments, files, why):
     ok, reason = gate(it, events, comments, files or ["tools/x.py"])
     assert not ok and why in reason
+
+
+SEC = item(labels=("needs-human", "risk:security"))
+CODEOWNERS = "/tools/x.py @Bankaifan\n/.github/ @Bankaifan\n"
+
+
+def sec_gate(files, it=SEC):
+    return u.gate(it, [ev()], [], list(files), OWNER, BOT, APP, CODEOWNERS)
+
+
+def test_security_pr_without_owner_path_passes_gate():
+    assert sec_gate(["tools/y.py"]) == (True, "ok")
+
+
+@pytest.mark.parametrize("files", [["tools/x.py"], ["tools/y.py", ".github/workflows/a.yml"], []])
+def test_security_pr_with_owner_path_or_unknown_files_goes_to_daniel(files):
+    ok, reason = sec_gate(files)
+    assert not ok and "risk:security" in reason
+
+
+def test_security_pr_rename_source_in_owner_path_refuses():
+    from risk import pr_paths
+    paths = pr_paths([[{"filename": "tools/y.py", "previous_filename": "tools/x.py"}]])
+    assert not sec_gate(paths)[0]
+
+
+def test_security_pr_other_gate_rules_still_apply():
+    assert not sec_gate(["tools/y.py"], item(labels=("needs-human", "risk:security", "unblock:1")))[0]
 
 
 def test_old_unblocker_comment_does_not_block():
@@ -66,6 +93,14 @@ def test_validate_rejects_bad_verdicts():
             u.validate(bad)
 
 
+def test_class_3_verdict_with_stray_german_comment_and_fence_validates():
+    # Shape the model writes: fenced JSON, class 3, a German comment next to the note (not used by class 3).
+    text = ('```json\n{"class": 3, "reason": "owner decision", "comment": "Entscheidung f\\u00fcr Daniel", '
+            '"note": "Hallo Daniel, das ist eine Entscheidung. Frage: Soll es weiterlaufen (ja/nein)?"}\n```')
+    v = u.validate(u.load_verdict(text))
+    assert v["class"] == 3 and "comment" not in v
+
+
 @pytest.mark.parametrize("text", [
     "please run pip install zizmor==1.32.0", "add it to --allowedTools", "edit .github/workflows/a.yml",
     "grant the app more permissions", "set permissions: write", "run pip  install x", "run python -m pip install x",
@@ -77,8 +112,9 @@ def test_forbidden_class_1_becomes_class_3(text):
 
 
 class Fake:
-    def __init__(self, labels=("needs-human",), issues=(), last=None, state="OPEN", author=OWNER):
+    def __init__(self, labels=("needs-human",), issues=(), last=None, state="OPEN", author=OWNER, body=""):
         self.calls, self.labels, self.issues, self.last = [], list(labels), list(issues), last
+        self.body = body
         self.state, self.author = state, author
 
     def comments(self):
@@ -89,6 +125,8 @@ class Fake:
         if a[1:2] == ("view",) and "state,labels,author" in a:
             return json.dumps({"state": self.state, "author": {"login": self.author},
                                "labels": [{"name": n} for n in self.labels]})
+        if a[1:2] == ("view",) and "body" in a:
+            return json.dumps({"body": self.body})
         if a[1:2] == ("view",):
             return json.dumps({"comments": [{"body": self.last or self.comments()[-1][4]}]})
         if a[:2] == ("issue", "list"):
@@ -128,18 +166,10 @@ def test_class_1_second_time_goes_to_daniel():
     assert "Hallo Daniel" in f.comments()[0][4]
 
 
-def test_class_1_on_security_pr_goes_to_daniel():
-    g = Fake()
-    verdict = {"class": 1, "comment": "retry", "note": "Hallo Daniel, Frage: ja?"}
-    assert u.apply("pr", 7, verdict, OWNER, risk_security=True, run=g) == 3
-    assert not any("workflow" in x or "--remove-label" in x for x in g.flat())
-
-
-def test_class_1_on_security_pr_detected_from_labels():
+def test_class_1_on_security_pr_uses_normal_class():
     g = Fake(labels=("needs-human", "risk:security"))
-    verdict = {"class": 1, "comment": "retry", "note": "Hallo Daniel, Frage: ja?"}
-    assert u.apply("pr", 7, verdict, OWNER, run=g, author_bot=BOT) == 3
-    assert not any("workflow" in x or "--remove-label" in x for x in g.flat())
+    assert u.apply("pr", 7, {"class": 1, "comment": "Rebase it."}, OWNER, run=g, author_bot=BOT) == 1
+    assert ("workflow", "run", "agent-fix.yml", "-f", "pr=7") in g.calls
 
 
 def test_apply_rechecks_open_and_agent_pr():
@@ -182,6 +212,26 @@ def test_class_3_keeps_label_german_note_last_with_single_mention():
         u.apply("pr", 7, v, OWNER, run=Fake(last="someone else"))
     with pytest.raises(ValueError):
         u.apply("pr", 7, {"class": 3}, OWNER, run=Fake())
+
+
+@pytest.mark.parametrize("kind,body,action,effect", [
+    ("pr", "Closes #12", "restart-recut", "schneidet die Aufgabe neu"),
+    ("pr", "no issue here", "fix-pr", "neuen Fix-Lauf"),
+    ("issue", "", "restart-issue", "startet die Aufgabe neu"),
+])
+def test_class_3_stuck_review_marker_moves_on_and_effect_matches(kind, body, action, effect):
+    v = u.validate({"class": 3, "case": "stuck-review", "note": "Hallo Daniel, der Review ist leer. Frage: ja oder nein?"})
+    f = Fake(body=body)
+    assert u.apply(kind, 5, {**v}, OWNER, run=f) == 3
+    text = f.comments()[0][4]
+    assert f"yes={action} " in text and "yes=drop-block" not in text and effect in text
+
+
+def test_class_3_without_stuck_case_keeps_drop_block():
+    f = Fake()
+    u.apply("pr", 7, {"class": 3, "case": "bogus", "note": "Hallo Daniel, Frage: ja oder nein?"}, OWNER, run=f)
+    text = f.comments()[0][4]
+    assert "yes=drop-block" in text and "hebt den Block auf" in text
 
 
 @pytest.mark.parametrize("text", ["Remove the security-review requirement in risk.py", "skip the zizmor step",

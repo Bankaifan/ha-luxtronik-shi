@@ -7,8 +7,9 @@ Runs from the default branch (agent-review.yml, workflow_run); PR data is read t
 
 Approve only if ALL hold, else refuse:
 1. The PR is open, same repo, `agent/*`, SHA is its head, one commit, fewer than 100 files (the file list is complete),
-   no `needs-human` / `risk:security`, not a design PR, no changed path owned by the owner in CODEOWNERS, and the
-   risk classifier (tools/ci/risk.py) rates the commit patch `none` (infra and security both refuse).
+   no `needs-human`, not a design PR, no changed path owned by the owner in CODEOWNERS, and the risk classifier
+   (tools/ci/risk.py) rates the commit patch `none` or `security` (infra refuses). A `security` patch or a
+   `risk:security` label also needs a `security-review: approve <sha>` comment of the approver app for the new head.
 2. No reviewer's latest decisive review is CHANGES_REQUESTED. The newest approver review for another head OLD is an
    APPROVED one, or a DISMISSED one whose dismissal event says: previous state `approved`, no message (a manual
    dismissal always has one), actor = the author app (the pusher). Anything unreadable refuses.
@@ -57,8 +58,8 @@ def check_pr(pr, repo, sha):
         raise Refuse("not a same-repo agent/* branch")
     if pr.get("commits") != 1:
         raise Refuse("PR has not exactly one commit")
-    if labels & {"needs-human", "risk:security"}:
-        raise Refuse("PR is labelled needs-human or risk:security")
+    if "needs-human" in labels:
+        raise Refuse("PR is labelled needs-human")
 
 
 def check_files(files, pr, codeowners, owner):
@@ -141,8 +142,14 @@ def run_reapprove(pr_no, sha, env, run=gh, ident=patch_id):
     new_patch, old_patch = (run("api", f"repos/{repo}/commits/{c}", "-H", PATCH_ACCEPT) for c in (sha, old))
     for p in (new_patch, old_patch):
         check_patch(p, len(files))
-    if risk.classify(new_patch, risk.read_text("AGENTS.md")) != "none":
+    level = risk.classify(new_patch, risk.read_text("AGENTS.md"))
+    labelled = any(lb.get("name") == "risk:security" for lb in pr.get("labels") or [])
+    if level not in ("none", "security"):
         raise Refuse("risk class is not none")
+    if level == "security" or labelled:  # the security verdict must cover exactly the new head
+        comments = paged(run, f"repos/{repo}/issues/{pr_no}/comments")
+        if risk.verdict_for(comments, sha, approver) != "approve":
+            raise Refuse("no security-review approve for this head")
     pid, old_pid = ident(new_patch), ident(old_patch)
     if pid != old_pid:
         raise Refuse("patch changed since the approved head")

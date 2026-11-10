@@ -14,11 +14,17 @@
 6. Red main: an own agent PR (one commit, author OWNER, behind main) whose last validate failed while main was red
    is rebased onto main via the update-branch API once main is green again, so CI runs again. Never merges.
 Read-only except: the status issue, re-triggers, run approvals, the fix dispatch and these labels:
-agent:dev (re-add), status:retriggered, review:N, needs-human, restart:1 (via restart.py). Needs the gh CLI (GH_TOKEN, GH_REPO).
+agent:dev (re-add), status:retriggered, review:N, needs-human, restart:1 (via restart.py), stalled:1 (via stalled_dev.py). Needs the gh CLI (GH_TOKEN, GH_REPO).
 
 CLI: status.py gate   write run=true|false to $GITHUB_OUTPUT (schedule ticks honour STATUS_INTERVAL)
      status.py        do the run
-Environment: OWNER (default Bankaifan), AUTHOR_BOT, STATUS_INTERVAL (minutes, default 30 public / 60 private repos;
+7. Failure watch (tools/failure_watch.py, design 0008): after the overdue block; FAILURE_WATCH=off skips it; the
+   anchor is kept in the status issue line `Failure watch since:`. An error in it never stops the status issue.
+8. Design parents (tools/design_parents.py, issue #335): an open design parent whose split issues are all closed as
+   completed by a merged PR is closed (prio:* and agent:dev removed, one comment). Nothing else is touched.
+9. Stalled agent:dev issues (tools/stalled_dev.py, issue #366): no open PR closes it, no agent-dev run covers it, label
+   older than 60 min: agent:dev set again once (stalled:1); a second stall goes to needs-human, OWNER as assignee.
+Environment: OWNER (default Bankaifan), AUTHOR_BOT, FAILURE_WATCH (off = skip the failure watch), STATUS_INTERVAL (minutes, default 30 public / 60 private repos;
 rounded up to a multiple of 30), EVENT, PRIVATE ("true" for a private repo).
 Prints numbers and titles, never tokens.
 """
@@ -29,8 +35,13 @@ import re
 import subprocess
 import sys
 
+import design_parents
+import failure_watch
 import liveness
+import owner_hold
+import stalled_dev
 from agent_guard import add_labels, same_login, tail_text
+from approval import effective_approval
 from restart import close_superseded, handle_limit, superseded
 
 TITLE = "Agent status"
@@ -41,6 +52,7 @@ LIMIT_IDLE_MIN = 30
 RETRIGGER = "status:retriggered"
 AGENT_WORKFLOWS = {"agent-dev", "agent-fix", "agent-review", "orchestrator", "scout", "rule-keeper"}
 TICK_MIN = 30
+SINCE_LABEL = "Failure watch since:"
 PR_LIMIT = 20  # 50 made the GraphQL query exceed 500,000 nodes (statusCheckRollup x commits)
 
 
@@ -200,12 +212,14 @@ def fix_round(labels):
     return ("review:2" if "review:1" in labels else "review:1"), False
 
 
-def limit_prs(prs, runs, now):
-    """Agent PRs at review:3 that nobody took over: open, not approved, no needs-human, no agent job, idle head."""
+def limit_prs(prs, runs, now, approver="", is_held=None):
+    """Agent PRs at review:3 that nobody took over: open, not effectively approved (a security `changes` verdict for
+    the head counts as not approved), no needs-human, no agent job, idle head, no OWNER label removal (`is_held`)."""
     if any(r["workflowName"] in ("agent-fix", "agent-review") for r in runs):
         return []
     return [p for p in prs if is_agent_pr(p) and "review:3" in names(p) and "needs-human" not in names(p)
-            and p.get("reviewDecision") != "APPROVED" and minutes_since(head_date(p), now) > LIMIT_IDLE_MIN]
+            and not effective_approval(p.get("reviewDecision"), names(p), p.get("comments"), p.get("headRefOid"), approver)
+            and minutes_since(head_date(p), now) > LIMIT_IDLE_MIN and not (is_held and is_held(p))]
 
 
 def handle_stuck_limit(pr, owner, run=gh):
@@ -323,7 +337,7 @@ def merged_rows(merged, now, hours=24):
 
 
 def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner, scheduled=None, added=None,
-               merged=None):
+               merged=None, watch_since=None):
     run_rows = [f"- [{r['workflowName']}]({r['url']}) {r.get('displayTitle', '')} ({r['status']}, "
                 f"{age(r['createdAt'], now)})" for r in runs]
     pr_rows = [pr_line(p, owner) for p in prs]
@@ -343,13 +357,15 @@ def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner
     if scheduled is not None:
         parts.append(section("Last successful scheduled runs", scheduled_rows(scheduled, now, added)))
     parts.append(section("Actions of this run", [f"- {a}" for a in actions]))
+    if watch_since is not None:
+        parts.append(f"{SINCE_LABEL} {watch_since:%Y-%m-%dT%H:%M:%SZ}")
     return "\n\n".join(parts) + "\n"
 
 
-def update_issue(body, run=gh):
+def update_issue(body, run=gh, bot=""):
     found = json.loads(run("issue", "list", "--state", "open", "--search", f'"{TITLE}" in:title',
-                           "--json", "number,title"))
-    found = [i for i in found if i["title"] == TITLE]
+                           "--json", "number,title,author"))
+    found = [i for i in found if i["title"] == TITLE and own_issue(i, bot)]
     if found:
         number = str(found[0]["number"])
         run("issue", "edit", number, "--body", body)
@@ -381,6 +397,46 @@ def label_time(run, repo):
     return f
 
 
+def own_issue(issue, bot):
+    """Status issue written by our bot. Without a configured bot login the author is not checked."""
+    return not bot or same_login((issue.get("author") or {}).get("login"), bot)
+
+
+def previous_since(run, now, bot=""):
+    """Anchor of the failure watch: the `Failure watch since:` line of the open status issue (bot-authored only,
+    clamped to [now - MAX_BACK, now] because the body is editable input), else 24 h back."""
+    oldest = now - failure_watch.MAX_BACK
+    found = jlist(run, "issue", "list", "--state", "open", "--search", f'"{TITLE}" in:title', "--json",
+                  "title,body,author")
+    for i in found:
+        if i["title"] != TITLE or not own_issue(i, bot):
+            continue
+        m = re.search(rf"^{re.escape(SINCE_LABEL)} (\S+)$", i.get("body") or "", re.MULTILINE)
+        if m:
+            try:
+                return min(max(parse_ts(m.group(1)), oldest), now)
+            except (ValueError, TypeError):
+                break
+    return oldest
+
+
+def watch_failures(env, now, successes, added, actions, run):
+    """Failure watch after the overdue block (design 0008, 4.8). Never stops the status run; returns the new anchor.
+    FAILURE_WATCH=off skips it. Without a successes list the overdue state is unknown, so nothing is closed."""
+    bot = env.get("AUTHOR_BOT", "")
+    if env.get("FAILURE_WATCH", "").strip().lower() == "off" or successes is None:
+        return None
+    since = None
+    try:
+        since = previous_since(run, now, bot)
+        late = liveness.overdue_runs(successes, now, added)
+        done, since = failure_watch.watch(since, now, late, None, run)
+        actions += done
+    except Exception as e:  # noqa: BLE001 - the status issue must always be written
+        print(f"failure watch failed: {type(e).__name__}")
+    return since
+
+
 def gate(env, now):
     private = env.get("PRIVATE", "").lower() == "true"
     go = should_run(env.get("EVENT", ""), private, env.get("STATUS_INTERVAL", ""), now)
@@ -401,7 +457,7 @@ def run_status(env, now, run=gh):
     runs = [r for r in runs if r["workflowName"] in AGENT_WORKFLOWS]
     prs = jlist(run, "pr", "list", "--state", "open", "--limit", str(PR_LIMIT), "--json",
                 "number,title,url,headRefName,headRefOid,labels,reviewDecision,reviewRequests,statusCheckRollup,"
-                "mergeStateStatus,isCrossRepository,author,commits,createdAt,body")
+                "mergeStateStatus,isCrossRepository,author,commits,createdAt,body,comments")
     issues = jlist(run, "issue", "list", "--state", "open", "--label", "agent:dev", "--limit", "50",
                    "--json", "number,title,labels,createdAt")
     ideas = jlist(run, "issue", "list", "--state", "open", "--label", "idea", "--limit", "50",
@@ -446,11 +502,16 @@ def run_status(env, now, run=gh):
     for p in prs:
         if p not in stuck_p:
             clear_retrigger("pr", p, run)
-    for p in limit_prs(prs, runs, now):
+    def is_held(p):
+        return owner_hold.pr_held(p["number"], run, owner)
+
+    for p in limit_prs(prs, runs, now, env.get("APPROVER_BOT", ""), is_held):
         actions.append(f"review:3 PR #{p['number']}: {handle_stuck_limit(p, owner, run)}")
     if not any(r["workflowName"] == "agent-fix" for r in runs):  # one fix job at a time
-        for p in conflict_prs(prs)[:1]:
+        for p in [c for c in conflict_prs(prs) if not is_held(c)][:1]:
             actions.append(f"conflict PR #{p['number']}: {handle_conflict(p, owner, run)}")
+    actions += safe(design_parents.close_done_parents, run, owner, bot) or []
+    actions += stalled_dev.check(issues, labeled_at, now, run, owner, {i["number"] for i in stuck_i})
     ages = {i["number"]: age(labeled_at(i), now) for i in issues}
     successes = safe(liveness.last_successes, run)
     added = {}
@@ -458,10 +519,11 @@ def run_status(env, now, run=gh):
         added = safe(liveness.added_dates, successes, run) or {}
         late, new = liveness.flag_overdue(successes, now, run, added)
         actions += [f"overdue run: {label}" for label in late] + [f"opened overdue issue #{n}" for n in new]
+    watch_since = watch_failures(env, now, successes, added, actions, run)
     merged = safe(jlist, run, "pr", "list", "--state", "merged", "--limit", "30", "--json",
                   "number,title,mergedAt,labels")
     number = update_issue(build_body(runs, prs, issues, ages, orch, ideas, actions, now, owner, successes, added,
-                                     merged), run)
+                                     merged, watch_since), run, bot)
     print(f"status issue #{number}; actions: {len(actions)}")
     for a in actions:
         print(a)

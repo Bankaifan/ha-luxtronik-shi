@@ -50,6 +50,13 @@ jobs:
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
+      # The model is denied `git checkout -b` (issue #203): the script creates the branch, the model only edits, commits, pushes.
+      - name: Rule-keeper branch
+        id: branch
+        run: |
+          branch="agent/rule-keeper-$(date +%F)"
+          git checkout -b "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         env:
@@ -76,9 +83,9 @@ jobs:
             workflow before or instead of the model step) with the runs per week it affects. Template-managed files are
             not edited here; name them in the PR body.
             If nothing is worth changing, do nothing. Otherwise first run `gh pr list --state open --search "head:agent/rule-keeper-"`
-            and stop if one is open. Then run `date +%F` on its own, and create the branch with the literal result
-            (`git checkout -b agent/rule-keeper-<that date>`, no shell substitution) from main, make the edits,
-            run `make check`, commit, push and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
+            and stop if one is open. The workflow already created the branch `${{ steps.branch.outputs.branch }}` from main and
+            checked it out: make the edits on it (do not create, switch or check out branches yourself), run `make check`,
+            commit, run `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
             Never edit main directly, never merge. Daniel merges.
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
@@ -86,7 +93,7 @@ jobs:
             --max-turns 30
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(git checkout -b agent/rule-keeper-:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin agent/rule-keeper-:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(make:*),Bash(date:*),Bash(wc:*),Bash(ls:*),Bash(rm:*)"
       - name: Run report (script, no model)
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
         env:

@@ -23,12 +23,86 @@ jobs:
           GH_REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.issue.number }}
         run: gh issue comment "$NUMBER" --body "/dev works on issues only. A PR gets fix rounds from review feedback or a red CI; for more, comment on the issue it closes."
-  dev:
+  # Project only, no model: a slip that touches only template-managed paths (no override) is routed to the template
+  # (tools/managed_guard.py), nothing is built here. The template app token exists only in this job, so the model step
+  # in `dev` never sees it. No-op in the template repo and without .agents/template.json.
+  route:
     if: >-
       (github.event_name == 'issues' && github.event.label.name == 'agent:dev') ||
       (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
        startsWith(github.event.comment.body, '/dev') &&
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    concurrency:
+      group: agent-route-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    outputs:
+      skip: ${{ steps.route.outputs.skip }}
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
+      - run: pip install pyyaml==6.0.2
+      - id: tpl
+        env:
+          GH_REPO: ${{ github.repository }}
+        run: |
+          repo="$(python3 tools/idea_route.py repo)"
+          {
+            echo "repo=$repo"
+            echo "owner=${repo%%/*}"
+            echo "name=${repo#*/}"
+          } >> "$GITHUB_OUTPUT"
+      # A trusted template sync issue is never routed (tools/ci/template_fetch.py prints nothing for other issues).
+      - id: sync
+        if: steps.tpl.outputs.repo != ''
+        env:
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+        run: echo "is=$([ -n "$(python3 tools/ci/template_fetch.py)" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - id: app
+        if: steps.tpl.outputs.repo != '' && steps.sync.outputs.is == 'false'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-issues: write
+      - id: tpl-app
+        if: steps.tpl.outputs.repo != '' && steps.sync.outputs.is == 'false'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          owner: ${{ steps.tpl.outputs.owner }}
+          repositories: ${{ steps.tpl.outputs.name }}
+          permission-issues: write
+      - name: Route a managed-files-only issue to the template
+        id: route
+        if: steps.tpl.outputs.repo != '' && steps.sync.outputs.is == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TEMPLATE_GH_TOKEN: ${{ steps.tpl-app.outputs.token }}
+        run: |
+          ISSUE_JSON="$(gh issue view "$ISSUE" --json number,title,body,comments)"
+          export ISSUE_JSON
+          python3 tools/managed_guard.py route-issue >> "$GITHUB_OUTPUT"
+  dev:
+    needs: route
+    if: >-
+      needs.route.outputs.skip != 'true' && (
+      (github.event_name == 'issues' && github.event.label.name == 'agent:dev') ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/dev') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
     # One run per issue; the 2-job cap is kept by the orchestrator (at most 2 open agent:dev issues).
     # At job level on purpose: a skipped run (e.g. the label event for model:sonnet) must not replace a pending real run.
     # Every label event starts a run here (GitHub cannot filter label names at workflow level); runs that are not
@@ -113,16 +187,21 @@ jobs:
             Create branch agent/${{ env.ISSUE }}-<slug> from main, implement, run `make check` and the tests,
             squash the branch into ONE commit authored by Daniel without a Co-authored-by trailer, push, and open a PR with
             `gh pr create` (English ASCII title, body max 5 lines, "Closes #${{ env.ISSUE }}").
+            The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
+            never `pip install`. Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects
+            (they do not match the allow list and are denied).
             Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
             comment on the issue/PR saying which one instead of stopping silently.
             Template sync issue: the template files at the issue's `Template-Sync` SHA are in .template/
             (${{ steps.template.outputs.dir || 'not present: this is no sync issue' }}). Read them from there, never commit .template/.
+            Porting files: no helper scripts (no `bash /tmp/port.sh`), no loops. Use Read then Write/Edit per file,
+            or one plain `cp <src> <dst>` per file; list and compare with `ls`, `diff`, `cmp`.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 60
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh run list:*),Bash(gh run view:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*)"
       # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
       - name: Make sure CI runs on the PR head
         if: ${{ !cancelled() }}
