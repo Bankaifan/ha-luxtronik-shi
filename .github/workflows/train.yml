@@ -1,0 +1,52 @@
+name: train
+# No model: tools/train.py rebases the oldest approved agent PR that is BEHIND main and starts the conflict fix round
+# (design docs/design/0003-merge-train.md, 4.3). Runs right after every push to main, every 30 min as a fallback, and by hand.
+# Repo variable TRAIN=off disables it. Checkout is main only; PR data is read through gh as data, never executed.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: train
+  cancel-in-progress: false
+jobs:
+  train:
+    if: (vars.TRAIN || 'on') != 'off'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+        run: |
+          for n in AUTHOR_CLIENT_ID AUTHOR_BOT APPROVER_BOT; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      # Author app token, not GITHUB_TOKEN: pushes made with GITHUB_TOKEN do not start validate.
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: write
+      - name: Rebase the next PR and start conflict fixes
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: Bankaifan
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+        run: python3 tools/train.py

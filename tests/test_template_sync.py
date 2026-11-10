@@ -116,6 +116,39 @@ def test_render_issue_contents():
     assert body.rstrip().endswith("Template-Sync: " + "c" * 40)
 
 
+def _big(n):
+    clean = [{"path": f"tools/f{i}.py", "status": "added"} for i in range(n)]
+    clean.append({"path": "tools/ci/risk.py", "status": "modified"})
+    clean.append({"path": "tests/test_risk.py", "status": "modified"})
+    return clean
+
+
+def test_render_issue_splits_large_change_with_reviewer_files():
+    _, body = mod.render_issue("c" * 40, _big(98), [], "")
+    p1, p2 = body.index("## Part 1: reviewer pipeline"), body.index("## Part 2: rest")
+    assert p1 < p2
+    assert p1 < body.index("`tools/ci/risk.py`") < p2
+    assert p1 < body.index("`tests/test_risk.py`") < p2
+    assert body.index("`tools/f0.py`") > p2
+    assert body.rstrip().endswith("Template-Sync: " + "c" * 40)
+
+
+def test_render_issue_small_change_stays_flat():
+    _, body = mod.render_issue("c" * 40, _big(8), [], "")
+    assert "Part 1" not in body and "## Clean (port as is)" in body
+
+
+def test_render_issue_large_without_reviewer_files_stays_flat():
+    clean = [{"path": f"tools/f{i}.py", "status": "added"} for i in range(100)]
+    _, body = mod.render_issue("c" * 40, clean, [], "")
+    assert "Part 1" not in body
+
+
+def test_render_issue_boundary_40_is_flat_41_splits():
+    assert "Part 1" not in mod.render_issue("c" * 40, _big(38), [], "")[1]
+    assert "Part 1" in mod.render_issue("c" * 40, _big(39), [], "")[1]
+
+
 def test_pick_issue_returns_first_open_only():
     issues = [{"number": 1, "title": "Other"}, {"number": 2, "title": "Template sync abc1234"},
               {"number": 3, "title": "Template sync def5678"}]

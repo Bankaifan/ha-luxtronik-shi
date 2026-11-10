@@ -344,8 +344,8 @@ class OrchGh:
 def orch_env(tmp_path, monkeypatch):
     f = tmp_path / "exec.json"
 
-    def setup(denials=(), startable=False):
-        f.write_text(json.dumps([{"type": "result", "permission_denials": list(denials)}]))
+    def setup(denials=(), startable=False, result=""):
+        f.write_text(json.dumps([{"type": "result", "result": result, "permission_denials": list(denials)}]))
         monkeypatch.setenv("EXEC_FILE", str(f))
         monkeypatch.setenv("STARTABLE", "true" if startable else "false")
     monkeypatch.setenv("GH_REPO", "o/r")
@@ -362,6 +362,25 @@ def test_orchestrator_denials_escalate(orch_env):
     comment = r.made("issue", "comment", "57")
     assert comment and "https://x/run/9" in comment[0][-1] and "Bash: gh issue list" in comment[0][-1]
     assert not r.made("issue", "create")  # first failure: no issue yet
+
+
+def test_denied_gh_run_view_fails_the_run_even_with_a_conclusion(orch_env):
+    # Run 42821430379 (issue #313): two denied `gh run view` calls, the run still ended with a Conclusion line.
+    # The guard keys on denials, not on the Conclusion line, so that run must fail and name the calls.
+    run_view = [{"tool_name": "Bash", "tool_input": {"command": f"gh run view 42821187787{flag}"}}
+                for flag in ("", " --log-failed")]
+    orch_env(denials=run_view, result="Conclusion: Started prio:1 issue #309.")
+    r = OrchGh()
+    assert g.silent_orchestrator(T0, r) == 1
+    comment = r.made("issue", "comment", "57")
+    assert comment and "Bash: gh run view 42821187787 --log-failed" in comment[0][-1]
+
+
+def test_run_with_conclusion_and_no_denials_passes(orch_env):
+    orch_env(startable=True, result="Started #313 with a slip.\nConclusion: Started #313 with a slip.")
+    r = OrchGh(comments=[{"user": {"login": BOT}, "created_at": "2026-11-09T10:05:00Z"}])  # a visible action
+    assert g.silent_orchestrator(T0, r) == 0
+    assert not r.made("issue", "comment")
 
 
 def test_orchestrator_free_slot_without_action_escalates(orch_env):

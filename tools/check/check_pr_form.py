@@ -4,6 +4,7 @@ Reads PR_TITLE and PR_BODY from the environment (pull_request events). On workfl
 title and body of the open PR for GITHUB_REF_NAME via `gh pr view` (needs GH_TOKEN); no PR means skipped.
 Also fails an `agent/<N>-*` PR whose body does not mention `#<N>`. Also fails (when the PR file list is known): a design PR (only `docs/design/`) with a closing keyword
 (use `Refs #N`), and a PR touching HANDOVER.md that is not an orchestrator PR (`agent/orchestrator-handover-*`).
+An optional `## Friction` section (see tools/friction.py) is accepted, never required.
 Skipped for local runs and pushes to main. Whether the title is really English cannot be verified.
 """
 import json

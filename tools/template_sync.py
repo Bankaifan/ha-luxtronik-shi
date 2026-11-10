@@ -15,6 +15,15 @@ import sys
 CONFIG = pathlib.Path(".agents/template.json")
 TITLE_PREFIX = "Template sync "
 COMPARE_CAP = 300
+SPLIT_MIN_FILES = 40
+# Part 1 of a large sync (design 0010, 4.3); their tests/test_<name>.py belong to it too.
+REVIEWER_FIRST = [
+    ".github/workflows/agent-security-review.yml",
+    ".github/workflows/agent-review.yml",
+    "tools/ci/post_verdict.py",
+    "tools/ci/risk.py",
+    "tools/ci/stage_review.py",
+]
 
 
 class TruncatedCompare(Exception):
@@ -72,13 +81,39 @@ def split_overrides(changed, overrides):
     return clean, overridden
 
 
+def is_reviewer_file(path):
+    for item in REVIEWER_FIRST:
+        if path == item:
+            return True
+        name = pathlib.PurePosixPath(item).stem
+        if item.endswith(".py") and path == f"tests/test_{name}.py":
+            return True
+    return False
+
+
+def _sections(clean, overridden, level):
+    h = "#" * level
+    lines = [f"{h} Clean (port as is)"]
+    lines += [f"- `{c['path']}` ({c['status']})" for c in clean] or ["- none"]
+    lines += ["", f"{h} Overridden (port by hand, keep the intent)"]
+    lines += [f"- `{c['path']}` ({c['status']}): {c['why']}" for c in overridden] or ["- none"]
+    return lines
+
+
 def render_issue(main_sha, clean, overridden, stat, compare_url=""):
     title = f"{TITLE_PREFIX}{main_sha[:7]}"
-    lines = [f"{len(clean) + len(overridden)} managed files changed ({len(clean)} clean, "
-             f"{len(overridden)} overridden). {stat}".strip(), "", "## Clean (port as is)"]
-    lines += [f"- `{c['path']}` ({c['status']})" for c in clean] or ["- none"]
-    lines += ["", "## Overridden (port by hand, keep the intent)"]
-    lines += [f"- `{c['path']}` ({c['status']}): {c['why']}" for c in overridden] or ["- none"]
+    total = len(clean) + len(overridden)
+    lines = [f"{total} managed files changed ({len(clean)} clean, "
+             f"{len(overridden)} overridden). {stat}".strip(), ""]
+    first_c = [c for c in clean if is_reviewer_file(c["path"])]
+    first_o = [c for c in overridden if is_reviewer_file(c["path"])]
+    if total > SPLIT_MIN_FILES and (first_c or first_o):
+        rest_c = [c for c in clean if not is_reviewer_file(c["path"])]
+        rest_o = [c for c in overridden if not is_reviewer_file(c["path"])]
+        lines += ["## Part 1: reviewer pipeline"] + _sections(first_c, first_o, 3)
+        lines += ["", "## Part 2: rest"] + _sections(rest_c, rest_o, 3)
+    else:
+        lines += _sections(clean, overridden, 2)
     if compare_url:
         lines += ["", f"Compare: {compare_url}"]
     lines += ["", f"Template-Sync: {main_sha}"]

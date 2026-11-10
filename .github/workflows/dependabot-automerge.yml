@@ -1,4 +1,5 @@
 name: dependabot-automerge
+run-name: "dependabot: ${{ github.event.workflow_run.display_title || github.event.workflow_run.head_branch }}"
 # No model. Trigger: workflow_run on `validate` (not pull_request_target), because runs started by
 # dependabot get no repo secrets and workflow_run always runs the default-branch version of this file.
 # PR code is never checked out. Open: whether workflow_run of a dependabot-triggered run sees the

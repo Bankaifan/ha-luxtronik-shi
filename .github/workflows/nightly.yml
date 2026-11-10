@@ -1,0 +1,45 @@
+name: nightly
+# Slow-marked tests run here, not on PRs, only when the repo variable NIGHTLY_HEAVY_TESTS is exactly "true"
+# (design 0009). Unset or false: both jobs are skipped. A failure opens one signed prio:1 issue.
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+jobs:
+  slow-tests:
+    if: vars.NIGHTLY_HEAVY_TESTS == 'true'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Install tools
+        run: bash tools/ci/install_tools.sh
+      - name: Run the slow tests
+        run: pytest --timeout=300 -q -m slow
+  report:
+    needs: slow-tests
+    if: failure()
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Open the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: python3 tools/liveness.py nightly-failed

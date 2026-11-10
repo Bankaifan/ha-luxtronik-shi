@@ -35,6 +35,11 @@ jobs:
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
           permission-contents: write
           permission-pull-requests: write
+      # main only: the shared approval helper (tools/approval.py).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
       # Review event: the PR is in the payload. Status event: find the open agent PR whose head is exactly that SHA
       # and that is already approved; anything else ends quietly.
       - name: Resolve the PR
@@ -45,17 +50,19 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR_FROM_REVIEW: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.sha }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
         run: |
           if [ "$EVENT" = "pull_request_review" ]; then echo "number=$PR_FROM_REVIEW" >> "$GITHUB_OUTPUT"; exit 0; fi
           n=$(gh api "repos/$GH_REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open" and .head.sha == "'"$SHA"'" and .user.type == "Bot" and .user.login != "dependabot[bot]")][0].number // empty')
           if [ -z "$n" ]; then echo "No open agent PR with head $SHA"; exit 0; fi
-          if [ "$(gh pr view "$n" --json reviewDecision --jq .reviewDecision)" != "APPROVED" ]; then echo "PR #$n is not approved yet"; exit 0; fi
+          if [ "$(python3 tools/approval.py check "$n")" != "approved" ]; then echo "PR #$n is not approved yet"; exit 0; fi
           echo "number=$n" >> "$GITHUB_OUTPUT"
       # Design PRs (docs/design/) never auto-merge: the design reviewer approves; Daniel merges
-      # (or the orchestrator when Owner decisions is empty).
+      # (or the orchestrator when Owner decisions is empty). Repo variable DESIGN_AUTOMERGE=on (default on in the template repo itself) lifts this
+      # (the design reviewer then decides Owner decisions itself; used in the template repo).
       - name: Refuse design PRs
         id: design
-        if: steps.pr.outputs.number != ''
+        if: steps.pr.outputs.number != '' && (vars.DESIGN_AUTOMERGE || (github.repository == 'Bankaifan/agent-template' && 'on' || 'off')) != 'on'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -72,9 +79,16 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ steps.pr.outputs.number }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
         run: |
           view=$(gh pr view "$PR" --json labels,headRefOid)
           if [ "$(jq '[.labels[].name] | index("risk:security") != null' <<<"$view")" != "true" ]; then exit 0; fi
+          # A security `changes` verdict for the head blocks the merge whatever the code review decision says.
+          if [ "$(python3 tools/approval.py security-changes "$PR")" != "no" ]; then
+            echo "wait=true" >> "$GITHUB_OUTPUT"
+            echo "risk:security PR #$PR: security reviewer asked for changes (or the verdict is unreadable); not merging"
+            exit 0
+          fi
           sha=$(jq -r .headRefOid <<<"$view")
           state=$(gh api "repos/$GH_REPO/commits/$sha/statuses" --jq '[.[] | select(.context == "security-review")][0].state // "none"')
           if [ "$state" != "success" ]; then

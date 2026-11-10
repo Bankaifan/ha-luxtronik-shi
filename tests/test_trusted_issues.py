@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 
+import guard_mark
 import pytest
 
 _path = pathlib.Path(__file__).parent.parent / "tools" / "trusted_issues.py"
@@ -182,3 +183,27 @@ def test_prio_label_by_stranger_is_ignored():
 def test_prio_label_by_author_app_counts():
     r = mod.classify(issue("Bankaifan", "prio:2"), [ev("labeled", "prio:2", BOT)], "Bankaifan", BOT)
     assert r["prio"] == 2
+
+
+KEY = "k" * 32
+FAILING = "Failing workflow: ci.yml"
+
+
+def guard(title=FAILING, author=BOT, signed=True):
+    d = issue(author, "agent:dev")
+    d["title"] = title
+    d["body"] = guard_mark.sign(title, "The workflow failed.", KEY) if signed else "The workflow failed."
+    return d
+
+
+def test_signed_failing_workflow_issue_is_trusted():
+    assert mod.classify(guard(), [], "Bankaifan", BOT, guard_key=KEY)["guard"]
+
+
+def test_signed_issue_with_other_title_is_not_trusted():
+    assert mod.classify(guard(title="Something else"), [], "Bankaifan", BOT, guard_key=KEY) is None
+
+
+def test_failing_workflow_issue_needs_signature_and_bot_author():
+    assert mod.classify(guard(signed=False), [], "Bankaifan", BOT, guard_key=KEY) is None
+    assert mod.classify(guard(author="mallory"), [], "Bankaifan", BOT, guard_key=KEY) is None
