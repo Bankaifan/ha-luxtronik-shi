@@ -107,8 +107,10 @@ def test_merge_step_exit_code(tmp_path, merge_rc, merge_out, view_rc, view_state
     assert result.returncode == expected_rc, result.stdout + result.stderr
 
 
+CHANGES_COMMENTS = '[[{"user": {"login": "approver[bot]"}, "body": "security-review: changes 64024cd"}]]'
 GATE_GH = """#!/bin/bash
 if [ "$1 $2" = "pr view" ]; then printf '%s' "$VIEW_JSON"; exit 0; fi
+case "$*" in *issues/*/comments*) printf '%s' "${COMMENTS_JSON:-[[]]}"; exit 0 ;; esac
 if [ "$1" = "api" ]; then printf '%s' "$STATUS_STATE"; exit 0; fi
 echo "unexpected gh call: $*" >&2
 exit 99
@@ -135,6 +137,7 @@ def _gate_script() -> str:
         ("risk:security", "none", True),
         ("risk:security", "success", False),
         ("other", "failure", False),
+        ("risk:security", "success-but-changes", True),  # code review approved, security asked for changes
     ],
 )
 def test_security_gate_waits_without_error_unless_success(tmp_path, label, state, wait):
@@ -152,10 +155,13 @@ def test_security_gate_waits_without_error_unless_success(tmp_path, label, state
         "PR": "67",
         "GH_REPO": "owner/repo",
         "GITHUB_OUTPUT": str(out),
-        "STATUS_STATE": state,
+        "STATUS_STATE": state.removesuffix("-but-changes"),
+        "APPROVER_BOT": "approver[bot]",
+        "COMMENTS_JSON": CHANGES_COMMENTS if state.endswith("-but-changes") else "[[]]",
         "VIEW_JSON": '{"headRefOid": "64024cd", "labels": [{"name": "' + label + '"}]}',
     }
-    result = subprocess.run(["bash", "-eo", "pipefail", str(script)], env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(["bash", "-eo", "pipefail", str(script)], env=env, capture_output=True, text=True, check=False,
+                            cwd=Path(__file__).parent.parent)
     assert result.returncode == 0, result.stdout + result.stderr
     assert ("wait=true" in out.read_text()) is wait
 

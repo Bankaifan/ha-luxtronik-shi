@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = ROOT / ".github" / "claude-judge-settings.json"
 JUDGING = ["agent-review.yml", "agent-security-review.yml", "scout.yml"]
-ACTING = ["agent-dev.yml", "agent-fix.yml", "orchestrator.yml", "rule-keeper.yml", "unblocker.yml"]
+ACTING = ["agent-dev.yml", "agent-fix.yml", "orchestrator.yml", "rule-keeper.yml", "unblocker.yml", "answer-receiver.yml"]
 TOOLS = ["Read", "Glob", "Grep"]
 REQUIRED = ["/proc", "/etc", "/root", "/run", "/var", "/home/runner/work/_temp"]
 

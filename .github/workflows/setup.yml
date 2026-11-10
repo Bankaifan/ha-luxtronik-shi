@@ -42,9 +42,12 @@ jobs:
           PYTHON_VERSION: ${{ vars.PYTHON_VERSION }}
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
           ORCHESTRATOR_ENABLED: ${{ vars.ORCHESTRATOR_ENABLED }}
+          ORCHESTRATOR_EVENTS: ${{ vars.ORCHESTRATOR_EVENTS }}
           IDEAS_PER_WEEK: ${{ vars.IDEAS_PER_WEEK }}
           STATUS_INTERVAL: ${{ vars.STATUS_INTERVAL }}
           UNBLOCKER: ${{ vars.UNBLOCKER }}
+          ANSWER_RECEIVER: ${{ vars.ANSWER_RECEIVER }}
+          NIGHTLY_HEAVY_TESTS: ${{ vars.NIGHTLY_HEAVY_TESTS }}
         run: |
           # row NAME DEFAULT VALUE: an unset or empty variable means the default, as in the workflows' || fallbacks
           row() {
@@ -57,9 +60,12 @@ jobs:
             row PYTHON_VERSION 3.x "$PYTHON_VERSION"
             if [ -n "$EXTRA_INSTALL" ]; then echo "| EXTRA_INSTALL | set (not shown) | repo variable |"; else echo "| EXTRA_INSTALL | not set | default |"; fi
             row ORCHESTRATOR_ENABLED false "$ORCHESTRATOR_ENABLED"
+            row ORCHESTRATOR_EVENTS off "$ORCHESTRATOR_EVENTS"
             row IDEAS_PER_WEEK 3 "$IDEAS_PER_WEEK"
             row STATUS_INTERVAL "30 public / 60 private" "$STATUS_INTERVAL"
             row UNBLOCKER on "$UNBLOCKER"
+            row ANSWER_RECEIVER on "$ANSWER_RECEIVER"
+            row NIGHTLY_HEAVY_TESTS false "$NIGHTLY_HEAVY_TESTS"
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - id: app
         if: steps.check.outputs.author == 'true'

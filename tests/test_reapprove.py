@@ -39,7 +39,8 @@ def dismissal(prior="approved", message=None, actor="app/author", rid=7):
 
 
 class Gh:
-    def __init__(self, pr=None, files=None, reviews=None, timeline=(), patches=None, moved_head=None):
+    def __init__(self, pr=None, files=None, reviews=None, timeline=(), patches=None, moved_head=None, comments=()):
+        self.comments = list(comments)
         self.pr = pr or pr_obj()
         self.files = files if files is not None else [{"filename": "src/app.py"}]
         self.reviews = reviews if reviews is not None else [approval()]
@@ -56,6 +57,8 @@ class Gh:
             return json.dumps([self.files])
         if path.endswith("/reviews"):
             return json.dumps([self.reviews])
+        if path.endswith("/comments"):
+            return json.dumps([self.comments])
         if path.endswith("/timeline"):
             return json.dumps([self.timeline])
         if "/commits/" in path:
@@ -146,7 +149,7 @@ def test_no_earlier_approval_refuses():
 
 @pytest.mark.parametrize("kw", [
     {"commits": 2}, {"state": "closed"}, {"labels": [{"name": "needs-human"}]},
-    {"labels": [{"name": "risk:security"}]}, {"head": {"sha": NEW, "ref": "feat/x", "repo": {"full_name": REPO}}},
+    {"head": {"sha": NEW, "ref": "feat/x", "repo": {"full_name": REPO}}},
     {"head": {"sha": NEW, "ref": "agent/1-x", "repo": {"full_name": "fork/r"}}},
     {"head": {"sha": "e" * 40, "ref": "agent/1-x", "repo": {"full_name": REPO}}},
 ])
@@ -173,15 +176,51 @@ def test_file_list_cap_and_mismatch_refuse():
 
 
 @pytest.mark.parametrize("path", ["tools/x.py", ".github/workflows/a.yml", ".agents/roles/x.md"])
-def test_infra_and_security_class_refuse(path):
+def test_infra_class_refuses(path):
     gh = Gh(files=[{"filename": path}], patches={NEW: patch(NEW, path=path, at=9), OLD: patch(OLD, path=path)})
     assert "risk class" in go(gh) and not gh.posts()
 
 
-def test_security_lines_without_label_refuse():
-    gh = Gh(patches={NEW: patch(NEW, lines="+permissions: write\n", path=".github/x.yml"), OLD: patch(OLD)},
-            files=[{"filename": ".github/x.yml"}])
-    assert "risk class" in go(gh)
+def sec_gh(comments=(), labels=(), lines="+permissions: write\n"):
+    path = "tools/x.py"
+    return Gh(pr=pr_obj(labels=[{"name": n} for n in labels]), files=[{"filename": path}], comments=comments,
+              patches={NEW: patch(NEW, lines=lines, path=path, at=9), OLD: patch(OLD, lines=lines, path=path)})
+
+
+def verdict(kind="approve", sha=NEW, login="app/approver"):
+    return {"user": {"login": login}, "body": f"security-review: {kind} {sha[:12]}"}
+
+
+def test_security_patch_with_verdict_for_new_head_approves():
+    gh = sec_gh(comments=[verdict()], labels=["risk:security"])
+    assert go(gh) == 0 and len(gh.posts()) == 1
+
+
+@pytest.mark.parametrize("comments", [
+    [], [verdict(sha=OLD)], [verdict("changes")], [verdict(login="someone")], [verdict(), verdict("changes")],
+])
+def test_security_patch_without_confirmed_verdict_refuses(comments):
+    gh = sec_gh(comments=comments, labels=["risk:security"])
+    assert "no security-review approve" in go(gh) and not gh.posts()
+
+
+def test_security_label_alone_needs_verdict():
+    labels = pr_obj(labels=[{"name": "risk:security"}])
+    assert "no security-review approve" in go(Gh(pr=labels))
+    assert go(Gh(pr=labels, comments=[verdict()])) == 0
+
+
+def test_security_patch_changed_still_refuses():
+    gh = sec_gh(comments=[verdict()], labels=["risk:security"])
+    gh.patches[NEW] = patch(NEW, lines="+permissions: admin\n", path="tools/x.py", at=9)
+    assert "patch changed" in go(gh) and not gh.posts()
+
+
+def test_security_codeowners_path_refuses(tmp_path, monkeypatch):
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "CODEOWNERS").write_text("/tools/x.py @Bankaifan\n")
+    monkeypatch.chdir(tmp_path)
+    assert "CODEOWNERS" in go(sec_gh(comments=[verdict()], labels=["risk:security"]))
 
 
 @pytest.mark.parametrize("extra", ["GIT binary patch\nliteral 3\n", "Binary files a/x and b/x differ\n",

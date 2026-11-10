@@ -53,8 +53,8 @@ def test_model_step_has_no_token_and_no_bash():
     assert "app.outputs.token" not in block
     allowed = re.search(r'--allowedTools "([^"]*)"', block).group(1)
     names = {t.split("(")[0] for t in allowed.split(",")}
-    assert names == {"Read", "Glob", "Grep", "Write"}
-    assert "Write(verdict.json)" in allowed.split(",")
+    assert names == {"Read", "Glob", "Grep", "Edit"}
+    assert "Edit(verdict.json)" in allowed.split(",")
     assert "Bash" not in block.replace("no shell", "")
 
 

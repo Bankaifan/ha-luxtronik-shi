@@ -1,4 +1,5 @@
 name: agent-fix
+run-name: "${{ github.event_name == 'pull_request_review' && github.event.pull_request.title || github.event_name == 'workflow_run' && github.event.workflow_run.display_title || github.event_name == 'workflow_dispatch' && format('PR #{0}', inputs.pr) || 'agent-fix' }}"
 # Automatic fix round on an agent/* PR, started by
 #  - the approver app requesting changes (pull_request_review), or
 #  - a failed `validate` run (workflow_run), which counts as a round too.
@@ -26,7 +27,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_review' &&
-       github.event.review.state == 'changes_requested' &&
+       (github.event.review.state == 'changes_requested' || github.event.review.state == 'approved') &&
        startsWith(github.event.pull_request.head.ref, 'agent/') &&
        github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'workflow_run' &&
@@ -50,6 +51,8 @@ jobs:
       RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
       RUN_SHA: ${{ github.event.workflow_run.head_sha }}
       REVIEWER: ${{ github.event.review.user.login }}
+      REVIEW_STATE: ${{ github.event.review.state }}
+      REVIEW_COMMIT: ${{ github.event.review.commit_id }}
       APPROVER_BOT: ${{ vars.APPROVER_BOT }}
     steps:
       - name: Fail if a required repo variable is unset
@@ -91,6 +94,24 @@ jobs:
           }
           if [ "$EVENT" = pull_request_review ]; then
             pr="$REVIEW_PR"; branch="$REVIEW_BRANCH"
+            # A merged or closed PR has no branch to check out any more (#311): no fix round.
+            if [ "$(gh pr view "$pr" --json state --jq .state)" != OPEN ]; then
+              echo "PR $pr is not open: no fix round"
+              echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            if [ "$REVIEW_STATE" = approved ]; then
+              # The code reviewer's approval must not mask a security `changes` verdict for the same head
+              # (the later review of the same app replaces the request-changes review in reviewDecision).
+              head=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
+              if [ "$head" != "$REVIEW_COMMIT" ] || [ "$(python3 tools/approval.py security-changes "$pr")" != yes ]; then
+                echo "Approval without a security 'changes' verdict for the head: no fix round"
+                echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0
+              fi
+              if [ "$(gh run list --workflow agent-fix.yml --status in_progress --json databaseId --jq length)" -gt 1 ]; then
+                echo "A fix run is already active; not starting a second one"
+                echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0
+              fi
+            fi
           elif [ "$EVENT" = workflow_dispatch ]; then
             case "$DISPATCH_PR" in ''|*[!0-9]*) echo "Bad PR number"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
             pr="$DISPATCH_PR"
@@ -184,7 +205,8 @@ jobs:
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           # Nothing from an earlier run may be applied to this PR: remove the agent's body file before the agent runs.
-          rm -f "$RUNNER_TEMP/pr-body.md"
+          # It lives in the checkout (the agent may not touch $RUNNER_TEMP, #266) and is kept out of git.
+          rm -rf .agent-out && mkdir .agent-out && echo ".agent-out/" >> .git/info/exclude
           gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/body-before.txt"
       - name: Git identity
         run: |
@@ -197,6 +219,14 @@ jobs:
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
+      # A large `gh run view --log-failed` output lands in a tool-results file the agent may not read, and pipes are
+      # denied; so the failing lines are fetched here into the checkout (git-ignored) and the agent reads that file.
+      - name: Fetch the failed CI log
+        if: env.EVENT == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh run view "$RUN_ID" --log-failed | tail -n 400 > ci-failure.log || echo "log not available" > ci-failure.log
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         env:
@@ -214,14 +244,18 @@ jobs:
             - pull_request_review: a review requests changes. Read it with `gh pr view ${{ env.PR }} --comments --json reviews,comments`.
             - workflow_dispatch: the PR conflicts with main. Rebase the branch onto current origin/main, resolve
               the conflicts keeping the intent of the PR (rebase, never merge main into the branch).
-            - workflow_run: the validate run ${{ env.RUN_ID }} failed. Read the log with
-              `gh run view ${{ env.RUN_ID }} --log-failed`.
+            - workflow_run: the validate run ${{ env.RUN_ID }} failed. Its failing lines are in `ci-failure.log`
+              (read it with Read; never commit it). CI tests the PR merged with current main: rebase onto
+              origin/main first, then reproduce with `make check`.
             Fix exactly what is raised, run `make check` and the tests, then squash the branch into ONE commit
             authored by Daniel (no Co-authored-by) on top of current origin/main and `git push --force-with-lease`.
+            The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
+            never `pip install`. Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects
+            (they do not match the allow list and are denied).
             Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
             comment on the issue/PR saying which one instead of stopping silently.
             If the review only asks for a change of the PR body (title or body text, e.g. `Closes #N` -> `Refs #N`),
-            write the complete new body (max 5 lines, ASCII, no Closes/Fixes/Resolves keywords) to ${{ runner.temp }}/pr-body.md
+            write the complete new body (max 5 lines, ASCII, no Closes/Fixes/Resolves keywords) to .agent-out/pr-body.md
             and do not run `gh pr edit` yourself: a fixed step after you applies that file to PR #${{ env.PR }}. Never change labels.
             Do not open a new PR.
           claude_args: >-
@@ -229,7 +263,7 @@ jobs:
             --max-turns 60
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)"
       # Deterministic, fixed flags: the agent only writes the file, it never runs `gh pr edit`.
       # Only after a successful agent run. The file must be a regular file (no symlink) and pass the checks below.
       - name: Apply the PR body the agent wrote
@@ -237,11 +271,13 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          BODY_FILE: ${{ runner.temp }}/pr-body.md
+          BODY_FILE: .agent-out/pr-body.md
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           f="$BODY_FILE"
-          if [ ! -f "$f" ] || [ -L "$f" ]; then echo "No PR body file from the agent; PR body unchanged"; exit 0; fi
+          # The checkout is agent-writable: a symlinked directory or file could point at any runner file.
+          if [ -L .agent-out ] || [ ! -f "$f" ] || [ -L "$f" ]; then echo "No PR body file from the agent; PR body unchanged"; exit 0; fi
+          if [ "$(realpath "$f")" != "$(pwd -P)/.agent-out/pr-body.md" ]; then echo "::error::PR body file resolves outside .agent-out; not applied"; exit 1; fi
           size=$(wc -c < "$f"); lines=$(grep -c '' "$f" || true)
           if [ "$size" -lt 1 ] || [ "$size" -gt 4000 ] || [ "$lines" -gt 5 ]; then
             echo "::error::PR body is empty, over 4000 bytes or over 5 lines; not applied"; exit 1

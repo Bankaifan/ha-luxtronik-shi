@@ -3,6 +3,7 @@ Reads the PR and decides. Never pushes.
 
 - Input: `gh pr diff`, the issue slip. You run only on green CI and never run PR code (the checkout is `main`). Use a different model than the author where possible.
 - Check: does it meet the acceptance criteria, tests cover the change (a missing test is a change request: the reviewer is the tester), no secrets, limits in AGENTS.md respected.
+- A fix without a stated cause, or with an obvious untreated sibling occurrence of the same defect, is a `changes` finding.
 - Do not re-check what CI already checks (lint, tests, drift, PR form).
 - Verdict classes, one per point:
   - `approve`: the slip is met.
@@ -13,5 +14,6 @@ Reads the PR and decides. Never pushes.
 - No style nitpicks. Design PRs never auto-merge; they need the design reviewer's approval.
 - Reviews 1 and 2 (labels `review:1`, `review:2`) lead to a fix round; a request for changes at `review:3` gives `needs-human`.
 - Infra/security risk (`risk:*` label) is the security reviewer's job (`security-reviewer.md`); you do not repeat it.
-- At `review:3` or a `needs-human` hand-off the last comment is the German note for Daniel (see AGENTS.md, Waiting for Daniel).
+- At `review:3` or a `needs-human` hand-off the last comment is the German note for Daniel (see AGENTS.md, Waiting for Daniel): the question names what "ja" and "nein" do, and the comment carries the
+  `<!-- decision: yes=<action> no=<action> -->` marker (ids in `tools/decision.py`).
 - Output: one review, short. Do not repeat the diff.

@@ -157,6 +157,16 @@ def test_limit_prs_picks_only_unhandled_review3():
     assert st.limit_prs([stuck], [{"workflowName": "agent-fix"}], NOW) == []
 
 
+def test_limit_hand_over_when_code_approved_but_security_changes():
+    sha = "abcdef1234567"
+    verdict = [{"author": {"login": "approver"}, "body": f"security-review: changes {sha}"}]
+    masked = pr(1, labels=["review:3", "risk:security"], reviewDecision="APPROVED", headRefOid=sha, comments=verdict)
+    assert st.limit_prs([masked], [], NOW, "app/approver") == [masked]
+    # an approval of a risk:security head without a `changes` verdict still counts as approved
+    clean = pr(2, labels=["review:3", "risk:security"], reviewDecision="APPROVED", headRefOid=sha, comments=[])
+    assert st.limit_prs([clean], [], NOW, "app/approver") == []
+
+
 def test_stuck_limit_hands_over_or_escalates(monkeypatch):
     monkeypatch.setattr(st, "handle_limit", lambda n, o, run: "restarted")
     assert st.handle_stuck_limit(pr(7), "Bankaifan", Recorder()) == "handed over (restarted)"
@@ -371,3 +381,101 @@ def test_merged_rows_last_24h_with_risk_label():
     merged = [{"number": 1, "title": "new", "mergedAt": "2026-11-10T08:00:00Z", "labels": [{"name": "risk:security"}]},
               {"number": 2, "title": "old", "mergedAt": "2026-11-08T08:00:00Z", "labels": []}]
     assert st.merged_rows(merged, now) == ["- #1 new (risk:security)"]
+
+
+# --- failure watch wiring (design 0008, 4.8) -------------------------------------------------------
+
+def ago_dt(minutes):
+    return NOW - datetime.timedelta(minutes=minutes)
+
+
+def wire(monkeypatch, watch):
+    """Prepare run_status so every gh call answers `[]`; returns (order, bodies)."""
+    order, bodies = [], []
+    monkeypatch.setattr(st.liveness, "last_successes", lambda run: fresh())
+    monkeypatch.setattr(st.liveness, "added_dates", lambda s, run: {})
+    monkeypatch.setattr(st.liveness, "flag_overdue", lambda *a: order.append("overdue") or ([], []))
+    monkeypatch.setattr(st.failure_watch, "watch", lambda *a: order.append("watch") or watch(*a))
+    monkeypatch.setattr(st, "previous_since", lambda run, now, bot="": ago_dt(90))
+    monkeypatch.setattr(st, "update_issue", lambda body, run=None, bot="": bodies.append(body) or "1")
+    return order, bodies
+
+
+def empty(*args):
+    return "[]"
+
+
+def test_watch_runs_after_overdue_and_writes_since_line(monkeypatch):
+    order, bodies = wire(monkeypatch, lambda since, now, late, key, run: (["opened failure issue #9"], ago_dt(10)))
+    assert st.run_status({"GH_REPO": "o/r"}, NOW, empty) == 0
+    assert order == ["overdue", "watch"]
+    assert "- opened failure issue #9" in bodies[0]
+    assert "Failure watch since: 2026-11-09T11:50:00Z" in bodies[0]
+
+
+def test_watch_off_switch_skips_the_watch(monkeypatch):
+    order, bodies = wire(monkeypatch, lambda *a: ([], NOW))
+    st.run_status({"GH_REPO": "o/r", "FAILURE_WATCH": "off"}, NOW, empty)
+    assert order == ["overdue"]
+    assert "Failure watch since" not in bodies[0]
+
+
+def test_watch_exception_does_not_stop_the_status_issue(monkeypatch, capsys):
+    def boom(*a):
+        raise st.liveness.ReadbackError("comment missing")
+
+    order, bodies = wire(monkeypatch, boom)
+    assert st.run_status({"GH_REPO": "o/r"}, NOW, empty) == 0
+    assert order == ["overdue", "watch"] and len(bodies) == 1
+    assert "failure watch failed: ReadbackError" in capsys.readouterr().out
+    assert "Failure watch since: 2026-11-09T10:30:00Z" in bodies[0]  # anchor kept, nothing lost
+
+
+def test_watch_skipped_when_overdue_state_unknown(monkeypatch):
+    order, _ = wire(monkeypatch, lambda *a: ([], NOW))
+    monkeypatch.setattr(st.liveness, "last_successes", lambda run: None)
+    st.run_status({"GH_REPO": "o/r"}, NOW, empty)
+    assert order == []
+
+
+def test_previous_since_reads_the_status_issue_line():
+    def with_line(*a):
+        return json.dumps([{"title": st.TITLE, "body": f"x\n\n{st.SINCE_LABEL} 2026-11-09T09:15:00Z\n"}])
+
+    def without_line(*a):
+        return json.dumps([{"title": st.TITLE, "body": "no line"}])
+
+    assert st.previous_since(with_line, NOW) == datetime.datetime(2026, 11, 9, 9, 15, tzinfo=UTC)
+    assert st.previous_since(without_line, NOW) == NOW - datetime.timedelta(hours=24)
+
+
+def test_previous_since_ignores_forged_anchors():
+    def issues(author, ts):
+        return lambda *a: json.dumps([{"title": st.TITLE, "author": {"login": author},
+                                       "body": f"{st.SINCE_LABEL} {ts}\n"}])
+
+    default = NOW - datetime.timedelta(hours=24)
+    assert st.previous_since(issues("mallory", "2026-11-09T09:15:00Z"), NOW, "bot") == default  # foreign author
+    assert st.previous_since(issues("bot", "9999-01-01T00:00:00Z"), NOW, "bot") == NOW  # future: clamped
+    assert st.previous_since(issues("bot", "2000-01-01T00:00:00Z"), NOW, "bot") == default  # too old: clamped
+    assert st.previous_since(issues("bot", "2026-11-09T09:15:00Z"), NOW, "bot") == datetime.datetime(
+        2026, 11, 9, 9, 15, tzinfo=UTC)
+
+
+def test_update_issue_ignores_foreign_status_issue():
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        if args[:2] == ("issue", "list"):
+            return json.dumps([{"number": 5, "title": st.TITLE, "author": {"login": "mallory"}}])
+        if args[:2] == ("issue", "view"):
+            return json.dumps({"body": "b"})
+        return "https://github.com/o/r/issues/12\n"
+
+    assert st.update_issue("b", run, "bot") == "12"
+
+
+def test_status_workflow_passes_failure_watch_switch_in_script_step():
+    text = (pathlib.Path(__file__).parent.parent / ".github/workflows/status.yml").read_text(encoding="utf-8")
+    assert "FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}" in text

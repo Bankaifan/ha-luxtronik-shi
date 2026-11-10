@@ -1,6 +1,7 @@
 name: agent-review
+run-name: "review: ${{ github.event.workflow_run.display_title || github.event.workflow_run.head_branch }}"
 # Review only on green CI: runs when `validate` completed successfully on a same-repo agent/* branch.
-# The reviewer never runs PR code: it checks out main and reads the change with gh pr diff / gh pr view.
+# The reviewer never runs PR code: it checks out main and reads the change from staged files (.review/) and gh pr view.
 on:
   workflow_run:  # zizmor: ignore[dangerous-triggers] validate gate only; checks out main, never PR code, and the reviewer cannot push
     workflows: [validate]
@@ -96,6 +97,26 @@ jobs:
           PR: ${{ steps.round.outputs.pr }}
         run: |
           if python3 tools/reapprove.py "$PR" "$SHA"; then echo "approved=true" >> "$GITHUB_OUTPUT"; fi
+      # The change as plain files, so the reviewer reads it with Read instead of shell output that can be cut off
+      # (same as agent-security-review.yml). Data only: nothing here is run, the checkout stays main.
+      - name: Stage the change as files
+        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.round.outputs.pr }}
+        run: |
+          set -euo pipefail
+          rm -rf .review && mkdir -p .review/files
+          gh pr diff "$PR" > .review/pr.diff
+          gh api --paginate "repos/$GH_REPO/pulls/$PR/files" --jq '.[] | select(.status != "removed") | .filename' > .review/files.txt
+          while IFS= read -r f; do
+            case "$f" in ""|/*|*..*) echo "path skipped: $f"; continue ;; esac
+            enc=$(jq -rn --arg p "$f" '$p | split("/") | map(@uri) | join("/")')
+            mkdir -p ".review/files/$(dirname "$f")"
+            gh api -H "Accept: application/vnd.github.raw" "repos/$GH_REPO/contents/$enc?ref=$SHA" > ".review/files/$f" \
+              || echo "not fetched: $f"
+          done < .review/files.txt
+          wc -l .review/pr.diff .review/files.txt
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
@@ -108,9 +129,12 @@ jobs:
           prompt: |
             Act as the reviewer described in .agents/roles/reviewer.md and follow AGENTS.md. If the PR changes
             only files under docs/design/, act as the design reviewer in .agents/roles/design-reviewer.md instead.
+            Design owner mode: ${{ (vars.DESIGN_AUTOMERGE || (github.repository == 'Bankaifan/agent-template' && 'on' || 'off')) == 'on' && 'auto (you decide Owner decisions)' || 'Daniel' }}.
             Review PR #${{ steps.round.outputs.pr }} in ${{ github.repository }} (CI is green on ${{ env.SHA }}).
-            The checkout is main, not the PR: never run or import code from the PR. Read the change with
-            `gh pr view` and `gh pr diff`, and the linked issue with `gh issue view`.
+            The checkout is main, not the PR: never run or import code from the PR. The change is staged as files:
+            `.review/pr.diff` (full diff), `.review/files.txt` (changed paths) and `.review/files/<path>` (each changed
+            file at the PR head). Read them with Read (long files in parts with offset/limit). Use `gh pr view` for the
+            body and `gh issue view` for the linked issue.
             Use the verdict classes of the role: approve; changes (defects against the slip, AGENTS.md or CI only);
             scope (work outside the slip: name it, never block the in-scope part); non-blocking `carry:` notes.
             Submit exactly one review: `gh pr review ${{ steps.round.outputs.pr }} --approve --body "..."` or
@@ -125,7 +149,7 @@ jobs:
             --max-turns 12
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh issue view:*)"
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr review:*),Bash(gh issue view:*)"
       # Approved but waiting for Daniel (security class or code-owner path): label needs-human and the German note.
       - name: Mark an approved PR that waits for Daniel
         if: ${{ steps.claude.conclusion == 'success' }}

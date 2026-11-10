@@ -5,7 +5,7 @@
 The final reply must contain a line `security-review: approve|changes <SHA>`; that line and everything after it is
 posted as one PR comment (secrets masked). A `changes` verdict also gets a request-changes review by the same app and the
 round label review:N is bumped (once per head SHA, shared with agent-review; a verdict for a superseded head is discarded), so agent-fix starts a normal fix round. An `approve` dismisses the app's own open
-"Security review asks for changes" reviews (env APPROVER_BOT names the app; unset: nothing is dismissed). No verdict: the denied tool calls are printed and the exit code is 1.
+"Security review asks for changes" reviews (env APPROVER_BOT names the app; unset: nothing is dismissed). No verdict (also `changes` without any reason): the denied tool calls are printed and the exit code is 1.
 """
 import json
 import os
@@ -44,6 +44,8 @@ def extract(text, sha):
     if not found:
         return None
     rest = text[found.end():].strip()
+    if found.group(1).lower() == "changes" and not rest:  # no reason means nothing to fix: no verdict, re-runnable
+        return None
     body = f"security-review: {found.group(1).lower()} {sha}" + (f"\n\n{rest}" if rest else "")
     return found.group(1).lower(), agent_guard._SECRET.sub("***", body)[:MAX_CHARS]
 

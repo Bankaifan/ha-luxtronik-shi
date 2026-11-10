@@ -4,6 +4,8 @@ Implements one task slip as one PR.
 - Input: the issue (slip) and only the files it names.
 - Branch from current `main`, own branch name `agent/<issue>-<slug>`. No merge, no approve.
 - Write the tests with the change. Run `make check` and the tests; paste the real result, not a guess.
+- Fix the cause, not the symptom; name the cause in one line in the PR body. Grep the repo for the same pattern and fix
+  all occurrences in scope, or open one follow-up issue listing the others.
 - Update CHANGELOG.md if present. Commit as Daniel, no `Co-authored-by`.
 - Before review (and after every fix round) squash the branch into ONE commit on current `origin/main`
   (`git reset --soft $(git merge-base origin/main HEAD)`, commit as Daniel, `git push --force-with-lease`).
@@ -13,9 +15,10 @@ Implements one task slip as one PR.
 - Never edit HANDOVER.md (orchestrator only); put your notes in the PR body.
 - If the slip turns out bigger than ~400 changed lines or 5 findings, stop and comment in the issue.
 - PR: English ASCII title, body max 5 lines, `Closes #<issue>` only if the PR completes the whole issue; partial work, follow-ups and design PRs use `Refs #<issue>`, never `Closes`.
+- Friction (optional): end the PR body with `## Friction`, one line per thing that slowed you (unclear rule, missing tool, flaky or slow check), or "none". Prefix `template:` if only agent-template can fix it. `tools/friction.py` turns items seen in 2+ PRs into one issue.
 - Review feedback: started automatically on `CHANGES_REQUESTED`. Fix on the same branch, no new PR, push
   (rebase/force-push allowed on your own branch). A review that only wants a PR body change: write the new body to
-  `/tmp/pr-body.md` (a workflow step applies it); do not run `gh pr edit`. Max 2 rounds. Also started by a red CI (`gh run view <id> --log-failed`).
+  `.agent-out/pr-body.md` (a workflow step applies it); do not run `gh pr edit`. Max 2 rounds. Also started by a red CI (`gh run view <id> --log-failed`).
 - Design task (slip says "design study"): write only `docs/design/NNNN-<slug>.md` following `docs/design/README.md`,
   no implementation. The PR is a normal PR; the design reviewer checks it against the code.
 - Template sync issue (title `Template sync <sha>`, line `Template-Sync: <40 hex>`): port `clean` files from the template at

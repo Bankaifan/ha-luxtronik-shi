@@ -1,4 +1,5 @@
 name: status
+run-name: "${{ github.event_name == 'schedule' && 'status (scheduled)' || format('status after {0}', github.event.workflow_run.name || 'manual run') }}"
 # No model: tools/status.py keeps the issue "Agent status" up to date, re-triggers orphans, approves held runs of
 # the author app and starts a fix round for PRs with merge conflicts.
 # Schedule: the cron ticks every 30 min; the gate step skips ticks according to repo variable STATUS_INTERVAL
@@ -56,5 +57,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           OWNER: Bankaifan
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
-          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the overdue-run issues; script step only, never a model step
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}  # reads the security verdict comment for the head
+          FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}  # "off" skips the failure watch
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the overdue-run and failure issues; script step only, never a model step
         run: python3 tools/status.py

@@ -41,6 +41,15 @@ def test_unblocker_tool_list_has_no_edit_or_write():
     assert "Edit/" not in line
 
 
+def test_parking_rules_name_marker_and_answer_effects():
+    root = ROLES.parent.parent
+    for text in (read("orchestrator.md"), read("reviewer.md"), (root / "AGENTS.md").read_text(encoding="utf-8")):
+        assert "<!-- decision: yes=<action> no=<action> -->" in text
+        assert "tools/decision.py" in text
+        assert '"ja"' in text and '"nein"' in text
+    assert "decision marker" in read("unblocker.md")
+
+
 def test_orchestrator_leaves_unblocker_items_alone():
     text = read("orchestrator.md")
     assert "Do not restart or rewrite an item the unblocker owns" in text
