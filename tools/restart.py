@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 
+import liveness
 from agent_guard import add_labels, same_login
 
 OWNER_DEFAULT = "Bankaifan"
@@ -97,7 +98,7 @@ def slip_comment(pr, findings):
 def restart_issue(pr, issue, reviews, run=gh):
     """Restart the task once: restart:1, slip comment, agent:dev re-added (removed first so the label event fires)."""
     add_labels("issue", issue, [RESTART], run)
-    run("issue", "comment", str(issue), "--body", slip_comment(pr, blocking_findings(reviews)))
+    liveness.post_comment("issue", issue, slip_comment(pr, blocking_findings(reviews)), run)
     run("issue", "edit", str(issue), "--remove-label", "agent:dev")
     add_labels("issue", issue, ["agent:dev"], run)
     run("pr", "close", str(pr), "--comment", f"Superseded: round limit reached, task restarted, see #{issue}")
@@ -115,7 +116,7 @@ def park_with_owner(pr, owner, restarted, run=gh):
     text = "Review limit of 2 fix rounds reached. Needs the orchestrator or Daniel."
     if restarted:
         text += "\n\nThe automatic restart (restart:1) already failed too.\n\n" + NOTE_RESTARTED
-    run("pr", "comment", str(pr), "--body", text)
+    liveness.post_comment("pr", pr, text, run)
 
 
 def handle_limit(pr, owner, run=gh):

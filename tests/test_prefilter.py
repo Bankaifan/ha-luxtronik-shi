@@ -45,3 +45,20 @@ def test_prio1_may_start_when_a_slot_is_stuck():
     assert mod.startable([p1, p3], 2) == []
     assert mod.startable([p1, p3], 2, stuck=1) == [7]
     assert mod.startable([p1, p3], 2, stuck=2) == [7]
+
+
+def test_waiting_issue_frees_its_dev_slot():
+    assert mod.startable([item(1)], 2) == []
+    assert mod.startable([item(1)], 2, waiting=1) == [1]
+    assert mod.free_slots(2, 3, 1, 1) == (1, 1)
+    assert mod.free_slots(2, 3, 0, 0) == (0, 0)
+
+
+def test_five_waiting_prs_hold_new_security_slips_only():
+    sec, plain = item(1, ["risk:security"]), item(2)
+    assert mod.startable([sec, plain], 0, waiting_prs=4) == [1, 2]
+    assert mod.startable([sec, plain], 0, waiting_prs=5) == [2]
+
+
+def test_closing_issues():
+    assert mod.closing_issues("Closes #172\nRefs #5") == {172, 5}

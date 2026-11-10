@@ -49,9 +49,13 @@ def form_errors(body, head_ref, files):
 
 
 def main() -> int:
-    if sys.argv[1:2] == ["closing"]:  # exit 0 when the file holds a closing keyword
-        with open(sys.argv[2], encoding="utf-8", errors="replace") as f:
-            return 0 if CLOSING.search(f.read()) else 1
+    if sys.argv[1:2] == ["closing"]:  # exit 0 on a closing keyword, 1 on none, 2 on any error
+        try:
+            with open(sys.argv[2], encoding="utf-8", errors="replace") as f:
+                return 0 if CLOSING.search(f.read()) else 1
+        except (OSError, IndexError) as e:
+            print(f"check_pr_form: cannot read file: {e}", file=sys.stderr)
+            return 2
     event = os.environ.get("GITHUB_EVENT_NAME", "pull_request")
     head_ref, files = "", []
     if event == "workflow_dispatch":

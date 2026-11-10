@@ -147,6 +147,35 @@ def test_conflict_dispatches_fix_then_escalates():
     assert not any(c[:2] == ("workflow", "run") for c in run.calls)
 
 
+def test_limit_prs_picks_only_unhandled_review3():
+    stuck = pr(1, labels=["review:3"])
+    others = [pr(2, labels=["review:3", "needs-human"]), pr(3, labels=["review:2"]),
+              pr(4, labels=["review:3"], reviewDecision="APPROVED"),
+              pr(5, labels=["review:3"], commits=[{"committedDate": ago(5)}]),
+              pr(6, labels=["review:3"], isCrossRepository=True)]
+    assert st.limit_prs([stuck, *others], [], NOW) == [stuck]
+    assert st.limit_prs([stuck], [{"workflowName": "agent-fix"}], NOW) == []
+
+
+def test_stuck_limit_hands_over_or_escalates(monkeypatch):
+    monkeypatch.setattr(st, "handle_limit", lambda n, o, run: "restarted")
+    assert st.handle_stuck_limit(pr(7), "Bankaifan", Recorder()) == "handed over (restarted)"
+
+    def boom(n, o, run):
+        raise subprocess.CalledProcessError(1, "gh")
+    monkeypatch.setattr(st, "handle_limit", boom)
+    run = Recorder()
+    assert st.handle_stuck_limit(pr(7), "Bankaifan", run) == "escalated"
+    assert ("pr", "edit", "7", "--add-label", "needs-human") in run.calls
+
+
+def test_workflows_never_ignore_limit_or_dev_on_pr():
+    root = pathlib.Path(__file__).parent.parent / ".github" / "workflows"
+    assert "|| guard label pr" in (root / "agent-fix.yml").read_text()
+    dev = (root / "agent-dev.yml").read_text()
+    assert "dev-on-pr:" in dev and "github.event.issue.pull_request &&" in dev
+
+
 def test_conflict_prs_skip_needs_human_and_clean():
     dirty = pr(1, mergeStateStatus="DIRTY")
     assert st.conflict_prs([dirty, pr(2), pr(3, mergeStateStatus="DIRTY", labels=["needs-human"])]) == [dirty]
@@ -335,3 +364,10 @@ def test_added_dates_only_for_never_run_workflows():
 
     assert st.liveness.added_dates(succ, run) == {"scout.yml": "2026-11-09T10:00:00Z"}
     assert len(calls) == 1 and "actions/workflows/scout.yml" in calls[0][1]
+
+
+def test_merged_rows_last_24h_with_risk_label():
+    now = datetime.datetime(2026, 11, 10, 12, 0, tzinfo=datetime.UTC)
+    merged = [{"number": 1, "title": "new", "mergedAt": "2026-11-10T08:00:00Z", "labels": [{"name": "risk:security"}]},
+              {"number": 2, "title": "old", "mergedAt": "2026-11-08T08:00:00Z", "labels": []}]
+    assert st.merged_rows(merged, now) == ["- #1 new (risk:security)"]

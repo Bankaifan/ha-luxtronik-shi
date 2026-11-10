@@ -50,7 +50,8 @@ jobs:
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
-      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+      - id: claude
+        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -66,14 +67,40 @@ jobs:
             1. rules a script could check (propose the script in tools/check/, remove the rule text),
             2. rules that never mattered (propose removal),
             3. repeated failures where a rule was missing,
-            4. contradictions between AGENTS.md, role files and CI.
+            4. contradictions between AGENTS.md, role files and CI,
+            5. recurring work steps of agent runs: fixed command sequences or decisions without judgement that every run
+            repeats (counting and setting labels, round counters, the same gh queries, fixed-format texts). Evidence:
+            the PRs above, the agent workflow files in .github/workflows/. The run logs are not readable with your tools
+            (the execution files sit in the runner temp dir, which is denied): do not try to fetch them and do not guess
+            counts; write "open" where a number is unknown. For each step, propose a script in tools/ (wired into the
+            workflow before or instead of the model step) with the runs per week it affects. Template-managed files are
+            not edited here; name them in the PR body.
             If nothing is worth changing, do nothing. Otherwise first run `gh pr list --state open --search "head:agent/rule-keeper-"`
             and stop if one is open. Then run `date +%F` on its own, and create the branch with the literal result
             (`git checkout -b agent/rule-keeper-<that date>`, no shell substitution) from main, make the edits,
             run `make check`, commit, push and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
             Never edit main directly, never merge. Daniel merges.
+            Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 30
             --setting-sources user
+            --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(git checkout -b agent/rule-keeper-:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin agent/rule-keeper-:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"
+      - name: Run report (script, no model)
+        if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          MODEL: ${{ env.MODEL }}
+          WORKFLOW_FILE: .github/workflows/rule-keeper.yml
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: |
+          # The agent may edit the checkout: run the helper as it is on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
+          python3 "$RUNNER_TEMP/guard/tools/run_report.py" rule-keeper

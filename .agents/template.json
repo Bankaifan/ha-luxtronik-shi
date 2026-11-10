@@ -1,7 +1,7 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "a73568f3cb496ebf5870cd08fb99f0851ea7a80c",
-  "managed": [".github/workflows/", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
+  "synced_sha": "2d88d007245c6e5de75982e8101c1be8a45243af",
+  "managed": [".github/workflows/", ".github/claude-judge-settings.json", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
               ".agents/roles/", "tools/", "tests/", "AGENTS.md", "CLAUDE.md", "Makefile", "docs/design/README.md"],
   "overrides": [
     {"path": ".github/workflows/validate.yml", "why": "project CI: hassfest, HACS, version and tests jobs are required checks; take over template steps (gitleaks, make check, agent-smoke) without dropping project jobs; Python default 3.13"},

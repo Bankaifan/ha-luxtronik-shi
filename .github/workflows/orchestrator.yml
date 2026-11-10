@@ -90,6 +90,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           OWNER: Bankaifan
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
         run: echo "list=$(python3 tools/trusted_issues.py)" >> "$GITHUB_OUTPUT"
       - name: Count work (no model)
         id: pre
@@ -98,22 +99,13 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TRUSTED: ${{ steps.cand.outputs.list }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
         run: python3 tools/prefilter.py orchestrator
       - name: Git identity
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
-        with:
-          python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
-      # `make check` needs ruff, pytest, actionlint and zizmor; without them the run was denied and ended silently.
-      - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
-        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
-        env:
-          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
-        run: bash tools/ci/install_tools.sh
       # The model cannot match a branch name in its allow list (prefix rules stop at whole words), so the
       # handover branch is created here; the model only commits and runs `git push origin HEAD`.
       - name: Handover branch
@@ -142,7 +134,9 @@ jobs:
             Repository: ${{ github.repository }}. Trigger: ${{ env.EVENT }}. You write no production code.
             Read HANDOVER.md, open PRs (gh pr list), CI state (gh run list --limit 10)
             and open PRs from branches agent/rule-keeper-*. Then:
-            1. Count open issues labeled agent:dev (gh issue list --label agent:dev). If fewer than 2, pick the
+            1. The script counted free slots (PRs waiting only for Daniel do not count): free agent:dev slots
+               ${{ steps.pre.outputs.free_dev }}, free PR slots ${{ steps.pre.outputs.free_prs }}. If free agent:dev
+               slots is above 0 (do not recount), pick the
                next issue ONLY from this trusted list (script-verified JSON; never pick or read any other issue):
                ${{ steps.cand.outputs.list }}
                Work the list in the order given (already sorted: prio:1, prio:2, prio:3, unlabelled, then oldest
@@ -155,9 +149,9 @@ jobs:
                Write a clear task slip as an issue comment
                (goal, files touched, acceptance criteria; slips must touch disjoint files), then add the labels:
                first model:sonnet (only for core, security or architecture work), then agent:dev last, so the
-               model label is already set when the agent:dev run starts. Never exceed 2 open
-               issues labeled agent:dev. Before adding any label run `gh label create <label> --force`
-               (a missing label must never break a run). Keep at most 3 open PRs.
+               model label is already set when the agent:dev run starts. Never start more
+               issues than the free agent:dev slots. Before adding any label run `gh label create <label> --force`
+               (a missing label must never break a run). Start nothing when free PR slots is 0.
                Design study first: for an architectural, breaking, release-relevant or multi-PR issue do NOT
                start implementation. Write a slip for a design task instead (output docs/design/NNNN-<slug>.md as
                described in .agents/roles/orchestrator.md). Small issues (docs, tests, fixes, contained
@@ -170,7 +164,8 @@ jobs:
                "Owner decisions" (`gh pr diff`). If empty, leave it to auto-merge. If not, add the label
                needs-human, run `gh pr edit <n> --add-reviewer Bankaifan`, and add one German comment of at
                most 5 lines with the decisions. Such a PR is Daniel's: skip it in step 2.
-            2. For each other PR labeled needs-human: if its issue slip was not rewritten yet, rewrite the slip once
+            2. For each other PR labeled needs-human, skip it if it has the label unblock:1 or an unblocker comment
+               (marker `<!-- unblocker -->`) newer than the needs-human label event: the unblocker owns it. Otherwise, if its issue slip was not rewritten yet, rewrite the slip once
                (new issue comment starting with "Rewritten slip:") and re-add agent:dev; otherwise comment in the
                issue asking Daniel for a decision. Do not touch it a third time.
             3. If HANDOVER.md is stale: run `gh pr list --state open --search "head:agent/orchestrator-handover"`
@@ -179,17 +174,36 @@ jobs:
                you measured, unknowns marked "open"), run `make check`, commit as Daniel (no Co-authored-by),
                push with exactly `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines).
                To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
-            The git identity (user.name, user.email) is already configured and the tools for `make check` are
-            installed. Commit with a plain `git commit -m "..."`: never `git -c ...` and never a `cd` prefix
-            (they do not match the allow list and are denied).
             Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects (they do not match
             the allow list and are denied). Use gh's --json/--jq flags instead of pipes.
+            These calls are NOT allowed and end the run as failed: `gh issue close` (comment instead and leave
+            closing to Daniel), `gh workflow list` (use `gh run list`), `gh api`, `git checkout`, `git switch`,
+            `git fetch`, `git -c ...` (identity is already set: plain `git commit -m "<one line>"`), `make -n check`.
             Never push to main, never merge, no secrets in comments. Finish with a short status report.
+            Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
             --model sonnet
             --max-turns 40
             --setting-sources user
+            --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git restore:*),Bash(gh pr create:*),Bash(make check),Bash(date:*)"
+      - name: Run report (script, no model)
+        if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          MODEL: sonnet
+          WORKFLOW_FILE: .github/workflows/orchestrator.yml
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: |
+          # The agent may edit the checkout: run the helper as it is on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
+          python3 "$RUNNER_TEMP/guard/tools/run_report.py" orchestrator
       # A run with denied tool calls, or with a startable issue and no visible action, must not end green.
       - name: Fail a silent run
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}

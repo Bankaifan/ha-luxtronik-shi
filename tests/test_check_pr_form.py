@@ -10,7 +10,7 @@ _spec.loader.exec_module(mod)
 
 
 def run(monkeypatch, env):
-    for k in ("PR_TITLE", "PR_BODY", "GITHUB_EVENT_NAME", "GITHUB_REF_NAME", "PR_HEAD_REF"):
+    for k in ("PR_TITLE", "PR_BODY", "PR_NUMBER", "GITHUB_EVENT_NAME", "GITHUB_REF_NAME", "PR_HEAD_REF"):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
@@ -95,6 +95,13 @@ def test_closing_subcommand_reads_file(tmp_path, monkeypatch):
         f.write_text(text)
         monkeypatch.setattr(mod.sys, "argv", ["x", "closing", str(f)])
         assert mod.main() == rc
+
+
+def test_closing_subcommand_errors_exit_2(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod.sys, "argv", ["x", "closing", str(tmp_path / "missing.md")])
+    assert mod.main() == 2
+    monkeypatch.setattr(mod.sys, "argv", ["x", "closing"])
+    assert mod.main() == 2
 
 
 def test_dispatch_without_pr_skipped(monkeypatch):

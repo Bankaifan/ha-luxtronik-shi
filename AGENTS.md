@@ -12,7 +12,8 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
    branches, never on `main`.
 4. Read-only checks against the real installation and the real Home Assistant are allowed. Anything that writes to
    the real heat pump or to Home Assistant needs Daniel's OK. Tests use the simulator.
-5. No changes to CI protection, rulesets, permissions, workflows or this file without OK.
+5. Changes to CI protection, permissions, workflows or this file go through the security reviewer. Changes to the
+   CODEOWNERS paths (CODEOWNERS, rulesets, trust logic, release workflow) need Daniel's OK.
 
 ## Domain rules
 1. **Correctness before continuity.** The project is in testing and Daniel is its only user. An entity that models a
@@ -85,16 +86,17 @@ again and the old PR is closed as superseded. If the issue already has `restart:
 review request to Daniel (a label alone is not in his inbox) and waits for the orchestrator or Daniel. Do not start a
 third round. A newer agent PR for the same issue closes the older one.
 Merges are rebase merges done by auto-merge after the approver app's approval and green CI. Only security-relevant
-files need Daniel as code owner (`.github/CODEOWNERS`, the release workflow, rulesets, `AGENTS.md`, the guard and risk
-tools); other security diffs are caught by the `risk` check (`tools/ci/risk.py`), which fails until he approves the
-head SHA. Only trusted input drives agents: issues by Daniel or labelled `approved`/`auto-ok` by Daniel; the reviewer
+files need Daniel as code owner (`.github/CODEOWNERS`, the release workflow, rulesets, the trust and guard tools, the
+risk gate); every other security diff is gated by the AI security reviewer (status `security-review`). Only trusted input drives agents: issues by Daniel or labelled `approved`/`auto-ok` by Daniel; the reviewer
 never runs PR code.
+Also trusted: an issue the liveness guard wrote (`Overdue scheduled run`): author app plus a valid HMAC signature
+(`tools/guard_mark.py`, secret `GUARD_KEY`, script steps only). No key, no trust. Unblocker and idea issues are never signed.
 Big work (architectural, breaking, release-relevant, multi-PR) starts with a design study in `docs/design/` (see its
 README); only its *Owner decisions* go to Daniel.
 
 ## Waiting for Daniel
-Daniel approves only what needs him: PRs with risk class `security` (check `risk`, label `risk:security`, see
-`tools/ci/risk.py`), `needs-human`, design owner decisions, dependabot majors, product decisions. Whoever parks
+Daniel approves only what needs him: PRs that change his CODEOWNERS paths (check `risk`, see `tools/ci/risk.py`),
+`needs-human`, design owner decisions, dependabot majors, product decisions. Whoever parks
 something with him leaves, as the LAST comment, a short plain-German note: what changes, the worst case, what the
 reviewers recommend, one exact yes/no question; technical terms explained in a few words. PRs get a review request to
 Bankaifan; only issues that wait for him mention `@Bankaifan` once in that note. No other comment mentions him. Every
@@ -107,5 +109,6 @@ This repo follows `Bankaifan/agent-template` (`.agents/template.json`). `templat
 `synced_sha`, one PR with `Closes #<issue>`.
 
 ## Models (subscription quota is scarce)
-Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK. Max 2 agent jobs at once.
+Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK. Max 2 agent jobs at once (PRs
+waiting only for Daniel's approval do not count, max 5 of them, see orchestrator.md).
 Script first, then haiku, then sonnet. Short reports, never repeat the diff.

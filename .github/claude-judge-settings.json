@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(//proc/**)",
+      "Read(//etc/**)",
+      "Read(//root/**)",
+      "Read(//run/**)",
+      "Read(//var/**)",
+      "Read(//home/runner/work/_temp/**)",
+      "Read(//home/runner/work/_actions/**)",
+      "Read(//home/runner/work/_tool/**)",
+      "Read(//home/runner/.*/**)",
+      "Glob(//proc/**)",
+      "Glob(//etc/**)",
+      "Glob(//root/**)",
+      "Glob(//run/**)",
+      "Glob(//var/**)",
+      "Glob(//home/runner/work/_temp/**)",
+      "Glob(//home/runner/work/_actions/**)",
+      "Glob(//home/runner/work/_tool/**)",
+      "Glob(//home/runner/.*/**)",
+      "Grep(//proc/**)",
+      "Grep(//etc/**)",
+      "Grep(//root/**)",
+      "Grep(//run/**)",
+      "Grep(//var/**)",
+      "Grep(//home/runner/work/_temp/**)",
+      "Grep(//home/runner/work/_actions/**)",
+      "Grep(//home/runner/work/_tool/**)",
+      "Grep(//home/runner/.*/**)"
+    ]
+  }
+}

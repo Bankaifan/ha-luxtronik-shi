@@ -11,9 +11,14 @@ class Fake:
         self.calls = []
         self.body, self.state, self.issue_labels, self.author = body, state, list(issue_labels), author
         self.reviews = list(reviews)
+        self.posted, self.lossy = [], False
 
     def __call__(self, *args):
         self.calls.append(args)
+        if args[1:2] == ("comment",) and not self.lossy:
+            self.posted.append({"body": args[args.index("--body") + 1]})
+        if args[1:2] == ("view",) and "comments" in args:
+            return json.dumps({"comments": self.posted})
         if args[:2] == ("pr", "view") and "author" in args:
             return json.dumps({"author": {"login": self.author}})
         if args[:2] == ("pr", "view"):
@@ -59,6 +64,21 @@ def test_limit_with_restart_label_parks_with_daniel_once():
     comments = [c for c in f.calls if c[:2] == ("pr", "comment")]
     assert len(comments) == 1 and "already failed" in comments[0][4] and "Hallo Daniel" in comments[0][4]
     assert not f.has("pr", "close") and not f.has("issue", "comment")
+
+
+def test_missing_slip_comment_fails_loudly_before_the_pr_is_closed():
+    f = Fake()
+    f.lossy = True
+    with pytest.raises(r.liveness.ReadbackError):
+        r.handle_limit("64", "Bankaifan", f)
+    assert not f.has("pr", "close")
+
+
+def test_missing_limit_comment_fails_loudly():
+    f = Fake(issue_labels=["restart:1"])
+    f.lossy = True
+    with pytest.raises(r.liveness.ReadbackError):
+        r.handle_limit("70", "Bankaifan", f)
 
 
 def test_one_restart_max_second_limit_never_restarts_again():
