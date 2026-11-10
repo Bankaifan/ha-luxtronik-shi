@@ -224,7 +224,7 @@ def test_run_pr_security_fails_until_owner_approves(monkeypatch, tmp_path):
     (tmp_path / ".github" / "CODEOWNERS").write_text("/.github/CODEOWNERS @Bankaifan\n")
     owned = [{"filename": ".github/CODEOWNERS"}]
     _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(), diff_text=sec, files=owned))
-    assert risk.run_pr("5") == 1
+    assert risk.run_pr("5") == 0  # the job stays green, the check run `risk` carries the gate
     assert _has(calls, "conclusion=failure") and _has(calls, "--add-label", "risk:security")
     assert _has(calls, "context=security-review", "state=pending")
     ok = [{"user": {"login": "Bankaifan"}, "state": "APPROVED", "commit_id": "abc"}]

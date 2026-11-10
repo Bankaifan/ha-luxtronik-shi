@@ -1,6 +1,6 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "c2f3006fb4fc33ee9006440ba57fd3f627982846",
+  "synced_sha": "8ead8f1a0de91861659906b4fc2c2ad1951b337a",
   "managed": [".github/workflows/", ".github/claude-judge-settings.json", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
               ".agents/roles/", "tools/", "tests/", "AGENTS.md", "CLAUDE.md", "Makefile", "docs/design/README.md"],
   "overrides": [

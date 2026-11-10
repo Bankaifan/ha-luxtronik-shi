@@ -25,8 +25,8 @@ def split_diff(diff):
     blocks, cur = [], None
     for line in diff.splitlines(keepends=True):
         if line.startswith("diff --git "):
-            m = re.match(r"diff --git a/(.*?) b/(.*)$", line.rstrip("\n"))
-            cur = {"path": m.group(2) if m else "", "old": m.group(1) if m else "", "status": "modified",
+            old, new = risk.parse_header(line)
+            cur = {"path": new, "old": old, "status": "modified",
                    "add": 0, "del": 0, "text": [], "body": False}
             blocks.append(cur)
         if cur is None:
@@ -50,6 +50,10 @@ def split_diff(diff):
 
 def unsafe(path):
     return not path or path.startswith("/") or ".." in path
+
+
+def bad(b):
+    return unsafe(b["path"]) or unsafe(b["old"])
 
 
 def is_test_of_security_tool(path):
@@ -92,16 +96,16 @@ def stage(diff, outdir, fetch=None):
     """Write the staged files, return the turns number. Falls back to the full diff on no relevant file or an error."""
     try:
         blocks = split_diff(diff)
-        keep = [b for b in blocks if not unsafe(b["path"]) and not unsafe(b["old"]) and relevant(b)]
+        # Unsafe/unparsable blocks stay in the diff (the reviewer must see them); only the content fetch is skipped.
+        keep = [b for b in blocks if bad(b) or relevant(b)]
         if not keep:
             raise ValueError("no relevant file")
         skipped = [b for b in blocks if b not in keep]
         staged = "".join("".join(b["text"]) for b in keep)
-        lines = "".join(f"{b['path']}\t{'unsafe path' if unsafe(b['path']) or unsafe(b['old']) else b['status']}"
-                        f"\t+{b['add']}/-{b['del']}\n" for b in skipped)
+        lines = "".join(f"{b['path']}\t{b['status']}\t+{b['add']}/-{b['del']}\n" for b in skipped)
         files = {}
         for b in keep:
-            if b["status"] != "deleted" and fetch:
+            if b["status"] != "deleted" and fetch and not bad(b):
                 content = fetch(b["path"])
                 if content is not None:
                     files[b["path"]] = content
