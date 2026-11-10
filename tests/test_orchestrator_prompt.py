@@ -20,6 +20,16 @@ def test_allow_list_does_not_contain_the_denied_calls():
         assert f"Bash({call}" not in allowed, call
 
 
+def test_prompt_forbids_rm_and_keeps_body_files_in_git_ignored_agent_out():
+    # Run 42889616904 ended silently: `rm slip-116.md` was denied. Body files stay in .agent-out/, which the workflow excludes.
+    text = WF.read_text(encoding="utf-8")
+    assert "`rm` (run 42889616904" in text
+    assert "`.agent-out/<name>.md`" in text
+    assert 'echo ".agent-out/" >> .git/info/exclude' in text
+    allowed = re.search(r'--allowedTools "([^"]*)"', text).group(1)
+    assert "Bash(rm" not in allowed
+
+
 def test_handover_is_stale_only_on_material_change_and_one_pr_per_day():
     # Issue #341: 13 of 30 merged PRs were handover PRs because "stale" was never defined.
     # Whitespace is flattened so the YAML line wrapping does not matter.

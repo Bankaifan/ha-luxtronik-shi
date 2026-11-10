@@ -166,6 +166,13 @@ jobs:
           branch="agent/orchestrator-handover-$(date -u +%F)"
           git checkout -b "$branch"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      # Run 42889616904: `rm slip-116.md` was denied and the run ended silently. Body files for gh go to .agent-out/,
+      # which git ignores here; the model writes them there and never deletes them.
+      - name: Agent output directory (git-ignored, for --body-file)
+        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        run: |
+          mkdir -p .agent-out
+          echo ".agent-out/" >> .git/info/exclude
       - id: started
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -245,9 +252,11 @@ jobs:
             closing to Daniel), `gh workflow list` (use `gh run list`), `gh run view` (also with `--log-failed`; use
             `gh run list --json name,conclusion,headSha,url` and name the red run in the issue slip), `gh api`, `git checkout`, `git switch`,
             `git fetch`, `git -c ...` (identity is already set: plain `git commit -m "<one line>"`), `make -n check`,
-            `pip install ...` (the tools are installed; if `make check` still fails, say so in the PR body).
+            `pip install ...` (the tools are installed; if `make check` still fails, say so in the PR body),
+            `rm` (run 42889616904 ended silently on `rm slip-116.md`; never delete a file).
             For `gh issue create` and `gh pr create` keep --title and --body on one line without backticks or
-            `$(...)`; for longer text write the file with Write and pass --body-file.
+            `$(...)`; for longer text write the file with Write to `.agent-out/<name>.md` (git ignores that
+            directory) and pass --body-file. Leave the file there.
             Never push to main, never merge, no secrets in comments. Finish with a short status report.
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
