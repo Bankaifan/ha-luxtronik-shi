@@ -122,17 +122,27 @@ def workflow_stats(runs, jobs_of, log_of, days=7, now=None):
 
 ERROR_RE = re.compile(r"error|exception|failed", re.IGNORECASE)
 STAMP_RE = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z\s*")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# A script line echoed in the log (`echo "::error::..."` or an unexpanded `${!name}`), not the error text itself
+SOURCE_RE = re.compile(r'echo "::error::|\$\{!')
+ANNOTATION_RE = re.compile(r"^::error::")
+# Runtime message of the agent tool, not repo code: the repo has no tsconfig.json (design 0015)
+TOOL_RE = re.compile(r"\binternal error:", re.IGNORECASE)
+TOOL_LABEL = "tool environment, not repo code: "
 
 
 def failure_class(log):
     """Normalized first error line of a failed model run (digits become #), or None. Limit or rate errors are not a
-    role failure and give None. Heuristic (design 0015): same text = same class."""
+    role failure and give None. Script source lines echoed in the log are skipped, so the expanded message wins.
+    Heuristic (design 0015): same text = same class."""
     if LIMIT_RE.search(log):
         return None
     for line in log.splitlines():
-        text = STAMP_RE.sub("", line.rsplit("\t", 1)[-1]).strip()
-        if ERROR_RE.search(text):
-            return re.sub(r"\d+", "#", text.lower())[:120]
+        text = STAMP_RE.sub("", ANSI_RE.sub("", line.rsplit("\t", 1)[-1])).strip()
+        if not ERROR_RE.search(text) or SOURCE_RE.search(text):
+            continue
+        label = TOOL_LABEL if TOOL_RE.search(text) else ""
+        return label + re.sub(r"\d+", "#", ANNOTATION_RE.sub("", text).lower())[:120]
     return None
 
 

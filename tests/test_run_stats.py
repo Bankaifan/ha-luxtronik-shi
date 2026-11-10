@@ -53,3 +53,31 @@ def test_fetch_uses_gh_calls():
     assert runs[0]["databaseId"] == 7
     assert s.ran_model(jobs_of(7))
     assert calls[1][1] == "repos/o/r/actions/runs/7/jobs"
+
+
+SOURCE = ('2026-11-10T08:00:00.1Z \x1b[36;1m[ -n "${!n}" ] || { echo "::error::Repo variable $n is not set '
+          '(Settings > Secrets and variables > Actions > Variables)."; exit 1; }\x1b[0m')
+EXPANDED = ("2026-11-10T08:00:01.2Z ::error::Repo variable MAX_DEV is not set "
+            "(Settings > Secrets and variables > Actions > Variables).")
+
+
+def test_failure_class_names_the_missing_variable_not_the_echoed_source():
+    log = f"dev\tcheck\t{SOURCE}\ndev\tcheck\t{EXPANDED}\n"
+    assert s.failure_class(log) == ("repo variable max_dev is not set "
+                                    "(settings > secrets and variables > actions > variables).")
+
+
+def test_failure_class_gives_none_for_source_echo_alone():
+    assert s.failure_class(f"dev\tcheck\t{SOURCE}\n") is None
+
+
+def test_failure_class_labels_tool_runtime_errors():
+    log = "dev\tstep\t2026-11-10T08:00:00Z (\"internal error: directory mismatch for directory .../tsconfig.json\")\n"
+    cls = s.failure_class(log)
+    assert cls.startswith("tool environment, not repo code: ")
+    assert "tsconfig.json" in cls
+
+
+def test_failure_class_keeps_limit_and_plain_errors():
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z usage limit reached\n") is None
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z build failed: 3 tests\n") == "build failed: # tests"

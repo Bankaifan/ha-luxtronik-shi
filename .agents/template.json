@@ -22,6 +22,8 @@
     {"path": ".agents/roles/orchestrator.md", "why": "orchestrator never deletes files and writes body files to the git-ignored .agent-out (#118); to be proposed upstream in agent-template"},
     {"path": ".github/workflows/orchestrator.yml", "why": "orchestrator run writes body files to the git-ignored .agent-out instead of deleting them (#118); to be proposed upstream in agent-template"},
     {"path": "tests/test_orchestrator_prompt.py", "why": "covers the .agent-out and never-delete rules of the orchestrator prompt (#118)"},
+    {"path": "tools/run_stats.py", "why": "weekly failure classes name the missing repo variable instead of the echoed script line and label agent-tool internal errors (#125); to be proposed upstream in agent-template"},
+    {"path": "tests/test_run_stats.py", "why": "covers the failure class text changes of tools/run_stats.py (#125)"},
     {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py)"},
     {"path": "AGENTS.md", "why": "project sentence and project rules (register facts, bilingual docs, firmware analysis as source)"}
   ]
