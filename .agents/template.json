@@ -19,6 +19,9 @@
     {"path": "tests/test_variables_doc.py", "why": "skipped at module level: it checks the template's docs/variables.md and README links, which this project does not have"},
     {"path": "tests/test_check_test_evidence.py", "why": "the temporary test repo gets a pytest.ini with asyncio_mode = auto: the Home Assistant pytest plugin (latest) errors on sync tests without it"},
     {"path": ".github/workflows/agent-fix.yml", "why": "the fix agent keeps no `gh pr edit` and `gh pr comment` rights (the security reviewer: it could strip risk:security from a PR); the PR body is applied by the fixed step after it"},
+    {"path": ".agents/roles/orchestrator.md", "why": "orchestrator never deletes files and writes body files to the git-ignored .agent-out (#118); to be proposed upstream in agent-template"},
+    {"path": ".github/workflows/orchestrator.yml", "why": "orchestrator run writes body files to the git-ignored .agent-out instead of deleting them (#118); to be proposed upstream in agent-template"},
+    {"path": "tests/test_orchestrator_prompt.py", "why": "covers the .agent-out and never-delete rules of the orchestrator prompt (#118)"},
     {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py)"},
     {"path": "AGENTS.md", "why": "project sentence and project rules (register facts, bilingual docs, firmware analysis as source)"}
   ]
