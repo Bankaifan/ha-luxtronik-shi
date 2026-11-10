@@ -22,6 +22,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ### Changed
 
+* The orchestrator workflow installs the CI tools before its run and tells the model to use a plain `git commit`,
+  so runs no longer end silently with denied tool calls (issue #104).
+
 * The entity IDs of `heating_available` and `hot_water_available` (were `cap_heating`, `cap_hot_water`) are renamed
   automatically at setup when they still carry the generated old name; user-chosen IDs and taken targets are skipped,
   each rename and skip is logged, a second run does nothing (issue #101).
