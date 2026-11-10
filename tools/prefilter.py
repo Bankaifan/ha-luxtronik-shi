@@ -12,15 +12,32 @@ import subprocess
 import sys
 import time
 
+import train
+
 MAX_DEV = 2
+MAX_PRS = 3
 MAX_OPEN_IDEAS = 10
 
 
-def startable(trusted, dev_open, stuck=0):
+def closing_issues(body):
+    return {int(n) for n in re.findall(r"(?:Closes|Refs) #(\d+)\b", body or "")}
+
+
+def free_slots(dev_open, open_prs, waiting_issues, waiting_prs):
+    """(free agent:dev slots, free PR slots). Issues and PRs waiting only for the owner do not count against the caps."""
+    return (max(0, MAX_DEV - (dev_open - waiting_issues)), max(0, MAX_PRS - (open_prs - waiting_prs)))
+
+
+def startable(trusted, dev_open, stuck=0, waiting=0, waiting_prs=0):
     """Trusted issues the orchestrator could start: no agent:dev yet, ideas only when approved/auto-ok.
-    `stuck` = open agent:dev issues with a merged PR or needs-human; they must not block a prio:1 issue."""
+    `stuck` = open agent:dev issues with a merged PR or needs-human; they must not block a prio:1 issue.
+    `waiting` = open agent:dev issues whose PR waits only for the owner: they free their slot (not for prio:1 beyond
+    the existing stuck rule). At MAX_WAITING waiting PRs (`waiting_prs`) new risk:security slips wait."""
+    dev_open = max(0, dev_open - waiting)
     out = []
     for item in trusted:
+        if waiting_prs >= train.MAX_WAITING and "risk:security" in item["labels"]:
+            continue
         if dev_open >= MAX_DEV and not (item.get("prio") == 1 and dev_open - stuck < MAX_DEV):
             continue
         labels = set(item["labels"])
@@ -68,6 +85,21 @@ def stuck_slots():
     return n
 
 
+def waiting_for_owner(owner, approver):
+    """(issue numbers, PR count) of PRs waiting only for the owner; see train.waiting_for_owner."""
+    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "20", "--json", train.LIST_FIELDS + ",body"))
+    repo = os.environ["GH_REPO"]
+    issues, n = set(), 0
+    for p in prs:
+        if not (train.status.is_agent_pr(p) and "risk:security" in train.status.names(p)):
+            continue
+        pages = json.loads(gh("api", "--paginate", "--slurp", f"repos/{repo}/pulls/{p['number']}/reviews"))
+        if train.waiting_for_owner(p, [r for page in pages for r in page], approver, owner):
+            n += 1
+            issues |= closing_issues(p.get("body"))
+    return issues, n
+
+
 def count(*args):
     return len(json.loads(gh(*args, "--limit", "200", "--json", "number")))
 
@@ -84,14 +116,18 @@ def handover_state():
 def main(mode) -> int:
     if mode == "orchestrator":
         dev_open = count("issue", "list", "--state", "open", "--label", "agent:dev")
+        w_issues, w_prs = waiting_for_owner(os.environ.get("OWNER", "Bankaifan"), os.environ.get("APPROVER_BOT", ""))
+        w_dev = sum(1 for i in json.loads(gh("issue", "list", "--state", "open", "--label", "agent:dev",
+                                             "--limit", "50", "--json", "number")) if i["number"] in w_issues)
+        free_dev, free_prs = free_slots(dev_open, count("pr", "list", "--state", "open"), w_dev, w_prs)
         trusted = json.loads(os.environ.get("TRUSTED") or subprocess.run(
             [sys.executable, "tools/trusted_issues.py"], check=True, capture_output=True, text=True).stdout)
-        cands = startable(trusted, dev_open, stuck_slots() if dev_open >= MAX_DEV else 0)
+        cands = startable(trusted, dev_open, stuck_slots() if dev_open - w_dev >= MAX_DEV else 0, w_dev, w_prs)
         human = count("pr", "list", "--state", "open", "--label", "needs-human")
         age, newer = handover_state()
         stale = handover_stale(age, newer, float(os.environ.get("STALE_DAYS", "7")))
         work = orchestrator_work(cands, human, stale)
-        print(f"dev_open={dev_open} candidates={cands} needs_human_prs={human} "
+        print(f"dev_open={dev_open} waiting_prs={w_prs} free_dev={free_dev} free_prs={free_prs} candidates={cands} needs_human_prs={human} "
               f"handover_age_days={age:.1f} commits_since={newer} stale={stale} work={work}")
     elif mode == "scout":
         ideas = count("issue", "list", "--state", "open", "--label", "idea")
@@ -106,6 +142,7 @@ def main(mode) -> int:
             f.write(f"work={str(work).lower()}\n")
             if mode == "orchestrator":
                 f.write(f"startable={str(bool(cands)).lower()}\n")
+                f.write(f"free_dev={free_dev}\nfree_prs={free_prs}\nwaiting_prs={w_prs}\n")
     return 0
 
 

@@ -2,6 +2,8 @@ import importlib.util
 import json
 import pathlib
 
+import pytest
+
 _path = pathlib.Path(__file__).parent.parent / "tools" / "ci" / "risk.py"
 _spec = importlib.util.spec_from_file_location("risk", _path)
 risk = importlib.util.module_from_spec(_spec)
@@ -80,7 +82,8 @@ def test_codeowner_paths_wait_for_owner():
     assert risk.owned_by(".github/rulesets/main.json", co, "Bankaifan")
     assert not risk.owned_by("x", co, "Bankaifan")
     assert not risk.owned_by("tools/status.py", co, "Bankaifan")
-    assert risk.waits_for_owner("security", [], co, "Bankaifan")
+    assert not risk.waits_for_owner("security", [], co, "Bankaifan")  # the security reviewer gates it
+    assert not risk.waits_for_owner("security", [".github/workflows/x.yml"], co, "Bankaifan")
     assert risk.waits_for_owner("infra", ["AGENTS.md"], co, "Bankaifan")
     assert not risk.waits_for_owner("infra", ["tools/status.py"], co, "Bankaifan")
 
@@ -90,9 +93,15 @@ GREEN_RUNS = [{"name": n, "status": "completed", "conclusion": "success"} for n 
 SEC_OK = [{"context": "security-review", "state": "success"}]
 
 
-def _stub(calls, reviews, files, comments, diff_text, runs=GREEN_RUNS, statuses=SEC_OK, user="agent-bot"):
+def _stub(calls, reviews, files, comments, diff_text, runs=GREEN_RUNS, statuses=SEC_OK, user="agent-bot", lossy=False):
+    posted = []
+
     def run(*a):
         calls.append(a)
+        if a[:2] == ("pr", "comment") and not lossy:
+            posted.append({"body": a[a.index("--body") + 1]})
+        if a[:2] == ("pr", "view") and "comments" in a:
+            return json.dumps({"comments": posted})
         if a[0] == "api" and a[-1].endswith("/reviews"):
             return json.dumps([reviews])
         if a[0] == "api" and a[-1].endswith("/files"):
@@ -137,6 +146,13 @@ def test_run_wait_all_green_labels_and_comments_once(monkeypatch, tmp_path):
     assert not any(c[:2] == ("pr", "comment") or "--add-label" in c for c in calls)
 
 
+def test_run_wait_fails_loudly_when_note_missing(monkeypatch, tmp_path):
+    _wait_env(monkeypatch, tmp_path)
+    run = _stub([], REV, ["AGENTS.md"], [], diff("AGENTS.md", "+x"), lossy=True)
+    with pytest.raises(risk.liveness.ReadbackError):
+        risk.run_wait("5", "abc", run)
+
+
 def test_run_wait_security_review_pending_or_failed_sets_nothing(monkeypatch, tmp_path):
     _wait_env(monkeypatch, tmp_path)
     for st in ([{"context": "security-review", "state": "pending"}],
@@ -168,9 +184,11 @@ def test_removed_line_starting_with_dashes_is_scanned():
     assert risk.classify(d) == "security"
 
 
-def _pr_stub(calls, pr, statuses=(), diff_text=""):
+def _pr_stub(calls, pr, statuses=(), diff_text="", files=()):
     def run(*a):
         calls.append(a)
+        if a[0] == "api" and a[-1].endswith("/files"):
+            return json.dumps([list(files)])
         if a[0] == "api" and a[1].endswith("/statuses"):
             return json.dumps(list(statuses))
         if a[0] == "api" and "/pulls/" in a[1]:
@@ -202,13 +220,16 @@ def _has(calls, *parts):
 def test_run_pr_security_fails_until_owner_approves(monkeypatch, tmp_path):
     sec = diff(".github/CODEOWNERS", "+/x @a")
     calls = []
-    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(), diff_text=sec))
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "CODEOWNERS").write_text("/.github/CODEOWNERS @Bankaifan\n")
+    owned = [{"filename": ".github/CODEOWNERS"}]
+    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(), diff_text=sec, files=owned))
     assert risk.run_pr("5") == 1
     assert _has(calls, "conclusion=failure") and _has(calls, "--add-label", "risk:security")
     assert _has(calls, "context=security-review", "state=pending")
     ok = [{"user": {"login": "Bankaifan"}, "state": "APPROVED", "commit_id": "abc"}]
     calls.clear()
-    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(["risk:security"]), diff_text=sec), reviews=ok)
+    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(["risk:security"]), diff_text=sec, files=owned), reviews=ok)
     assert risk.run_pr("5") == 0
     assert _has(calls, "conclusion=success")
     assert not _has(calls, "--add-label")
@@ -257,3 +278,19 @@ def test_run_verdict(monkeypatch):
         monkeypatch.setattr(risk, "api_list", lambda path, body=body: [{"user": {"login": "appr[bot]"}, "body": body}])
         assert risk.run_verdict("5", sha) == code
         assert _has(calls, f"state={state}", "context=security-review")
+
+
+def test_run_pr_security_outside_codeowner_paths_needs_no_owner(monkeypatch, tmp_path):
+    sec = diff(".github/workflows/x.yml", "+permissions:", "+  contents: write")
+    calls = []
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "CODEOWNERS").write_text("/.github/CODEOWNERS @Bankaifan\n")
+    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(), diff_text=sec, files=[{"filename": ".github/workflows/x.yml"}]))
+    assert risk.run_pr("5") == 0
+    assert _has(calls, "conclusion=success") and _has(calls, "--add-label", "risk:security")
+    assert _has(calls, "context=security-review", "state=pending")  # the AI security reviewer still gates it
+
+
+def test_pr_paths_include_rename_source():
+    pages = [[{"filename": "tools/x.py", "previous_filename": "tools/trusted_issues.py"}], [{"filename": "a b.py"}]]
+    assert risk.pr_paths(pages) == ["a b.py", "tools/trusted_issues.py", "tools/x.py"]

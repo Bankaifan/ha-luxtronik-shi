@@ -6,13 +6,14 @@ security: the diff touches workflow `permissions:`, `allowedTools`, `allowed_bot
 
 CLI:
   risk.py classify [AGENTS_MD]   read a unified diff on stdin, print the level (AGENTS_MD: base file for the Limits section)
-  risk.py pr NUMBER              (env GH_TOKEN, GH_REPO, optional OWNER, AUTHOR_BOT) label the PR, request the owner's review
-                                 for `security`, publish the check run `risk`; it fails until OWNER approved the head SHA.
+  risk.py pr NUMBER              (env GH_TOKEN, GH_REPO, optional OWNER, AUTHOR_BOT) label the PR, publish the check run
+                                 `risk`. Only a PR that changes a file owned by OWNER in CODEOWNERS (the outsider boundary)
+                                 waits for him: then `risk` fails until OWNER approved the head SHA. Every other `security`
+                                 PR is gated by the AI security reviewer (status `security-review`) alone.
                                  Also starts the status `security-review` (pending for agent PRs that need that review).
   risk.py wait NUMBER SHA        (env GH_TOKEN, GH_REPO, APPROVER_BOT) called by agent-review and agent-security-review; acts only
                                  when for SHA the approver approved, validate/agent-smoke are green, risk is complete and
-                                 `security-review` is success, and the PR waits for the owner (risk `security` or a code-owner
-                                 path): label `needs-human`, request the owner's review, post the PR-specific German note once
+                                 `security-review` is success, and the PR waits for the owner (a code-owner path): label `needs-human`, request the owner's review, post the PR-specific German note once
   risk.py verdict NUMBER SHA     publish the status `security-review` from the security reviewer's comment for SHA
 Runs from the default branch with the PR read through `gh`; PR code is never executed.
 """
@@ -22,7 +23,11 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import liveness
+
 SECURITY_FILES = (".github/rulesets/", ".github/CODEOWNERS", "tools/trusted_issues.py", "tools/agent_guard.py",
+                  "tools/exec_log.py", "tools/guard_mark.py",
                   "tools/ci/risk.py", ".github/workflows/risk.yml")
 INFRA_PATHS = (".github/", ".agents/", "tools/", "AGENTS.md", "CLAUDE.md", "Makefile", ".claude/", ".mcp.json")
 SECURITY_LINES = re.compile(
@@ -124,8 +129,14 @@ def owned_by(path, codeowners, owner):
 
 
 def waits_for_owner(level, files, codeowners, owner):
-    """The PR cannot merge without the owner: risk `security` or a changed file owned by him in CODEOWNERS."""
-    return level == "security" or any(owned_by(f, codeowners, owner) for f in files)
+    """The PR cannot merge without the owner: a changed file owned by him in CODEOWNERS. `level` is kept for callers;
+    risk `security` alone no longer waits for him (decided 2026-11-10: the AI security reviewer gates it)."""
+    return any(owned_by(f, codeowners, owner) for f in files)
+
+
+def pr_paths(pages):
+    """Changed paths of a PR from `pulls/N/files` (--slurp pages), old names of renames included."""
+    return sorted({p for page in pages for f in page for p in (f.get("filename"), f.get("previous_filename")) if p})
 
 
 NOTE_MARK = "<!-- needs-human-note -->"
@@ -205,8 +216,7 @@ def run_wait(number, sha, run=None):
         print("not approved at this head: nothing to do")
         return 0
     codeowners, agents = read_text(".github/CODEOWNERS"), read_text("AGENTS.md")
-    files = [f["filename"] for page in json.loads(run("api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/files"))
-             for f in page]
+    files = pr_paths(json.loads(run("api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/files")))
     level = classify(run("pr", "diff", str(number)), agents)
     if not waits_for_owner(level, files, codeowners, owner):
         print("does not wait for the owner")
@@ -229,7 +239,7 @@ def run_wait(number, sha, run=None):
     if norm(pr.get("user", {}).get("login")) != norm(owner):  # a label alone is not in the owner's inbox
         subprocess.run(["gh", "pr", "edit", str(number), "--add-reviewer", owner], check=False, capture_output=True)
     review = mine[-1].get("body") or ""
-    run("pr", "comment", str(number), "--body", build_note(sha, level, pr.get("body") or "", review))
+    liveness.post_comment("pr", number, build_note(sha, level, pr.get("body") or "", review), run)
     return 0
 
 
@@ -249,7 +259,8 @@ def run_pr(number):
     level = classify(gh("pr", "diff", str(number)), base)
     sync_labels(number, level, [lb["name"] for lb in pr.get("labels", [])])
     approved = True
-    if level == "security":
+    files = pr_paths(json.loads(gh("api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/files") or "[]"))
+    if waits_for_owner(level, files, read_text(".github/CODEOWNERS"), owner):
         approved = owner_approved(api_list(f"repos/{repo}/pulls/{number}/reviews"), owner, sha)
         if not approved and norm(author) != norm(owner):
             subprocess.run(["gh", "pr", "edit", str(number), "--add-reviewer", owner], check=False, capture_output=True)

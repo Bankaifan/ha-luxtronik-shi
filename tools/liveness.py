@@ -9,6 +9,8 @@ import datetime
 import json
 import subprocess
 
+import guard_mark
+
 # workflow file -> (label, expected interval in minutes)
 SCHEDULED = {
     "orchestrator.yml": ("orchestrator", 24 * 60),
@@ -98,22 +100,31 @@ def overdue_title(label):
     return f"Overdue scheduled run: {label}"
 
 
-def ensure_overdue_issue(label, detail, run=gh):
-    """Create the prio:1 issue for an overdue run unless an open one exists. Returns its number or None."""
+OVERDUE_DETAIL = "Check the workflow runs."  # fixed script text: the body is signed, so no log or model text in it
+
+
+def overdue_body(label):
+    return f"The scheduled run of the {label} has no successful run within {OVERDUE_FACTOR} intervals. {OVERDUE_DETAIL}"
+
+
+def ensure_overdue_issue(label, key=None, run=gh):
+    """Create the prio:1 issue for an overdue run unless an open one exists. Returns its number or None.
+    The body is signed with GUARD_KEY (guard_mark.py) so the orchestrator trusts it; no key, no signature."""
     title = overdue_title(label)
+    key = guard_mark.key_from_env() if key is None else key
     found = json.loads(run("issue", "list", "--state", "open", "--search", f'"{title}" in:title',
                            "--json", "number,title"))
     if any(i["title"] == title for i in found):
         return None
     out = run("issue", "create", "--title", title, "--label", OVERDUE_LABEL, "--body",
-              f"The scheduled run of the {label} has no successful run within {OVERDUE_FACTOR} intervals. {detail}")
+              guard_mark.sign(title, overdue_body(label), key))
     return out.strip().rsplit("/", 1)[-1]
 
 
 def flag_overdue(successes, now, run=gh, added=None):
     """One issue per overdue run, none for runs that already have one. Returns (overdue labels, new issue numbers)."""
     late = overdue_runs(successes, now, added)
-    new = [n for n in (ensure_overdue_issue(label, "Check the workflow runs.", run) for label in late) if n]
+    new = [n for n in (ensure_overdue_issue(label, run=run) for label in late) if n]
     return late, new
 
 

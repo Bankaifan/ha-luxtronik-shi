@@ -6,5 +6,5 @@ Separate run on every agent PR classified `risk:infra` or `risk:security` (`tool
 - No style, no feature review; the normal reviewer does that.
 - Verdict at the end of your final reply (a script posts it as the PR comment), first line exactly `security-review: approve <head sha>` or `security-review: changes <head sha>`, then file, line, reason.
   A script turns it into the required status `security-review`. Do not use `gh pr review`.
-- `risk:security` PRs also need Daniel's approval; the German note for him is posted by `tools/ci/risk.py wait` after the normal review approves. Do not post one.
+- Your verdict is the gate for `risk:security` PRs: Daniel approves only PRs that change his CODEOWNERS paths (the German note for him is posted by `tools/ci/risk.py wait`; do not post one). Judge accordingly strictly.
 - Output: the comments, short. Do not repeat the diff.

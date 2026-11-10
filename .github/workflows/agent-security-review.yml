@@ -18,7 +18,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     concurrency:
       group: agent-security-review-${{ github.event.workflow_run.head_branch }}
-      cancel-in-progress: false
+      cancel-in-progress: true  # a newer green head cancels the review of the superseded one
     permissions:
       contents: read
       pull-requests: read
@@ -97,6 +97,7 @@ jobs:
             --model sonnet
             --max-turns 12
             --setting-sources user
+            --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*)"
       # The model has no write or comment tools: a script posts the verdict from its final reply. `changes` also gets a
       # request-changes review by the approver app, which starts a normal agent-fix round. No verdict: denials are logged.
@@ -110,14 +111,14 @@ jobs:
         run: python3 tools/ci/post_verdict.py "$PR" "$SHA"
       # A run that left no verdict fails the required status instead of ending silently.
       - name: Publish status security-review
-        if: ${{ always() && steps.claude.conclusion != 'skipped' }}
+        if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.pr.outputs.num }}
         run: python3 tools/ci/risk.py verdict "$PR" "$SHA"
       # Whichever of agent-review / agent-security-review finishes last marks the PR for Daniel (idempotent).
       - name: Mark an approved PR that waits for Daniel
-        if: ${{ always() && steps.claude.conclusion != 'skipped' }}
+        if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.pr.outputs.num }}

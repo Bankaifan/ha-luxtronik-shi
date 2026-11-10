@@ -56,4 +56,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
           OWNER: Bankaifan
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the overdue-run issues; script step only, never a model step
         run: python3 tools/status.py

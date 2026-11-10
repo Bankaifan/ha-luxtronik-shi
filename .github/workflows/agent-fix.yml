@@ -85,7 +85,8 @@ jobs:
           limit() {
             # First limit of an issue: restart the task once (restart:1) and close this PR. Second: needs-human,
             # review request to Daniel (unless author) and the German note, see tools/restart.py.
-            python3 tools/restart.py limit "$pr"
+            # Never silent: if the hand-over fails, the PR still gets needs-human (the status run picks up the rest).
+            python3 tools/restart.py limit "$pr" || guard label pr "$pr" needs-human
             echo "fix=false" >> "$GITHUB_OUTPUT"
           }
           if [ "$EVENT" = pull_request_review ]; then
@@ -227,7 +228,8 @@ jobs:
             --model ${{ env.MODEL }}
             --max-turns 60
             --setting-sources user
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)"
+            --settings .github/claude-judge-settings.json
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)"
       # Deterministic, fixed flags: the agent only writes the file, it never runs `gh pr edit`.
       # Only after a successful agent run. The file must be a regular file (no symlink) and pass the checks below.
       - name: Apply the PR body the agent wrote
@@ -249,8 +251,12 @@ jobs:
           git fetch --depth=1 origin "$DEFAULT_BRANCH"
           mkdir -p "$RUNNER_TEMP/form"
           git archive FETCH_HEAD tools/check | tar -x -C "$RUNNER_TEMP/form"
-          if python3 "$RUNNER_TEMP/form/tools/check/check_pr_form.py" closing "$f"; then
+          rc=0
+          python3 "$RUNNER_TEMP/form/tools/check/check_pr_form.py" closing "$f" || rc=$?
+          if [ "$rc" -eq 0 ]; then
             echo "::error::PR body must not contain a closing keyword (Closes/Fixes/Resolves #N, owner/repo#N or issue URL); use Refs #N; not applied"; exit 1
+          elif [ "$rc" -ne 1 ]; then
+            echo "::error::closing-keyword check failed with exit code $rc (error, not 'no match'); PR body not applied"; exit 1
           fi
           if grep -qE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_|AKIA[0-9A-Z]{16}|-----BEGIN' "$f"; then
             echo "::error::PR body looks like it contains a secret; not applied"; exit 1

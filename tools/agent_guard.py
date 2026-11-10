@@ -27,11 +27,22 @@ import re
 import subprocess
 import sys
 
+import liveness
+
+# Execution-file helpers live in exec_log.py; re-exported here so `agent_guard.X` keeps working.
+from exec_log import (  # noqa: F401
+    _SECRET,
+    MAX_DENIALS,
+    TAIL_CHARS,
+    TAIL_LINES,
+    _records,
+    count_denials,
+    denied_calls,
+    read_exec,
+    tail_text,
+)
+
 OWNER_DEFAULT = "Bankaifan"
-TAIL_LINES = 15
-TAIL_CHARS = 1500
-MAX_DENIALS = 10
-_SECRET = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,})")
 
 
 def norm_login(login):
@@ -63,6 +74,34 @@ def add_labels(kind, number, labels, run=gh):
     for name in labels:
         ensure_label(name, run)
     run(kind, "edit", str(number), *[a for name in labels for a in ("--add-label", name)])
+
+
+def count_round(number, sha, run=gh):
+    """One review round per head SHA, shared by both reviewers. Marker label `round:<sha7>` (older markers are removed).
+    Returns "already" (this head was counted), "limit" (review:3 is set, nothing bumped) or "counted" (review:N bumped)."""
+    labels = set(run("pr", "view", str(number), "--json", "labels", "--jq", ".labels[].name").split())
+    mark = f"round:{sha[:7]}"
+    if mark in labels:
+        return "already"
+    if "review:3" in labels:
+        return "limit"
+    nxt = "review:3" if "review:2" in labels else "review:2" if "review:1" in labels else "review:1"
+    add_labels("pr", number, [nxt, mark], run)
+    for old in sorted(n for n in labels if n.startswith("round:")):
+        try:
+            run("pr", "edit", str(number), "--remove-label", old)
+        except (subprocess.CalledProcessError, OSError):
+            pass
+    return "counted"
+
+
+def is_stale_head(number, sha, run=gh):
+    """True if the PR head is known and no longer SHA. Unknown (lookup failed) is not stale: fail open."""
+    try:
+        head = run("pr", "view", str(number), "--json", "headRefOid", "--jq", ".headRefOid").strip()
+    except (subprocess.CalledProcessError, OSError):
+        return False
+    return bool(head) and not head.startswith(sha) and not sha.startswith(head)
 
 
 def is_agent_pr(author, labels, author_bot, owner):
@@ -108,47 +147,6 @@ def fix_produced(head_before, head_after, body_before, body_after):
     return body_before is not None and body_hash(body_before) != body_hash(body_after)
 
 
-def tail_text(text, lines=TAIL_LINES, chars=TAIL_CHARS):
-    """Last lines of the execution file, secret-looking tokens masked, fences neutralized, length capped."""
-    out = "\n".join(text.splitlines()[-lines:])[-chars:].replace("```", "'''")
-    return _SECRET.sub("***", out)
-
-
-def _records(text):
-    """Execution file = JSON array of messages (or JSON lines); return every dict."""
-    try:
-        data = json.loads(text)
-    except ValueError:
-        data = []
-        for line in text.splitlines():
-            try:
-                data.append(json.loads(line))
-            except ValueError:
-                pass
-    return [d for d in (data if isinstance(data, list) else [data]) if isinstance(d, dict)]
-
-
-def denied_calls(text, limit=MAX_DENIALS):
-    """One line per denied tool call (tool + command/path) from `permission_denials`; secrets masked."""
-    lines = []
-    for rec in _records(text):
-        for d in rec.get("permission_denials") or []:
-            if not isinstance(d, dict):
-                continue
-            inp = d.get("tool_input")
-            inp = inp if isinstance(inp, dict) else {}
-            what = inp.get("command") or inp.get("file_path") or inp.get("path") or inp.get("pattern") or ""
-            text_ = _SECRET.sub("***", " ".join(str(what).split()))[:150]  # mask first, then cut
-            lines.append(f"{d.get('tool_name') or '?'}: {text_}".replace("`", "'"))
-    more = len(lines) - limit
-    return lines[:limit] + ([f"... and {more} more"] if more > 0 else [])
-
-
-def count_denials(text):
-    """Number of permission denials in the execution file (all of them, not only the listed ones)."""
-    return sum(len([d for d in rec.get("permission_denials") or [] if isinstance(d, dict)]) for rec in _records(text))
-
-
 def _after(ts, since):
     return (ts or "") >= since  # same UTC ISO format, compares as text
 
@@ -190,7 +188,7 @@ def escalate_orchestrator(why, status_issue, repo, author_bot, run=gh, now=None)
     earlier = recent_failures([c for p in pages for c in p], author_bot, day_ago)
     body = report("orchestrator", why, os.environ.get("RUN_URL", ""), read_exec(os.environ.get("EXEC_FILE", "")))
     body = body.split("Labelled needs-human")[0] + "The run is marked failed."  # no needs-human here: the status issue is not a task
-    run("issue", "comment", str(status_issue), "--body", body)
+    liveness.post_comment("issue", status_issue, body, run)
     if earlier:
         open_ = json.loads(run("issue", "list", "--state", "open", "--search", f'"{ORCH_REPEAT_TITLE}" in:title',
                                "--json", "title"))
@@ -231,14 +229,6 @@ def report(kind, what, run_url, exec_text):
             "Labelled needs-human; Daniel is asked to look at it.")
 
 
-def read_exec(path):
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return f.read()
-    except (OSError, TypeError):
-        return ""
-
-
 def read_body_before(path):
     """PR body saved before a fix run. None if missing or unreadable: unknown, not an empty body."""
     try:
@@ -252,7 +242,7 @@ def escalate(kind, number, is_pr, what, owner, run=gh):
     body = report(kind, what, os.environ.get("RUN_URL", ""), read_exec(os.environ.get("EXEC_FILE", "")))
     thing = "pr" if is_pr else "issue"
     add_labels(thing, number, ["needs-human"], run)
-    run(thing, "comment", str(number), "--body", body)
+    liveness.post_comment(thing, number, body, run)
     if is_pr:
         author = json.loads(run("pr", "view", str(number), "--json", "author"))["author"]["login"]
         if not same_login(author, owner):  # nobody can review their own PR
@@ -293,6 +283,9 @@ def silent_check(args, owner):
             escalate("fix", number, True, "no fix was produced (no new commit, PR body unchanged)", owner)
     elif kind == "review" and len(args) >= 3:
         bh = args[3] if len(args) >= 4 else None
+        if is_stale_head(number, args[2], gh):  # the head moved during the run: that review is discarded, not silent
+            print(f"head moved past {args[2][:7]}: stale run, nothing to report")
+            return 0
         if not has_review(reviews_of(number), os.environ.get("APPROVER_BOT", ""), args[2], bh):
             escalate("review", number, True, "no review by the approver app exists for the head commit", owner)
     elif kind == "orchestrator" and len(args) >= 3:
@@ -331,6 +324,8 @@ def main(argv):
         return 0 if same_login(*args) else 1
     elif cmd == "label" and len(args) >= 3 and args[0] in ("pr", "issue"):
         add_labels(args[0], args[1], args[2:])
+    elif cmd == "round" and len(args) == 2:
+        print(count_round(args[0], args[1]))
     elif cmd == "agent-pr" and len(args) in (1, 2):
         labels = (args[1] if len(args) == 2 else "").split(",")
         return 0 if is_agent_pr(args[0], labels, os.environ.get("AUTHOR_BOT", ""), owner) else 1

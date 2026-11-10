@@ -22,9 +22,14 @@ def test_empty_and_different_logins_never_match():
 class Recorder:
     def __init__(self, fail_create=False, replies=None):
         self.calls, self.fail_create, self.replies = [], fail_create, replies or {}
+        self.posted, self.lossy = [], False
 
     def __call__(self, *args):
         self.calls.append(args)
+        if args[1:2] == ("comment",) and not self.lossy:
+            self.posted.append({"body": args[args.index("--body") + 1]})
+        if args[1:2] == ("view",) and "comments" in args:
+            return json.dumps({"comments": self.posted})
         if self.fail_create and args[:2] == ("label", "create"):
             raise subprocess.CalledProcessError(1, "gh")
         return self.replies.get(args[:2], "")
@@ -130,12 +135,25 @@ def stub_gh(tmp_path, monkeypatch):
     """A fake `gh` on PATH: logs each call to calls.log, answers `pr list`, `pr view` and `api` from env JSON."""
     script = tmp_path / "gh"
     script.write_text(
-        '#!/bin/sh\necho "$*" >> "$GH_LOG"\n'
-        'case "$1 $2" in\n'
-        '  "pr list") printf %s "$GH_PR_LIST" ;;\n'
-        '  "pr view") printf %s "$GH_PR_VIEW" ;;\n'
-        '  "api --paginate") printf %s "$GH_REVIEWS" ;;\n'
-        'esac\n')
+        '#!/usr/bin/env python3\n'
+        'import json, os, sys\n'
+        'a = sys.argv[1:]\n'
+        'open(os.environ["GH_LOG"], "a").write(" ".join(a) + "\\n")\n'
+        'store = os.environ["GH_LOG"] + ".comments"\n'
+        'posted = json.load(open(store)) if os.path.exists(store) else []\n'
+        'if a[1:2] == ["comment"]:\n'
+        '    posted.append({"body": a[a.index("--body") + 1]})\n'
+        '    json.dump(posted, open(store, "w"))\n'
+        'elif a[1:2] == ["view"] and "comments" in a:\n'
+        '    print(json.dumps({"comments": posted}))\n'
+        'elif a[:2] == ["pr", "list"]:\n'
+        '    sys.stdout.write(os.environ["GH_PR_LIST"])\n'
+        'elif a[:2] == ["pr", "view"] and "--jq" in a and "headRefOid" in a:\n'
+        '    print(os.environ.get("GH_HEAD", "sha1"))\n'
+        'elif a[:2] == ["pr", "view"]:\n'
+        '    sys.stdout.write(os.environ["GH_PR_VIEW"])\n'
+        'elif a[:2] == ["api", "--paginate"]:\n'
+        '    sys.stdout.write(os.environ["GH_REVIEWS"])\n')
     script.chmod(0o755)
     log = tmp_path / "calls.log"
     log.write_text("")
@@ -301,9 +319,14 @@ class OrchGh:
         self.data = {("issue", "list", "--state", "open"): list(open_issues),
                      ("pr", "list"): list(prs), ("issue", "list", "--state", "all"): list(issues)}
         self.events, self.comments = list(events), list(comments)
+        self.posted, self.lossy = [], False
 
     def __call__(self, *a):
         self.calls.append(a)
+        if a[1:2] == ("comment",) and not self.lossy:
+            self.posted.append({"body": a[a.index("--body") + 1]})
+        if a[:2] == ("issue", "view") and "comments" in a:
+            return json.dumps({"comments": self.posted})
         if a[0] == "api" and "/issues/events" in a[-1]:
             return json.dumps(self.events)
         if a[0] == "api":
@@ -382,9 +405,67 @@ def test_orchestrator_second_failure_same_day_opens_one_issue(orch_env):
     assert not r.made("issue", "create") and r.made("issue", "comment", "57")
 
 
+def test_escalate_fails_loudly_when_comment_missing(monkeypatch):
+    monkeypatch.delenv("EXEC_FILE", raising=False)
+    r = Recorder()
+    r.lossy = True
+    with pytest.raises(g.liveness.ReadbackError):
+        g.escalate("dev", "22", False, "no PR", "Bankaifan", r)
+
+
+def test_escalate_orchestrator_fails_loudly_when_comment_missing(orch_env):
+    orch_env(denials=[DENIAL])
+    r = OrchGh()
+    r.lossy = True
+    with pytest.raises(g.liveness.ReadbackError):
+        g.escalate_orchestrator("denied", "57", "o/r", BOT, r, now=NOW)
+
+
 def test_orchestrator_old_failure_does_not_count(orch_env):
     old = {"user": {"login": BOT}, "created_at": "2026-11-07T08:00:00Z", "body": g.ORCH_MARK}
     r = OrchGh(comments=[old])
     g.escalate_orchestrator("denied", "57", "o/r", BOT, r,
                             now=NOW)
     assert not r.made("issue", "create")
+
+
+def _pr_run(labels="", head="a" * 40):
+    calls = []
+
+    def run(*a):
+        calls.append(a)
+        if a[:2] == ("pr", "view"):
+            return head + "\n" if "headRefOid" in a else labels
+        return ""
+
+    return calls, run
+
+
+def test_round_is_counted_once_per_head():
+    sha = "a" * 40
+    calls, run = _pr_run("review:1\nround:" + sha[:7] + "\n")
+    assert g.count_round(5, sha, run) == "already"
+    assert not any("--add-label" in c for c in calls)
+    calls, run = _pr_run("review:1\nround:bbbbbbb\n")
+    assert g.count_round(5, sha, run) == "counted"
+    assert ("pr", "edit", "5", "--add-label", "review:2", "--add-label", "round:aaaaaaa") in calls
+    assert ("pr", "edit", "5", "--remove-label", "round:bbbbbbb") in calls
+    calls, run = _pr_run("review:3\n")
+    assert g.count_round(5, sha, run) == "limit"
+    assert not any("--add-label" in c for c in calls)
+
+
+def test_stale_head_is_detected_and_fails_open():
+    assert g.is_stale_head(5, "b" * 40, _pr_run()[1])
+    assert not g.is_stale_head(5, "a" * 40, _pr_run()[1])
+
+    def broken(*a):
+        raise subprocess.CalledProcessError(1, "gh")
+
+    assert not g.is_stale_head(5, "b" * 40, broken)
+
+
+def test_silent_review_check_ignores_a_superseded_head(monkeypatch):
+    monkeypatch.setattr(g, "gh", _pr_run(head="c" * 40)[1])
+    monkeypatch.setattr(g, "reviews_of", lambda *a: pytest.fail("must not look for a review of a stale head"))
+    assert g.silent_check(["review", "5", "d" * 40], "Bankaifan") == 0

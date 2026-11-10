@@ -7,6 +7,22 @@ on:
 permissions:
   contents: read
 jobs:
+  # `/dev` on a PR is not supported (the agent works on issues): say so instead of ignoring it.
+  dev-on-pr:
+    if: >-
+      github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/dev') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    permissions:
+      issues: write
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$NUMBER" --body "/dev works on issues only. A PR gets fix rounds from review feedback or a red CI; for more, comment on the issue it closes."
   dev:
     if: >-
       (github.event_name == 'issues' && github.event.label.name == 'agent:dev') ||
@@ -59,17 +75,21 @@ jobs:
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
-      # A template sync issue (line `Template-Sync: <40 hex>`) needs the template files: the developer has no tool to
-      # fetch them. Download the template (repo from .agents/template.json, public) at that SHA into .template/,
-      # kept out of git via .git/info/exclude. Only a 40-hex SHA from the issue is used; nothing else from it.
+      # A template sync issue (trusted as in tools/trusted_issues.py, line `Template-Sync: <40 hex>`) needs the template
+      # files: the developer has no tool to fetch them. Download the template (repo from .agents/template.json, public)
+      # at that SHA into .template/, kept out of git via .git/info/exclude. tools/ci/template_fetch.py decides; it prints
+      # nothing when this is no trusted sync issue.
       - name: Template files for a sync issue
         id: template
         env:
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
         run: |
-          sha=$(printf '%s\n' "$ISSUE_BODY" | tr -d '\r' | grep -oE '^Template-Sync: [0-9a-f]{40}$' | tail -1 | cut -d' ' -f2 || true)
-          tpl=$(python3 -c 'import json; print(json.load(open(".agents/template.json")).get("template", ""))' 2>/dev/null || true)
-          if [ -z "$sha" ] || ! [[ "$tpl" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then echo "No template sync"; exit 0; fi
+          out=$(python3 tools/ci/template_fetch.py)
+          if [ -z "$out" ]; then echo "No template sync"; exit 0; fi
+          read -r tpl sha <<<"$out"
           mkdir -p .template
           curl -fsSL "https://codeload.github.com/$tpl/tar.gz/$sha" | tar -xz --strip-components=1 -C .template
           echo ".template/" >> .git/info/exclude
@@ -101,7 +121,8 @@ jobs:
             --model ${{ env.MODEL }}
             --max-turns 60
             --setting-sources user
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*)"
+            --settings .github/claude-judge-settings.json
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*)"
       # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
       - name: Make sure CI runs on the PR head
         if: ${{ !cancelled() }}

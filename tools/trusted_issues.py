@@ -8,6 +8,8 @@ has a line `Design: docs/design/NNNN-slug.md` naming a file that exists on the c
 is not an `idea`. Authorship cannot be forged; a stranger's "Design:" line counts for nothing.
 Also trusted: a template sync issue (author AUTHOR_BOT, title starting `Template sync `, body line
 `Template-Sync: <40 hex>`; design 0001, section 4.4).
+Also trusted: an issue a guard script wrote (liveness `Overdue scheduled run`): author AUTHOR_BOT, not an `idea`,
+and a valid HMAC signature over title and body (tools/guard_mark.py, repo secret GUARD_KEY). No key, no trust.
 Needs the gh CLI (GH_TOKEN, GH_REPO). Environment: OWNER (default Bankaifan), AUTHOR_BOT (login of the author app).
 """
 import json
@@ -16,6 +18,7 @@ import re
 import subprocess
 import sys
 
+import guard_mark
 from agent_guard import same_login  # logins compare as `x`, `app/x` and `x[bot]` alike
 
 GATED = ("approved", "auto-ok")
@@ -45,6 +48,15 @@ def is_sync_issue(issue, author_bot):
     return (issue.get("title") or "").startswith(SYNC_PREFIX) and bool(_SYNC.search(issue.get("body") or ""))
 
 
+def is_guard_issue(issue, author_bot, key):
+    """True for an issue a guard script signed with GUARD_KEY, authored by the author app, not an idea."""
+    if not key or not same_login((issue.get("author") or {}).get("login"), author_bot):
+        return False
+    if any(lab["name"] == "idea" for lab in issue.get("labels", [])):
+        return False
+    return guard_mark.verify(issue.get("title"), issue.get("body"), key)
+
+
 def label_set_by(events, label, actor):
     """True if the latest label/unlabel event for `label` is a `labeled` made by `actor`."""
     last = None
@@ -64,14 +76,15 @@ def prio_of(labels, events, owner, author_bot):
     return best
 
 
-def classify(issue, events, owner, author_bot="", exists=os.path.isfile):
+def classify(issue, events, owner, author_bot="", exists=os.path.isfile, guard_key=""):
     """Return a dict for a trusted issue, or None. `events` is only needed for gated labels."""
     labels = {lab["name"] for lab in issue.get("labels", [])}
     by_owner = {g for g in GATED if g in labels and label_set_by(events, g, owner)}
     authored = same_login((issue.get("author") or {}).get("login"), owner)
     design = design_ref(issue, author_bot, exists)
     sync = is_sync_issue(issue, author_bot)
-    if not authored and not by_owner and not design and not sync:
+    guard = is_guard_issue(issue, author_bot, guard_key)
+    if not authored and not by_owner and not design and not sync and not guard:
         return None
     return {
         "number": issue["number"],
@@ -81,6 +94,7 @@ def classify(issue, events, owner, author_bot="", exists=os.path.isfile):
         "auto_ok": "auto-ok" in by_owner,
         "design": design,
         "template_sync": sync,
+        "guard": guard,
         "prio": prio_of(labels, events, owner, author_bot),
         "labels": sorted((labels - set(GATED)) | by_owner),
     }
@@ -100,13 +114,14 @@ def main() -> int:
     owner = os.environ.get("OWNER", "Bankaifan")
     author_bot = os.environ.get("AUTHOR_BOT", "")
     repo = os.environ["GH_REPO"]
+    guard_key = guard_mark.key_from_env()
     issues = json.loads(gh("issue", "list", "--state", "open", "--limit", "200",
                            "--json", "number,title,author,labels,body"))
     result = []
     for issue in issues:
         names = {lab["name"] for lab in issue["labels"]}
         events = timeline(issue["number"], repo) if names & (set(GATED) | set(PRIOS)) else []
-        item = classify(issue, events, owner, author_bot)
+        item = classify(issue, events, owner, author_bot, guard_key=guard_key)
         if item:
             result.append(item)
     result.sort(key=lambda i: (i["prio"], i["number"]))  # prio first, then oldest (lowest number)

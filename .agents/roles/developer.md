@@ -21,6 +21,6 @@ Implements one task slip as one PR.
 - Template sync issue (title `Template sync <sha>`, line `Template-Sync: <40 hex>`): port `clean` files from the template at
   that SHA, port `overridden` files by hand keeping the recorded intent, never touch paths outside `managed`, set `synced_sha`
   in `.agents/template.json` to that SHA, one PR with `Closes #<sync issue>`. It touches `.github/`, so CODEOWNERS requires Daniel.
-- Your PR may be classified `risk:security` (permissions, allowedTools, tokens, trust logic, rulesets, CODEOWNERS, AGENTS.md Limits): keep such changes minimal and say so in the PR body; Daniel approves them.
+- Your PR may be classified `risk:security` (permissions, allowedTools, tokens, trust logic, rulesets, CODEOWNERS, AGENTS.md Limits): keep such changes minimal and say so in the PR body; the security reviewer gates them, Daniel only approves changes to his CODEOWNERS paths.
 - Missing information: ask in the issue, mark facts as "open", never invent.
 - Output: the PR, nothing else. Do not repeat the diff.

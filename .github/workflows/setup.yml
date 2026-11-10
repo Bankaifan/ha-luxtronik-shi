@@ -1,5 +1,5 @@
 name: setup
-# Manual, no model. Creates the labels the workflows use (idempotent) and checks the 3 secrets and the 4 variables.
+# Manual, no model. Creates the labels the workflows use (idempotent) and checks the 4 secrets and the 4 variables.
 # Optional variables (never required): the table in the job summary shows each one with its effective value
 # (the set value, or the default when unset or empty). EXTRA_INSTALL is a shell command run by tools/ci/install_tools.sh.
 # Secret values are never printed; only the names of missing ones.
@@ -17,13 +17,14 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           AUTHOR_APP_KEY: ${{ secrets.AUTHOR_APP_KEY }}
           APPROVER_APP_KEY: ${{ secrets.APPROVER_APP_KEY }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
           AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
           APPROVER_CLIENT_ID: ${{ vars.APPROVER_CLIENT_ID }}
         run: |
           missing=""
-          for name in CLAUDE_CODE_OAUTH_TOKEN AUTHOR_APP_KEY APPROVER_APP_KEY; do
+          for name in CLAUDE_CODE_OAUTH_TOKEN AUTHOR_APP_KEY APPROVER_APP_KEY GUARD_KEY; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           echo "missing=${missing# }" >> "$GITHUB_OUTPUT"
@@ -43,6 +44,7 @@ jobs:
           ORCHESTRATOR_ENABLED: ${{ vars.ORCHESTRATOR_ENABLED }}
           IDEAS_PER_WEEK: ${{ vars.IDEAS_PER_WEEK }}
           STATUS_INTERVAL: ${{ vars.STATUS_INTERVAL }}
+          UNBLOCKER: ${{ vars.UNBLOCKER }}
         run: |
           # row NAME DEFAULT VALUE: an unset or empty variable means the default, as in the workflows' || fallbacks
           row() {
@@ -57,6 +59,7 @@ jobs:
             row ORCHESTRATOR_ENABLED false "$ORCHESTRATOR_ENABLED"
             row IDEAS_PER_WEEK 3 "$IDEAS_PER_WEEK"
             row STATUS_INTERVAL "30 public / 60 private" "$STATUS_INTERVAL"
+            row UNBLOCKER on "$UNBLOCKER"
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - id: app
         if: steps.check.outputs.author == 'true'
@@ -71,7 +74,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          for l in agent:dev agent:review model:sonnet review:1 review:2 review:3 needs-human idea auto-ok approved prio:1 prio:2 prio:3; do
+          for l in agent:dev agent:review model:sonnet review:1 review:2 review:3 needs-human unblock:1 idea auto-ok approved prio:1 prio:2 prio:3; do
             gh label create "$l" --force
           done
       - name: Report Dependabot secrets (best effort)

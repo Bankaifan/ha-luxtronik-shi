@@ -15,9 +15,10 @@ jobs:
       startsWith(github.event.workflow_run.head_branch, 'agent/') &&
       github.event.workflow_run.head_repository.full_name == github.repository
     # Job level on purpose: runs skipped by `if` must not take over the group.
+    # A newer green head cancels the review of the superseded one.
     concurrency:
       group: agent-review-${{ github.event.workflow_run.head_branch }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
@@ -71,7 +72,10 @@ jobs:
           if guard reviewed "$num" "$SHA" "$bhash"; then echo "Already reviewed $SHA / body $bhash"; skip; fi
           case "$labels" in
             *,needs-human,*) skip ;;
-            *,review:3,*)
+          esac
+          # One round per head SHA (marker label round:<sha7>), shared with the security reviewer.
+          case "$(guard round "$num" "$SHA")" in
+            limit)
               guard label pr "$num" needs-human
               # A label alone is not in Daniel's inbox; skip if he is the author.
               guard same "$(jq -r .user.login <<<"$pr")" Bankaifan || \
@@ -80,14 +84,21 @@ jobs:
 
               Hallo Daniel, dieser PR haengt fest: Entwickler und Pruefer sind nach drei Runden nicht einig. Schlimmster Fall: nichts passiert, der PR wird nur nicht gemergt. Die Pruefer empfehlen, den Auftrag neu zuzuschneiden. Frage: Soll der Orchestrator den Auftrag neu schneiden (ja) oder der PR geschlossen werden (nein)?"
               skip ;;
-            *,review:2,*) guard label pr "$num" review:3 ;;
-            *,review:1,*) guard label pr "$num" review:2 ;;
-            *) guard label pr "$num" review:1 ;;
           esac
           echo "pr=$num" >> "$GITHUB_OUTPUT"; echo "bhash=$bhash" >> "$GITHUB_OUTPUT"
+      # Rebased head with the patch a model already approved: script approval (tools/reapprove.py, from main). Any refusal
+      # or error leaves approved unset and the model reviews as before.
+      - name: Re-approve an unchanged patch without the model
+        id: reapprove
+        if: steps.round.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.round.outputs.pr }}
+        run: |
+          if python3 tools/reapprove.py "$PR" "$SHA"; then echo "approved=true" >> "$GITHUB_OUTPUT"; fi
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
-        if: steps.round.outputs.skip != 'true'
+        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -113,6 +124,7 @@ jobs:
             --model sonnet
             --max-turns 12
             --setting-sources user
+            --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh issue view:*)"
       # Approved but waiting for Daniel (security class or code-owner path): label needs-human and the German note.
       - name: Mark an approved PR that waits for Daniel
@@ -123,7 +135,7 @@ jobs:
         run: python3 tools/ci/risk.py wait "$PR" "$SHA"
       # Never end silently: the Claude step ran but the approver app left no review for this head SHA.
       - name: Escalate a run that left no review
-        if: ${{ always() && steps.claude.conclusion != 'skipped' }}
+        if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
