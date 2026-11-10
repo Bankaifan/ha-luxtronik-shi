@@ -47,6 +47,8 @@ versioning follows [Semantic Versioning](https://semver.org/):
 - The ruff and zizmor pins moved from `tools/ci/install_tools.sh` into `requirements-lint.txt`, so Dependabot's pip
   ecosystem proposes updates; the actionlint tarball is verified against a pinned SHA-256 before extraction (issue #78).
   No change for users.
+- The weekly failure classes (`tools/run_stats.py`) name the missing repo variable instead of the echoed script line,
+  and label agent-tool `internal error:` messages as "tool environment, not repo code" (issue #125). No change for users.
 - The orchestrator no longer deletes files: run 42889616904 ended silently on a denied `rm slip-116.md`. Its body files
   go to `.agent-out/`, which the workflow git-ignores, and stay there (issue #118). No change for users.
 
