@@ -24,7 +24,7 @@ from .block_views import (
     writes_for_on,
 )
 from .coordinator import LuxtronikCoordinator
-from .entity import LuxtronikEntity
+from .entity import LuxtronikEntity, set_english_entity_id
 from .registers import BLOCK_POWER_KEY
 
 # One write at a time per platform; the Modbus client serialises access to the SHI anyway.
@@ -74,6 +74,7 @@ class LuxtronikBlockPowerSwitch(CoordinatorEntity[LuxtronikCoordinator], SwitchE
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{BLOCK_POWER_KEY}"
         self._attr_device_info = coordinator.device_info_for(BLOCK_POWER_KEY)
+        set_english_entity_id(self, coordinator, "switch", BLOCK_POWER_KEY)
         self._attr_entity_registry_enabled_default = coordinator.block_views_enabled_default
 
     @property

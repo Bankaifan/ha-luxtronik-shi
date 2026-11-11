@@ -58,6 +58,7 @@ from .const import (
     SHI_WATCHDOG_TIMEOUT,
     STORE_VERSION,
     TRIGGER_KEYS,
+    TRIGGER_REREAD_DELAY,
     UNREACHABLE_AFTER,
 )
 from .modbus_client import LuxtronikModbusClient, ModbusCommError, ModbusIllegalAddress
@@ -233,6 +234,8 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Deferred hot water writes: key -> (raw, "user" | "restore") awaiting the delayed read-back.
         self._awaiting: dict[str, tuple[int, str]] = {}
         self._recheck_unsub: dict[str, CALLBACK_TYPE] = {}
+        # Pending status re-reads after a trigger button press: trigger key -> cancel callback.
+        self._reread_unsub: dict[str, CALLBACK_TYPE] = {}
         # Restore values that did not read back yet: key -> {"raw", "deadline" (monotonic), "attempts"}.
         self._pending_restore: dict[str, dict[str, Any]] = {}
         # Last successful poll: in memory, and as persisted (throttled) for the gap check after a restart.
@@ -1329,9 +1332,36 @@ class LuxtronikCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             unsub()
 
     def async_cancel_rechecks(self) -> None:
-        """Cancel the scheduled delayed read-backs (on unload)."""
+        """Cancel the scheduled delayed read-backs and trigger re-reads (on unload)."""
         for key in list(self._recheck_unsub):
             self._cancel_recheck(key)
+        for unsub in self._reread_unsub.values():
+            unsub()
+        self._reread_unsub.clear()
+
+    def schedule_reread(self, trigger: str, keys: Sequence[str]) -> None:
+        """After a successful trigger press: read the status registers ``keys`` once, TRIGGER_REREAD_DELAY s
+        later. Only registers that are polled (enabled entities) are read; a second press of the same trigger
+        replaces the pending re-read. The regular poll is not touched.
+        """
+        if (unsub := self._reread_unsub.pop(trigger, None)) is not None:
+            unsub()
+        regs = tuple(reg for reg in self._polled if reg.key in keys)
+        if not regs:
+            return
+
+        @callback
+        def _due(_now: Any) -> None:
+            self._reread_unsub.pop(trigger, None)
+            self.hass.async_create_task(self._reread(regs), eager_start=True)
+
+        self._reread_unsub[trigger] = async_call_later(self.hass, TRIGGER_REREAD_DELAY, _due)
+
+    async def _reread(self, regs: tuple[Register, ...]) -> None:
+        try:
+            await self.async_read_now(regs)
+        except HomeAssistantError as err:
+            _LOGGER.debug("%s: re-read after a button press failed: %s", self.config_entry.title, err)
 
     async def _recheck(self, key: str) -> None:
         """The delayed read-back: one read of the register, outside the write lock."""

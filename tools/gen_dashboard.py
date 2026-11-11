@@ -1,10 +1,11 @@
 """Generate the ready-made Lovelace dashboards in ``dashboards/`` (run from the repo root).
 
-Home Assistant builds an entity ID from the device name and the entity name in the language that was active when
-the entity was created, so the IDs differ between installations. This script therefore does two things:
+Since 0.19.0 an entity ID is built from the device name and the English entity names, whatever the Home
+Assistant language (earlier versions used the names of the system language). Installations that were created
+earlier are migrated at setup. This script does two things:
 
-* **Predict** the entity IDs for a given device name and language the way Home Assistant builds them
-  (``--name``, ``--lang``). This is how the committed example dashboards are made.
+* **Predict** the entity IDs for a given device name the way the integration builds them (``--name``); ``--lang``
+  only selects the language of the labels. This is how the committed example dashboards are made.
 * **Look them up** exactly in your own entity registry (``--registry /config/.storage/core.entity_registry``).
   Entities that do not exist or are disabled are left out, optional parts (mixing circuits, cooling, pool, room
   unit) are detected from the entities that exist, and renamed entities are found by their unique ID.
@@ -133,6 +134,7 @@ class Resolver:
         self.name = name
         self.info = universe()
         self.tr = _translations(lang)
+        self.tr_en = _translations("en")
         self.registry = registry
         self.features = features
         self._ids: dict[str, str] = {}
@@ -142,22 +144,23 @@ class Resolver:
                 self._ids[key] = entity_id
 
     # -- prediction -------------------------------------------------------------------------------------
-    def _entity_name(self, info: Info) -> str | None:
+    def _entity_name(self, info: Info, tr: dict | None = None) -> str | None:
         if info.platform in ("climate", "water_heater"):
             return None  # the entity carries the name of its device
         key = "raw" if info.key in registers.RAW_KEYS else info.key
-        entry = self.tr["entity"].get(info.platform, {}).get(key)
+        entry = (tr or self.tr)["entity"].get(info.platform, {}).get(key)
         if entry is None:
             return None
         return entry["name"].replace("{address}", info.key.removeprefix("raw_"))
 
     def _predict(self, info: Info) -> str | None:
+        """Entity ID since 0.19.0: device name plus the English names, whatever the language."""
         if not info.enabled_default or not set(info.features) <= set(self.features):
             return None
         device = self.name
         if info.area:
-            device = self.tr["device"][info.area]["name"].replace("{name}", self.name)
-        entity = self._entity_name(info)
+            device = self.tr_en["device"][info.area]["name"].replace("{name}", self.name)
+        entity = self._entity_name(info, self.tr_en)
         if entity is None and info.platform not in ("climate", "water_heater"):
             return None
         label = device if entity is None else f"{device} {entity}"

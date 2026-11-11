@@ -72,10 +72,10 @@ Firmware facts for every SHI register (V3.92.3, with evidence and grade): [full 
 | `energy_th_dhw` | 10324 | input | int32 | 0.1 | kWh | - | open |
 | `energy_th_cooling` | 10326 | input | int32 | 0.1 | kWh | - | open |
 | `energy_th_pool` | 10328 | input | int32 | 0.1 | kWh | - | open |
-| `output_vbo` | 10350 | input | uint16 | 1 | - | - | proven: firmware VBOout (t0/0x45); measured: runs with the compressor |
-| `output_fp1` | 10351 | input | uint16 | 1 | - | - | proven: firmware FP1out (t0/0x6d); measured: follows the heating pump |
-| `output_fp2` | 10352 | input | uint16 | 1 | - | - | proven: firmware FP2out (t0/0x4c); not measured (no second circuit) |
-| `output_fp3` | 10353 | input | uint16 | 1 | - | - | proven: firmware FP3out (t0/0x4d); not measured (no third circuit) |
+| `output_vbo` | 10350 | input | uint16 | 1 | - | - | proven: firmware VBOout (t0/0x45), text "Ventil.-BOSUP"; per manual: fan / well or brine pump; measured: runs with the compressor |
+| `output_fp1` | 10351 | input | uint16 | 1 | - | - | proven: firmware FP1out (t0/0x6d); web page "FUP 1", per manual: circulation pump of mixing circuit 1; measured: follows the heating pump |
+| `output_fp2` | 10352 | input | uint16 | 1 | - | - | proven: firmware FP2out (t0/0x4c); web page "FUP 2", per manual: circulation pump of mixing circuit 2; not measured (no second circuit) |
+| `output_fp3` | 10353 | input | uint16 | 1 | - | - | proven: firmware FP3out (t0/0x4d); web page "FUP 3", per manual: circulation pump of mixing circuit 3; not measured (no third circuit) |
 | `pump_heating` | 10354 | input | uint16 | 1 | - | - | proven: firmware HUPout (t0/0x20); measured |
 | `pump_hot_water` | 10355 | input | uint16 | 1 | - | - | proven: firmware BUPout (t0/0x44); measured |
 | `pump_circulation` | 10356 | input | uint16 | 1 | - | - | proven: firmware ZIPout (t0/0x48); measured |

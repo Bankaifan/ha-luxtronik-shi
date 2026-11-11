@@ -22,6 +22,7 @@ from .const import (
     STORE_VERSION,
 )
 from .coordinator import LuxtronikCoordinator, restore_store_key
+from .entity import generated_entity_id, load_names
 from .modbus_client import LuxtronikModbusClient
 from .registers import (
     BLOCK_SELECT_KEYS,
@@ -109,6 +110,41 @@ def async_migrate_renamed_entity_ids(hass: HomeAssistant, entry: ConfigEntry) ->
             break
 
 
+@callback
+def async_migrate_english_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rename entity IDs that Home Assistant generated from the German names to the English form.
+
+    Before 0.19.0 the entity ID came from the names in the system language, so a German system gave
+    German IDs. An entity is renamed only while its ID still equals the ID generated from the German names
+    (never when the user changed it by hand); a target that already exists is skipped. Each rename and each
+    skip is logged, unique IDs do not change, and a second run finds nothing to do.
+    """
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.platform != DOMAIN or not entity.unique_id.startswith(prefix):
+            continue
+        key = entity.unique_id.removeprefix(prefix)
+        german = generated_entity_id("de", entry.title, entity.domain, key)
+        english = generated_entity_id("en", entry.title, entity.domain, key)
+        if german is None or english is None or german == english or entity.entity_id == english:
+            continue
+        if entity.entity_id != german:
+            _LOGGER.info(
+                "%s: not renaming %s to %s, the entity ID was changed by hand",
+                entry.title, entity.entity_id, english,
+            )
+            continue
+        if registry.async_get(english) is not None:
+            _LOGGER.warning(
+                "%s: not renaming %s to %s, the new entity ID is already taken",
+                entry.title, entity.entity_id, english,
+            )
+            continue
+        _LOGGER.info("%s: renaming the entity ID %s to %s", entry.title, entity.entity_id, english)
+        registry.async_update_entity(entity.entity_id, new_entity_id=english)
+
+
 def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete the registry entries of entities that no longer exist.
 
@@ -130,8 +166,10 @@ def async_remove_obsolete_entities(hass: HomeAssistant, entry: ConfigEntry) -> N
 
 async def async_setup_entry(hass: HomeAssistant, entry: LuxtronikConfigEntry) -> bool:
     """Set up one heat pump."""
+    await hass.async_add_executor_job(load_names)
     await async_migrate_renamed_keys(hass, entry)
     async_migrate_renamed_entity_ids(hass, entry)
+    async_migrate_english_entity_ids(hass, entry)
     async_remove_obsolete_entities(hass, entry)
     client = LuxtronikModbusClient(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_SLAVE])
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)

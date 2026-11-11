@@ -28,6 +28,9 @@
     {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py); it does not run the template-only tools/check/check_version_bump.py (no VERSION and no .agents/managed.json here, design 0011 4.1)"},
     {"path": "tests/test_check_version_bump.py", "why": "skipped at module level: it checks the template's own VERSION bump rule (root VERSION, .agents/managed.json), which this project does not have (design 0011 4.1)"},
     {"path": "tests/test_managed_guard.py", "why": "only test_repo_managed_file_lists_tools_and_makefile is skipped when .agents/managed.json is missing: that file exists only in the template (design 0011 4.1c); every other test runs"},
+    {"path": "tools/entity_docs_entries.py", "why": "project generator helper for the entity docs: entity IDs are English (#151); not a template tool"},
+    {"path": "tools/gen_dashboard.py", "why": "project generator for the dashboard: it uses the English entity IDs (#151); not a template tool"},
+    {"path": "tests/test_english_entity_ids.py", "why": "project test for the English entity IDs of the integration (#151); not a template test"},
     {"path": "AGENTS.md", "why": "project sentence and project rules (register facts, bilingual docs, firmware analysis as source)"}
   ]
 }

@@ -833,18 +833,34 @@ for _key, _raw, _var, _item, _en, _de, _meas_en, _meas_de in (
      "circulation, for runs started with the `circulation` button and runs of the controller's time program alike.",
      "Zirkulationspumpe (ZIP) läuft: die Laufanzeige der Zirkulation, für Läufe über den Taster `circulation` "
      "ebenso wie für Läufe des Zeitprogramms der Regelung.", "Measured: pulses of 2 minutes.", "Gemessen: Pulse von 2 Minuten."),
-    ("output_vbo", "10350", "VBOout", "t0/0x45", "Digital output VBO is on. What it switches is not "
-     "documented (open).", "Digitaler Ausgang VBO ist an. Was er schaltet, ist nicht dokumentiert (ungeklärt).",
+    ("output_vbo", "10350", "VBOout", "t0/0x45", "Digital output VBO is on. The firmware text of the register "
+     "is \"Ventil.-BOSUP\" (firmware analysis, proven); the controller manual names the output fan / well or "
+     "brine circulation pump.",
+     "Digitaler Ausgang VBO ist an. Der Firmware-Text des Registers lautet \"Ventil.-BOSUP\" "
+     "(Firmware-Analyse, belegt); die Anleitung der Regelung nennt den Ausgang Ventilator / Brunnen- bzw. "
+     "Solepumpe.",
      "Measured: coincides with the compressor runs.", "Gemessen: deckt sich mit den Verdichterläufen."),
-    ("output_fp1", "10351", "FP1out", "t0/0x6d", "Digital output FP1 is on.",
-     "Digitaler Ausgang FP1 ist an.", "Measured: follows the heating circulation pump.",
+    ("output_fp1", "10351", "FP1out", "t0/0x6d", "Digital output FP1 is on. The controller's web page labels "
+     "it \"FUP 1\"; per the Luxtronik manual (not proven by the firmware) FP is the circulation pump of mixing "
+     "circuit 1.",
+     "Digitaler Ausgang FP1 ist an. Die Weboberfläche der Regelung nennt ihn \"FUP 1\"; laut Luxtronik-Anleitung "
+     "(durch die Firmware nicht belegt) ist FP die Umwälzpumpe von Mischkreis 1.",
+     "Measured: follows the heating circulation pump.",
      "Gemessen: folgt der Heizungsumwälzpumpe."),
-    ("output_fp2", "10352", "FP2out", "t0/0x4c", "Digital output FP2 is on. Disabled by default.",
-     "Digitaler Ausgang FP2 ist an. Standardmäßig deaktiviert.",
+    ("output_fp2", "10352", "FP2out", "t0/0x4c", "Digital output FP2 is on. Disabled by default. The "
+     "controller's web page labels it \"FUP 2\"; per the Luxtronik manual (not proven by the firmware) FP is the "
+     "circulation pump of mixing circuit 2.",
+     "Digitaler Ausgang FP2 ist an. Standardmäßig deaktiviert. Die Weboberfläche der Regelung nennt ihn "
+     "\"FUP 2\"; laut Luxtronik-Anleitung (durch die Firmware nicht belegt) ist FP die Umwälzpumpe von "
+     "Mischkreis 2.",
      "Not measured (the reference installation has no second circuit).",
      "Nicht gemessen (die Referenzanlage hat keinen zweiten Kreis)."),
-    ("output_fp3", "10353", "FP3out", "t0/0x4d", "Digital output FP3 is on. Disabled by default.",
-     "Digitaler Ausgang FP3 ist an. Standardmäßig deaktiviert.",
+    ("output_fp3", "10353", "FP3out", "t0/0x4d", "Digital output FP3 is on. Disabled by default. The "
+     "controller's web page labels it \"FUP 3\"; per the Luxtronik manual (not proven by the firmware) FP is the "
+     "circulation pump of mixing circuit 3.",
+     "Digitaler Ausgang FP3 ist an. Standardmäßig deaktiviert. Die Weboberfläche der Regelung nennt ihn "
+     "\"FUP 3\"; laut Luxtronik-Anleitung (durch die Firmware nicht belegt) ist FP die Umwälzpumpe von "
+     "Mischkreis 3.",
      "Not measured (the reference installation has no third circuit).",
      "Nicht gemessen (die Referenzanlage hat keinen dritten Kreis)."),
 ):

@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
-from .entity import LuxtronikEntity
+from .entity import LuxtronikEntity, set_english_entity_id
 from .registers import BY_KEY, DERIVED_FLAGS, DerivedFlag, Register, usable
 
 # Read-only platform: the coordinator delivers the values, nothing to limit.
@@ -80,6 +80,7 @@ class LuxtronikStatusBit(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEn
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{self._key}"
         self._attr_device_info = coordinator.device_info
         self._attr_entity_registry_enabled_default = self._key not in _DISABLED_BY_DEFAULT
+        set_english_entity_id(self, coordinator, "binary_sensor", self._key)
         if self._key.startswith(("compressor", "heatpump_vd")):
             self._attr_device_class = BinarySensorDeviceClass.RUNNING
         else:
@@ -103,6 +104,7 @@ class LuxtronikDerivedFlag(CoordinatorEntity[LuxtronikCoordinator], BinarySensor
         self._attr_translation_key = flag.key
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{flag.key}"
         self._attr_device_info = coordinator.device_info_for(flag.key)
+        set_english_entity_id(self, coordinator, "binary_sensor", flag.key)
         if flag.device_class:
             self._attr_device_class = BinarySensorDeviceClass(flag.device_class)
 
@@ -145,6 +147,7 @@ class LuxtronikOnline(CoordinatorEntity[LuxtronikCoordinator], BinarySensorEntit
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_online"
         self._attr_device_info = coordinator.device_info
+        set_english_entity_id(self, coordinator, "binary_sensor", "online")
 
     @property
     def available(self) -> bool:

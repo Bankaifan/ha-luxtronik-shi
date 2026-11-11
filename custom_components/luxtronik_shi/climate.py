@@ -40,6 +40,7 @@ from . import LuxtronikConfigEntry
 from .compat import CLIMATE_NATIVE_TEMPERATURE
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
+from .entity import set_english_entity_id
 from .registers import BY_KEY, CLIMATE_HEATING_KEY, MODE_NO_INFLUENCE, MODE_SETPOINT, encode_int16
 from .setpoint import setpoint_attributes, validate_setpoint_write
 
@@ -86,6 +87,7 @@ class LuxtronikHeatingClimate(CoordinatorEntity[LuxtronikCoordinator], ClimateEn
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{CLIMATE_HEATING_KEY}"
         self._attr_device_info = coordinator.device_info_for(_SETPOINT_REG.key)
+        set_english_entity_id(self, coordinator, "climate", CLIMATE_HEATING_KEY)
         self._attr_entity_registry_enabled_default = coordinator.climate_enabled_default
 
     def _data(self, reg):
