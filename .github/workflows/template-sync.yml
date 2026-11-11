@@ -1,10 +1,16 @@
 name: template-sync
-# Weekly report of template changes as one issue (design 0001, section 4.3). No model.
-# Off when the repo variable TEMPLATE_SYNC is `off`.
+# Daily poll: report template changes as one issue when the template's x version moved
+# (designs 0001 and 0011). No model. Off when the repo variable TEMPLATE_SYNC is `off`.
+# TEMPLATE_SYNC_MODE `all` (default `version`) skips the version gate; so does the `force` input.
 on:
   schedule:
-    - cron: "41 6 * * 1"
+    - cron: "41 6 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Skip the version gate (report managed changes whatever the version)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -30,4 +36,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-        run: python3 tools/template_sync.py
+          SYNC_FORCE: ${{ inputs.force == true }}
+          SYNC_ALL: ${{ (vars.TEMPLATE_SYNC_MODE || 'version') == 'all' }}
+        run: >-
+          python3 -c "import os, sys; sys.path.insert(0, 'tools'); import template_sync;
+          sys.exit(template_sync.main(force=os.environ['SYNC_FORCE'] == 'true',
+          mode='all' if os.environ['SYNC_ALL'] == 'true' else 'version'))"

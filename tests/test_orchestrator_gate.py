@@ -73,6 +73,18 @@ def test_schedule_run_within_window_debounces_a_label_run():
     assert not decide(run_id=100, runs=runs)[0]
 
 
+def test_skipped_or_cancelled_runs_do_not_debounce_approved():
+    # Issue opened or another label a minute before `approved`: those runs ended skipped/cancelled.
+    for conclusion in ("skipped", "cancelled"):
+        earlier = dict(run(99, T0 - timedelta(seconds=60)), conclusion=conclusion)
+        assert decide(run_id=100, runs=[earlier, run(100, T0)])[0]
+
+
+def test_run_that_really_ran_still_debounces():
+    earlier = dict(run(99, T0 - timedelta(seconds=60)), conclusion="success")
+    assert not decide(run_id=100, runs=[earlier, run(100, T0)])[0]
+
+
 def test_missing_own_run_falls_back_to_now():
     runs = [run(90, T0 - timedelta(minutes=10))]
     assert decide(run_id=100, runs=runs, now=T0)[0]

@@ -1,7 +1,7 @@
 """Check that the project version has a section in CHANGELOG.md.
 
 Version source (first match wins):
-  1. env VERSION_FILE (+ optional VERSION_REGEX with one group, default: first x.y.z found)
+  1. env VERSION_FILE (+ optional VERSION_REGEX with one group, default: first x.y or x.y.z found)
   2. a file named VERSION in the repo root
 If neither exists, or there is no CHANGELOG.md, the check is skipped (exit 0).
 """
@@ -10,7 +10,9 @@ import re
 import sys
 from pathlib import Path
 
-SEMVER = r"\d+\.\d+\.\d+"
+SEMVER = r"\d+\.\d+(?:\.\d+)?"  # x.y or x.y.z
+# default search: a version not glued to other word characters or dots, so "v1.0" and "1.2.3.4" are not found
+DEFAULT_REGEX = rf"(?<![\w.])({SEMVER})(?![\w.])"
 
 
 def read_version() -> str | None:
@@ -21,7 +23,7 @@ def read_version() -> str | None:
             sys.exit(f"VERSION_FILE {name} does not exist")
         return None
     text = path.read_text(encoding="utf-8")
-    regex = os.environ.get("VERSION_REGEX") or rf"({SEMVER})"
+    regex = os.environ.get("VERSION_REGEX") or DEFAULT_REGEX
     match = re.search(regex, text)
     if not match:
         sys.exit(f"no version found in {path} with pattern {regex}")
@@ -35,7 +37,7 @@ def main() -> int:
         print("check_version: skipped (no version source or no CHANGELOG.md)")
         return 0
     if not re.fullmatch(SEMVER, version):
-        print(f"check_version: '{version}' is not x.y.z")
+        print(f"check_version: '{version}' is not x.y or x.y.z")
         return 1
     text = changelog.read_text(encoding="utf-8")
     if not re.search(r"^## \[Unreleased\]", text, re.MULTILINE | re.IGNORECASE):

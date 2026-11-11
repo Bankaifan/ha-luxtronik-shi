@@ -15,6 +15,30 @@ CFG = {"template": "me/tpl", "managed": ["tools/", "AGENTS.md"],
 PROJ = "me/proj"
 
 
+def test_template_managed_reads_file(tmp_path):
+    f = tmp_path / "managed.json"
+    f.write_text(json.dumps({"managed": ["tools/", "AGENTS.md"]}))
+    assert mod.template_managed(f) == ["tools/", "AGENTS.md"]
+
+
+def test_template_managed_missing_file_is_empty(tmp_path):
+    assert mod.template_managed(tmp_path / "nope.json") == []
+
+
+def test_template_managed_invalid_raises(tmp_path):
+    f = tmp_path / "managed.json"
+    f.write_text('{"managed": "tools/"}')
+    with pytest.raises(mod.ConfigError):
+        mod.template_managed(f)
+
+
+@pytest.mark.skipif(not (ROOT / ".agents" / "managed.json").is_file(),
+                    reason=".agents/managed.json exists only in the template repo")
+def test_repo_managed_file_lists_tools_and_makefile():
+    managed = mod.template_managed(ROOT / ".agents" / "managed.json")
+    assert "tools/" in managed and "Makefile" in managed
+
+
 def test_pr_with_managed_file_fails_and_names_template():
     errs = mod.pr_errors(CFG, PROJ, "Fix", ["src/a.py", "tools/a.py"])
     assert len(errs) == 1 and "tools/a.py" in errs[0] and "me/tpl" in errs[0]

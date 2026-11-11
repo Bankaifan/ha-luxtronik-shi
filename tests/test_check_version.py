@@ -56,7 +56,7 @@ def test_non_semver_version_fails(repo, capsys, monkeypatch):
     monkeypatch.setenv("VERSION_FILE", _version(repo, "release v12\n"))
     monkeypatch.setenv("VERSION_REGEX", r"(v\d+)")
     assert mod.main() == 1
-    assert "'v12' is not x.y.z" in capsys.readouterr().out
+    assert "'v12' is not x.y or x.y.z" in capsys.readouterr().out
 
 
 def test_missing_unreleased_section_fails(repo, capsys, monkeypatch):
@@ -78,6 +78,28 @@ def test_matching_sections_pass(repo, capsys, monkeypatch):
     monkeypatch.setenv("VERSION_FILE", _version(repo))
     assert mod.main() == 0
     assert "check_version: ok (1.2.3)" in capsys.readouterr().out
+
+
+def test_x_y_version_with_section_passes(repo, capsys):
+    (repo / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [1.0] - 2026-01-01\n", encoding="utf-8")
+    _version(repo, "1.0\n", name="VERSION")
+    assert mod.main() == 0
+    assert "check_version: ok (1.0)" in capsys.readouterr().out
+
+
+def test_x_y_version_without_section_fails(repo, capsys):
+    (repo / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [0.9] - 2026-01-01\n", encoding="utf-8")
+    _version(repo, "1.0\n", name="VERSION")
+    assert mod.main() == 1
+    assert "no '## [1.0]' section" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("text", ["v1.0\n", "1.2.3.4\n", "1\n"])
+def test_prefixed_or_malformed_version_is_not_found(repo, text):
+    (repo / "CHANGELOG.md").write_text("## [Unreleased]\n\n## [1.0] - 2026-01-01\n", encoding="utf-8")
+    _version(repo, text, name="VERSION")
+    with pytest.raises(SystemExit, match="no version found in"):
+        mod.main()
 
 
 def test_default_version_file_in_root_is_used(repo, capsys):

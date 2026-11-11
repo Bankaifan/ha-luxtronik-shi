@@ -1,6 +1,7 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "d3b39a6011b8c64fe4a799390d424606ca513440",
+  "synced_sha": "082d20cbf4cead3ad78e8395b6bb77ed08d3f24a",
+  "synced_version": "1.5",
   "managed": [".github/workflows/", ".github/claude-judge-settings.json", ".github/dependabot.yml", ".github/CODEOWNERS", ".github/rulesets/",
               ".agents/roles/", "tools/", "tests/", "AGENTS.md", "CLAUDE.md", "Makefile", "docs/design/README.md"],
   "overrides": [
@@ -24,7 +25,9 @@
     {"path": "tests/test_orchestrator_prompt.py", "why": "covers the .agent-out and never-delete rules of the orchestrator prompt (#118)"},
     {"path": "tools/run_stats.py", "why": "weekly failure classes name the missing repo variable instead of the echoed script line and label agent-tool internal errors (#125); to be proposed upstream in agent-template"},
     {"path": "tests/test_run_stats.py", "why": "covers the failure class text changes of tools/run_stats.py (#125)"},
-    {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py)"},
+    {"path": "Makefile", "why": "make check also runs the project checks (tools/check_version.py); it does not run the template-only tools/check/check_version_bump.py (no VERSION and no .agents/managed.json here, design 0011 4.1)"},
+    {"path": "tests/test_check_version_bump.py", "why": "skipped at module level: it checks the template's own VERSION bump rule (root VERSION, .agents/managed.json), which this project does not have (design 0011 4.1)"},
+    {"path": "tests/test_managed_guard.py", "why": "only test_repo_managed_file_lists_tools_and_makefile is skipped when .agents/managed.json is missing: that file exists only in the template (design 0011 4.1c); every other test runs"},
     {"path": "AGENTS.md", "why": "project sentence and project rules (register facts, bilingual docs, firmware analysis as source)"}
   ]
 }

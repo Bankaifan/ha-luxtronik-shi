@@ -249,6 +249,7 @@ jobs:
               origin/main first, then reproduce with `make check`.
             Fix exactly what is raised, run `make check` and the tests, then squash the branch into ONE commit
             authored by Daniel (no Co-authored-by) on top of current origin/main and `git push --force-with-lease`.
+            No tool or AI attribution in commits, PR bodies or comments (no "Generated with", session link, Co-Authored-By, Claude-Session).
             The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
             never `pip install`. Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects
             (they do not match the allow list and are denied).

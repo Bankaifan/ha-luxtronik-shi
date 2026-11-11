@@ -45,7 +45,7 @@ def test_truncated_compare_raises_at_300_not_299():
     assert len(mod.changed_files(many(299), MANAGED)) == 299
 
 
-def run_main(tmp_path, monkeypatch, cfg, compare):
+def run_main(tmp_path, monkeypatch, cfg, compare, version="1.0\n", changelog="", open_issues=(), **kwargs):
     cfg_file = tmp_path / "t.json"
     cfg_file.write_text(json.dumps(cfg))
     monkeypatch.setattr(mod, "CONFIG", cfg_file)
@@ -54,10 +54,136 @@ def run_main(tmp_path, monkeypatch, cfg, compare):
 
     def fake_gh(*args):
         calls.append(args)
-        return "b" * 40 if "commits/main" in args[1] else json.dumps(compare)
+        if args[0] == "issue" and args[1] == "list":
+            return json.dumps(list(open_issues))
+        if "commits/main" in args[1]:
+            return "b" * 40
+        if "contents/VERSION" in args[1]:
+            return version
+        if "contents/CHANGELOG.md" in args[1]:
+            return changelog
+        return json.dumps(compare)
 
     monkeypatch.setattr(mod, "gh", fake_gh)
-    return mod.main(), calls
+    return mod.main(**kwargs), calls
+
+
+def issue_calls(calls):
+    return [a for a in calls if a[0] == "issue" and a[1] in ("create", "edit")]
+
+
+def body_of(call):
+    return call[call.index("--body") + 1]
+
+
+X_CHANGE = files(("tools/a.py", "modified", None))
+
+
+def test_read_version_accepts_x_dot_y():
+    assert mod.read_version("1.0") == "1.0"
+    assert mod.read_version("12.3\n") == "12.3"
+
+
+def test_read_version_rejects_everything_else():
+    for bad in ("v1.0", "1", "1.0.0", "1.0\n; rm", "1.0 ", "1.0\n\n", "", "1.", ".1", "1.0x", "١.0"):
+        with pytest.raises(mod.ConfigError):
+            mod.read_version(bad)
+    with pytest.raises(mod.ConfigError):
+        mod.read_version(None)
+
+
+def test_needs_sync_gate_on_x():
+    assert mod.needs_sync("2.0", "1.5")
+    assert not mod.needs_sync("1.9", "1.0")
+    assert not mod.needs_sync("1.0", "1.0")
+    assert not mod.needs_sync("1.0", "2.0")
+    assert mod.needs_sync("1.0", None)
+    assert mod.needs_sync("1.0", "")
+    assert not mod.needs_sync("0.5", None)
+
+
+def test_y_only_change_creates_no_issue(tmp_path, monkeypatch, capsys):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.0", "managed": MANAGED}
+    code, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="1.7\n")
+    assert code == 0 and not issue_calls(calls)
+    assert not any("compare" in a[1] for a in calls if a[0] == "api")
+    assert "x unchanged" in capsys.readouterr().out
+
+
+def test_x_change_creates_one_issue_and_second_run_edits_it(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.0", "managed": MANAGED}
+    code, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="2.0\n")
+    assert code == 0
+    assert [a[1] for a in issue_calls(calls)] == ["create"]
+    code, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="2.0\n",
+                           open_issues=[{"number": 7, "title": "Template sync abc1234"}])
+    assert code == 0
+    assert [(a[1], a[2]) for a in issue_calls(calls)] == [("edit", "7")]
+
+
+def test_missing_synced_version_counts_as_zero(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "managed": MANAGED}
+    _, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="1.0\n")
+    assert [a[1] for a in issue_calls(calls)] == ["create"]
+    assert "synced version: unknown" in body_of(issue_calls(calls)[0])
+
+
+def test_force_and_mode_all_skip_the_gate(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.0", "managed": MANAGED}
+    for kwargs in ({"force": True}, {"mode": "all"}):
+        _, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="1.7\n", **kwargs)
+        assert [a[1] for a in issue_calls(calls)] == ["create"]
+
+
+def test_bad_template_version_exits_1_without_issue(tmp_path, monkeypatch, capsys):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.0", "managed": MANAGED}
+    for bad in ("v2.0\n", "2.0.0\n", "", "2.0\n; rm -rf /"):
+        code, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version=bad, force=True)
+        assert code == 1 and not issue_calls(calls)
+    assert "VERSION unusable" in capsys.readouterr().err
+
+
+def test_issue_body_shows_both_versions(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.4", "managed": MANAGED}
+    _, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="2.1\n")
+    assert "Template version: 2.1, synced version: 1.4" in body_of(issue_calls(calls)[0])
+
+
+def test_sync_lines_are_fenced_and_cut():
+    nasty = "Sync: @octocat **bold** [x](http://e) ``` close"
+    block = mod.sync_lines("## [2.0]\nSync: plain\n" + nasty + "\nother\n")
+    fence = block.splitlines()[0]
+    assert set(fence) == {"`"} and len(fence) >= 4  # longer than the ``` inside the text
+    assert block.splitlines()[-1] == fence
+    assert "Sync: plain" in block and nasty in block and "other" not in block
+    long_block = mod.sync_lines("Sync: " + "a" * 5000)
+    assert len(long_block.splitlines()[1]) == mod.SYNC_CAP
+    assert mod.sync_lines("no notes here") == ""
+
+
+def test_issue_body_quotes_sync_lines_fenced(tmp_path, monkeypatch):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.0", "managed": MANAGED}
+    _, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="2.0\n",
+                        changelog="Sync: @octocat run `rm -rf`\n")
+    body = body_of(issue_calls(calls)[0])
+    assert "```\nSync: @octocat run `rm -rf`\n```" in body
+
+
+def test_bump_sets_synced_version_next_to_synced_sha():
+    text = '{\n  "template": "o/t",\n  "synced_sha": "' + SHA + '",\n  "managed": ["tools/"]\n}\n'
+    got = mod.bump(text, "b" * 40, "2.0")
+    assert got == text.replace(f'"synced_sha": "{SHA}",', f'"synced_sha": "{"b" * 40}",\n  "synced_version": "2.0",')
+    assert json.loads(got)["synced_version"] == "2.0"
+    assert mod.bump(got, "c" * 40, "3.1").count("synced_version") == 1
+    assert json.loads(mod.bump(got, "c" * 40, "3.1"))["synced_version"] == "3.1"
+    with pytest.raises(mod.ConfigError):
+        mod.bump(text, "b" * 40, "v2.0")
+
+
+def test_parse_config_rejects_bad_synced_version():
+    with pytest.raises(mod.ConfigError):
+        mod.parse_config('{"template": "o/t", "synced_version": "v1.0"}')
+    assert mod.parse_config('{"template": "o/t", "synced_version": "1.0"}')["synced_version"] == "1.0"
 
 
 def test_truncated_compare_creates_no_issue(tmp_path, monkeypatch):

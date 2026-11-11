@@ -18,6 +18,7 @@ check:
 	python3 tools/managed_guard.py check
 	python3 tools/check/check_no_bytecode.py
 	python3 tools/check/check_var_defaults.py
+	python3 tools/check/check_budget.py
 	bash tools/check/check_drift.sh
 	@$(MAKE) --no-print-directory test-evidence
 

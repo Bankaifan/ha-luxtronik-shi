@@ -244,7 +244,8 @@ jobs:
                lists a PR. Else you are already on branch ${{ steps.handover.outputs.branch }} (created from main; do not
                create or switch branches). Overwrite HANDOVER.md (max 60 lines, facts you measured, unknowns marked "open"),
                run `make check`, commit as Daniel (no Co-authored-by), push with exactly `git push origin HEAD` and open
-               ONE PR (English, ASCII title, body max 5 lines). To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
+               ONE PR (English, ASCII title, body max 5 lines). No tool or AI attribution anywhere (no "Generated with",
+               session link, Co-Authored-By, Claude-Session). To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
             The git identity (user.name, user.email) is already configured and the tools for `make check` are
             installed. Commit with a plain `git commit -m "..."`: never `git -c ...` and never a `cd` prefix
             (they do not match the allow list and are denied).

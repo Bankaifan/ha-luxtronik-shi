@@ -95,6 +95,19 @@ def test_friction_section_is_optional(monkeypatch):
     assert check(monkeypatch, "Refs #53", ["tools/a.py"], head="agent/53-x") == 0
 
 
+def test_attribution_footer_in_body_or_commits_fails(monkeypatch):
+    for body in ("why\n\nGenerated with Claude Code", "see https://claude.ai/code/session_01abc", "x\nClaude-Session: abc"):
+        assert check(monkeypatch, body, ["tools/a.py"]) == 1
+    assert check(monkeypatch, "Refs #5\nclean body", ["tools/a.py"]) == 0
+    for msg in ("Generated with Claude Code", "Claude-Session: https://claude.ai/code/session_01abc"):
+        fake_gh(monkeypatch, {"title": "Fix x", "body": "why", "headRefName": "feature/x",
+                              "files": [], "commits": [{"messageHeadline": "Fix x", "messageBody": msg}]})
+        assert run(monkeypatch, {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF_NAME": "feature/x"}) == 1
+    fake_gh(monkeypatch, {"title": "Fix x", "body": "why", "headRefName": "feature/x",
+                          "files": [], "commits": [{"messageHeadline": "Fix x", "messageBody": ""}]})
+    assert run(monkeypatch, {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF_NAME": "feature/x"}) == 0
+
+
 def test_closing_subcommand_reads_file(tmp_path, monkeypatch):
     f = tmp_path / "b.md"
     for text, rc in (("Refs #5", 1), ("Closes #5", 0), ("closes https://github.com/o/r/issues/5", 0)):
