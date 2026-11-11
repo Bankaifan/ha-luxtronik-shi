@@ -117,6 +117,4 @@ This repo follows `Bankaifan/agent-template` (`.agents/template.json`). `templat
 
 ## Models (subscription quota is scarce)
 Routine work haiku; core, security and architecture sonnet; opus only with Daniel's OK.
-Agent jobs at once: repo variable MAX_DEV (default 2); open PRs: MAX_PRS (default 3). PRs waiting only for Daniel's
-approval do not count (max 5 of them, see orchestrator.md).
-Script first, then haiku, then sonnet. Short reports, never repeat the diff.
+Agent jobs at once: repo variable MAX_DEV (default 4); open PRs: MAX_PRS (default 5). PRs waiting only for Daniel's approval do not count (max 5 of them, see orchestrator.md). Script first, then haiku, then sonnet. Short reports, never repeat the diff.

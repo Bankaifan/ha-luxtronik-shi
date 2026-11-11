@@ -11,10 +11,13 @@ Sections, in this order:
 5. Migration and compatibility
 6. Test and verification plan (must be able to fail on today's code; proves it works before rollout)
 7. Rollback
-8. Split into PR-sized implementation issues (title, files, order)
+8. Split into PR-sized implementation issues: a table with step, title, files and `Depends on` (the earlier steps
+   that must be merged first, or `-`). Cut the split so that as many steps as possible are independent with disjoint
+   files: independent steps run in parallel.
 9. **Owner decisions**: only what Daniel must decide (user-facing breaking changes, publishing outside the repo
    such as a first PyPI release, costs). Write `none` if there is nothing.
 
 Flow: developer writes it, the design reviewer approves it (see `.agents/roles/design-reviewer.md`). With `none` it
 merges without Daniel. Otherwise the PR gets `needs-human`, a review request to Daniel and a German summary.
-After the merge the orchestrator creates the implementation issues, each with a line `Design: docs/design/NNNN-<slug>.md`.
+After the merge the orchestrator creates the implementation issues, each with a line `Design: docs/design/NNNN-<slug>.md`
+and, for a step that depends on earlier ones, a line `Depends on: #<n>[, #<m>]` (`tools/deps.py`).

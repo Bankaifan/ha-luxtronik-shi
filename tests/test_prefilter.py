@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 
 _path = pathlib.Path(__file__).parent.parent / "tools" / "prefilter.py"
@@ -13,19 +14,19 @@ def item(number, labels=(), approved=False, auto_ok=False):
 
 def test_startable_skips_started_and_unapproved_ideas():
     trusted = [item(1), item(2, ["agent:dev"]), item(3, ["idea"]), item(4, ["idea"], approved=True)]
-    assert mod.startable(trusted, 0) == [1, 4]
+    assert mod.startable(trusted, 4) == [1, 4]
 
 
 def test_startable_empty_when_dev_slots_full():
-    assert mod.startable([item(1)], 2) == []
+    assert mod.startable([item(1)], 0) == []
 
 
 def test_no_free_pr_slot_means_nothing_to_start():
     # Issue #313: candidates existed but MAX_PRS was full; the model started nothing, and STARTABLE=true with no
     # visible action made the guard fail the run.
-    assert mod.start_candidates([item(1)], 0, 0) == []
-    assert mod.start_candidates([item(1)], 0, 1) == [1]
-    assert mod.start_candidates([item(1)], 2, 1) == []
+    assert mod.start_candidates([item(1)], 1, 0) == []
+    assert mod.start_candidates([item(1)], 1, 1) == [1]
+    assert mod.start_candidates([item(1)], 0, 1) == []
 
 
 def test_handover_stale():
@@ -47,25 +48,41 @@ def test_scout_work():
     assert not mod.scout_work(mod.MAX_OPEN_IDEAS, 3)
 
 
-def test_prio1_may_start_when_a_slot_is_stuck():
-    p1 = dict(item(7, ["prio:1"]), prio=1)
-    p3 = dict(item(8), prio=3)
-    assert mod.startable([p1, p3], 2) == []
-    assert mod.startable([p1, p3], 2, stuck=1) == [7]
-    assert mod.startable([p1, p3], 2, stuck=2) == [7]
+def test_parked_or_done_issue_frees_its_slot_for_every_priority():
+    # Downstream: two parked agent:dev issues ate both slots (dev_open=3, MAX_DEV=2) and nothing below prio:1 started.
+    p3 = dict(item(8, ["prio:3"]), prio=3)
+    free_dev, _ = mod.free_slots({1, 2, 3, 4, 5}, set(), {1, 2}, 0, 0)
+    assert free_dev == 1
+    assert mod.start_candidates([p3], free_dev, 1) == [8]
+    assert mod.free_slots({1, 2, 3, 4, 5}, set(), set(), 0, 0)[0] == 0
 
 
 def test_waiting_issue_frees_its_dev_slot():
-    assert mod.startable([item(1)], 2) == []
-    assert mod.startable([item(1)], 2, waiting=1) == [1]
-    assert mod.free_slots(2, 3, 1, 1) == (1, 1)
-    assert mod.free_slots(2, 3, 0, 0) == (0, 0)
+    assert mod.free_slots({1, 2, 3, 4}, {1}, set(), 5, 1) == (1, 1)
+    assert mod.free_slots({1, 2, 3, 4}, set(), set(), 5, 0) == (0, 0)
+
+
+def test_waiting_and_stuck_overlap_is_not_counted_twice():
+    assert mod.free_slots({1, 2, 3, 4, 5}, {1}, {1, 2}, 0, 0)[0] == 1
+    assert mod.free_slots({1, 2}, {1, 9}, {1, 8}, 0, 0)[0] == 3
+
+
+def test_blocked_issue_is_no_candidate():
+    assert mod.startable([item(1), item(2)], 4, blocked={1}) == [2]
+    assert mod.startable([item(1), item(2)], 4) == [1, 2]
+
+
+def test_start_is_cut_to_the_free_slots_in_list_order():
+    trusted = [item(7), item(3), item(9)]
+    assert mod.start_candidates(trusted, 2, 5) == [7, 3]
+    assert mod.start_candidates(trusted, 4, 5) == [7, 3, 9]
+    assert mod.start_candidates(trusted, 4, 1) == [7]  # the PR cap bounds the starts too
 
 
 def test_five_waiting_prs_hold_new_security_slips_only():
     sec, plain = item(1, ["risk:security"]), item(2)
-    assert mod.startable([sec, plain], 0, waiting_prs=4) == [1, 2]
-    assert mod.startable([sec, plain], 0, waiting_prs=5) == [2]
+    assert mod.startable([sec, plain], 4, waiting_prs=4) == [1, 2]
+    assert mod.startable([sec, plain], 4, waiting_prs=5) == [2]
 
 
 def test_closing_issues():
@@ -86,28 +103,82 @@ def load_with_env(monkeypatch, **env):
 
 def test_caps_default_when_unset(monkeypatch):
     fresh = load_with_env(monkeypatch)
-    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (2, 3)
+    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (4, 5)
 
 
 def test_caps_default_when_empty_or_blank(monkeypatch):
     fresh = load_with_env(monkeypatch, MAX_DEV="", MAX_PRS="  ")
-    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (2, 3)
+    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (4, 5)
 
 
 def test_caps_override_and_slot_arithmetic_follows(monkeypatch):
-    fresh = load_with_env(monkeypatch, MAX_DEV="4", MAX_PRS="5")
-    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (4, 5)
-    assert fresh.free_slots(3, 5, 0, 0) == (1, 0)
-    assert fresh.free_slots(3, 4, 0, 0) == (1, 1)
-    assert fresh.startable([item(1)], 3) == [1]
-    assert mod.startable([item(1)], 3) == []
+    fresh = load_with_env(monkeypatch, MAX_DEV="2", MAX_PRS="3")
+    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (2, 3)
+    assert fresh.free_slots({1}, set(), set(), 3, 0) == (1, 0)
+    assert fresh.free_slots({1}, set(), set(), 2, 0) == (1, 1)
+    assert mod.free_slots({1}, set(), set(), 3, 0) == (3, 2)
 
 
 def test_non_numeric_cap_falls_back_with_warning(monkeypatch, capsys):
     fresh = load_with_env(monkeypatch, MAX_DEV="four", MAX_PRS="3.5")
-    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (2, 3)
+    assert (fresh.MAX_DEV, fresh.MAX_PRS) == (4, 5)
     err = capsys.readouterr().err
     assert "MAX_DEV" in err and "MAX_PRS" in err
+
+
+def run_main(monkeypatch, tmp_path, dev, bodies, trusted, merged=(), waiting=(), max_dev="2"):
+    """Run main('orchestrator') with a fake gh. DEV: {number: labels} of open agent:dev issues, BODIES: {number: body}
+    of all open issues, MERGED: issue numbers a merged PR refers to. Returns the GITHUB_OUTPUT lines as a dict."""
+    fresh = load_with_env(monkeypatch, MAX_DEV=max_dev)
+
+    def gh(*args):
+        if args[:2] == ("issue", "list") and "agent:dev" in args:
+            return json.dumps([{"number": n, "labels": [{"name": x} for x in labs]} for n, labs in dev.items()])
+        if args[:2] == ("issue", "list"):
+            assert args[-1] == "number,body"
+            return json.dumps([{"number": n, "body": b} for n, b in bodies.items()])
+        if "merged" in args:
+            n = int(args[args.index("--search") + 1].split()[0][1:])
+            return json.dumps([{"number": 90, "body": f"Refs #{n}", "headRefName": "agent/9-x"}] if n in merged else [])
+        return "[]"
+
+    out = tmp_path / "out"
+    monkeypatch.setattr(fresh, "gh", gh)
+    monkeypatch.setattr(fresh, "waiting_for_owner", lambda owner, approver: (set(waiting), len(waiting)))
+    monkeypatch.setattr(fresh, "handover_state", lambda: (0, 0))
+    monkeypatch.setenv("TRUSTED", json.dumps(trusted))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.delenv("EVENT", raising=False)
+    assert fresh.main("orchestrator") == 0
+    return dict(line.split("=", 1) for line in out.read_text().splitlines())
+
+
+def test_main_parked_and_done_issues_free_slots_for_prio3(monkeypatch, tmp_path):
+    dev = {10: ["agent:dev", "needs-human"], 11: ["agent:dev"], 12: ["agent:dev"]}
+    trusted = [dict(item(20, ["prio:3"]), prio=3), dict(item(21, ["prio:3"]), prio=3)]
+    bodies = dict.fromkeys((10, 11, 12, 20, 21), "")
+    out = run_main(monkeypatch, tmp_path, dev, bodies, trusted, merged={11})
+    assert (out["free_dev"], out["start"], out["startable"], out["work"]) == ("1", "20", "true", "true")
+    out = run_main(monkeypatch, tmp_path, dev, bodies, trusted, merged={11}, waiting={10})
+    assert out["free_dev"] == "1"
+
+
+def test_main_no_free_slot_writes_empty_start(monkeypatch, tmp_path):
+    dev = {11: ["agent:dev"], 12: ["agent:dev"]}
+    out = run_main(monkeypatch, tmp_path, dev, dict.fromkeys((11, 12, 20), ""), [item(20)])
+    assert (out["free_dev"], out["start"], out["startable"]) == ("0", "", "false")
+
+
+def test_main_holds_back_an_issue_until_its_dependency_closes(monkeypatch, tmp_path, capsys):
+    trusted = [item(20), item(21), item(22), item(23)]
+    bodies = {19: "", 20: "Design: docs/design/0001-x.md\nDepends on: #19, #21\n\nSlip", 21: "Depends on: #21",
+              22: "", 23: ""}
+    out = run_main(monkeypatch, tmp_path, {}, bodies, trusted, max_dev="4")
+    assert out["start"] == "21,22,23"
+    assert "blocked=[20]" in capsys.readouterr().out
+    del bodies[19], bodies[21]
+    out = run_main(monkeypatch, tmp_path, {}, bodies, trusted[:1] + trusted[2:], max_dev="2")
+    assert out["start"] == "20,22"
 
 
 def facts(**over):
@@ -170,3 +241,13 @@ def test_event_review_submitted():
     assert reason("pull_request_review", "submitted", review_state="COMMENTED", **ok) == (False, "no-match")
     assert reason("pull_request_review", "submitted", review_state="APPROVED", agent_pr=True) == (False, "no-match")
     assert reason("pull_request_review", "submitted", review_state="APPROVED", reviewer_ok=True) == (False, "no-match")
+
+
+def test_only_agent_prs_mark_an_issue_done(monkeypatch):
+    """Anyone can write `Refs #N` into a PR body: a foreign or fork PR must not free a slot."""
+    prs = [{"number": 1, "body": "Refs #7", "headRefName": "patch-1"},
+           {"number": 2, "body": "Refs #7", "headRefName": "agent/7-x", "isCrossRepository": True}]
+    monkeypatch.setattr(mod, "gh", lambda *a: json.dumps(prs))
+    assert mod.stuck_slots([{"number": 7, "labels": []}]) == set()
+    prs.append({"number": 3, "body": "Refs #7", "headRefName": "agent/7-x"})
+    assert mod.stuck_slots([{"number": 7, "labels": []}]) == {7}

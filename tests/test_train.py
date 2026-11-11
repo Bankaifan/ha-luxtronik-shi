@@ -1,9 +1,17 @@
 import json
 import subprocess
 
+import pytest
 import train
 
 ENV = {"GH_REPO": "o/r", "APPROVER_BOT": "app/approver", "OWNER": "Bankaifan"}
+REQUIRED = {"validate", "risk"}
+
+
+@pytest.fixture(autouse=True)
+def ruleset(monkeypatch):
+    """Pins the ruleset's required checks; run_train reads them from main.json."""
+    monkeypatch.setattr(train.status, "required_contexts", lambda: set(REQUIRED))
 
 
 def pr(n, *, branch=None, merge="CLEAN", labels=(), files=("tools/x.py",), auto=True, checks=(), cross=False):
@@ -150,9 +158,27 @@ def test_rebase_and_conflict_in_one_run():
 
 
 def sec(n, **kw):
-    p = pr(n, labels=["risk:security"], checks=[{"conclusion": "SUCCESS"}], **kw)
+    p = pr(n, labels=["risk:security"], checks=[{"name": c, "conclusion": "SUCCESS"} for c in REQUIRED], **kw)
     p["reviewRequests"] = [{"login": "Bankaifan"}]
     return p
+
+
+def test_non_required_check_does_not_hold_the_train():
+    running_other = [{"name": "validate", "conclusion": "SUCCESS"}, {"name": "risk", "conclusion": "SUCCESS"},
+                     {"name": "orchestrate", "status": "IN_PROGRESS", "conclusion": ""}]
+    assert not train.in_flight(pr(1, merge="BLOCKED", checks=running_other), REQUIRED)
+    assert train.in_flight(pr(1, merge="BLOCKED", checks=running_other), None)  # null case: every check counts
+    running_required = [{"name": "risk", "status": "IN_PROGRESS", "conclusion": ""}]
+    assert train.in_flight(pr(1, merge="BLOCKED", checks=running_required), REQUIRED)
+
+
+def test_non_required_red_does_not_stop_the_next_pr():
+    checks = [{"name": "validate", "conclusion": "SUCCESS"}, {"name": "risk", "conclusion": "SUCCESS"},
+              {"name": "orchestrate", "conclusion": "CANCELLED"}]
+    prs = [pr(1, merge="BLOCKED", checks=checks), pr(2, merge="BEHIND")]
+    run = Gh(prs, approved(*prs))
+    assert train.run_train(ENV, run) == 0
+    assert ("api", "-X", "PUT", "repos/o/r/pulls/2/update-branch", "-f", "update_method=rebase") in run.calls
 
 
 def test_waiting_for_owner_needs_everything_but_owner_approval():

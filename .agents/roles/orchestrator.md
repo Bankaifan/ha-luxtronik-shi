@@ -5,7 +5,9 @@ Plans, cuts work, starts agents. Writes no production code.
 - Cut each task into a slip: goal, files touched, acceptance criteria. Slips must touch disjoint files.
   Before adding `agent:dev` run `python3 tools/overlap.py --files <comma list> --issue <n>`: exit 1 (overlap with an open
   agent PR or `agent:dev` slip) or 2 (GitHub data unreadable) means defer the slip; it stays `approved`, retry next run.
-- Keep at most MAX_PRS open PRs and at most MAX_DEV open `agent:dev` issues (repo variables, default 3 and 2; the script counts the free slots).
+- Keep at most MAX_PRS open PRs and at most MAX_DEV open `agent:dev` issues (repo variables, default 5 and 4; the script counts the free slots).
+  Parked (`needs-human`) and done (merged PR) `agent:dev` issues hold no slot. Start every issue in the prompt's start list
+  in one run, and none outside it: the script fills it with the unblocked candidates that fit the free slots.
   With repo variable `DESIGN_AUTOMERGE=on` a design PR does not wait for Daniel: the design reviewer decides its
   Owner decisions and it auto-merges.
   A PR waiting only for Daniel (all agent reviews approved at its head, green CI, `risk:security` on one of his CODEOWNERS paths, only his approval
@@ -18,8 +20,8 @@ Plans, cuts work, starts agents. Writes no production code.
 - Priorities: work the trusted list in script order (prio:1, prio:2, prio:3, unlabelled; then oldest). `prio:1` blocks the
   pipeline or other issues (red main, broken agent/CI workflow, deadlock, security hole), `prio:2` is a bug or missing
   guard, `prio:3` a feature. Every issue you, the scout or a guard create gets a prio label (red main and guard/silent-run
-  escalations are `prio:1`). Red main: the next slot goes to the fix first. A `prio:1` issue may start although 2 `agent:dev`
-  issues are open if one has a merged PR or `needs-human`. When a PR with `Refs #N` merges, remove `agent:dev` from #N.
+  escalations are `prio:1`). Red main: the next slot goes to the fix first.
+  When a PR with `Refs #N` merges, remove `agent:dev` from #N.
 - Closing keywords: only the PR that completes an issue says `Closes #N`; design PRs and partial steps use `Refs #N`.
 - Turn reviewer `scope` points into follow-up issues (or have the developer remove them) and `carry:` notes into issues.
 - Big work gets a design study first. Architectural, breaking, release-relevant or multi-PR issues are not implemented
@@ -28,8 +30,9 @@ Plans, cuts work, starts agents. Writes no production code.
   otherwise add `needs-human`, request Daniel's review (`gh pr edit <n> --add-reviewer Bankaifan`) and comment a German
   summary (max 5 lines). After the merge remove `agent:dev` and `needs-human` from the source issue (its design task is
   done; otherwise a developer run starts on it again, finds nothing to do and blocks a slot), create the implementation
-  issues from the split, each with a line `Design: docs/design/NNNN-<slug>.md` (these count as trusted), and work them
-  in order. Do not close the source issue by hand: the status run closes it once every implementation issue is
+  issues from the split, each with a line `Design: docs/design/NNNN-<slug>.md` (these count as trusted). Split issues
+  run in parallel: create them in split order and give every step that needs an earlier step merged a line
+  `Depends on: #<n>[, #<m>]` (alone on its line, after the `Design:` line; `tools/deps.py` holds it back until those are closed). Do not close the source issue by hand: the status run closes it once every implementation issue is
   closed as completed by a merged PR (`tools/design_parents.py`, it also removes its prio and agent:dev labels).
   Small issues (docs, tests, fixes, contained features) start directly.
 - Options and decisions (ideas from the scout, see `scout.md`): when an issue gets `approved`, read Daniel's comments

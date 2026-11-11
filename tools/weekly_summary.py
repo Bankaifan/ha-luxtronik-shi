@@ -325,7 +325,7 @@ def proposal_body(reasons, model, queue_text, today, roles_text=""):
     levers = [
         "- `IDEAS_PER_WEEK`: scout cap per run (default 3, 0 = off)",
         "- `ORCHESTRATOR_EVENTS`: on or off for non-label events",
-        "- `MAX_DEV` / `MAX_PRS`: agent jobs at once and open agent PRs (current values in Queue above; defaults 2 and 3, agent-template 4 and 5)",
+        "- `MAX_DEV` / `MAX_PRS`: agent jobs at once and open agent PRs (current values in Queue above; defaults 4 and 5)",
         "- model per role: haiku by default, sonnet for core and security, opus only with Daniel's OK",
         "- which roles run at all: see the Roles table (cost and benefit per role); a new role is a Role proposal",
     ]
@@ -379,7 +379,7 @@ def main() -> int:
     for title in friction_issues():
         print(f"created friction issue: {title}")
     model, queue_text, reasons, roles_text, role_candidates = capacity_sections(
-        today, gh, env_int("MAX_DEV", 2), env_int("MAX_PRS", 3))
+        today, gh, env_int("MAX_DEV", 4), env_int("MAX_PRS", 5))
     body = build_body(merged, human, keeper, ideas, today.isoformat(), status_stale_safe(),
                       failures=failure_watch_summary(gh, today, guard_mark.key_from_env()),
                       capacity=[model, queue_text, roles_text])

@@ -129,32 +129,78 @@ def is_agent_pr(pr):
     return pr.get("headRefName", "").startswith("agent/") and not pr.get("isCrossRepository")
 
 
-def ci_state(rollup):
-    states = [(c.get("conclusion") or c.get("state") or c.get("status") or "").upper() for c in rollup or []]
-    if any(s in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE") for s in states):
+FAILED_STATES = ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE")
+PENDING_STATES = ("", "PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "EXPECTED", "REQUESTED")
+RULESET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, ".github", "rulesets", "main.json")
+
+
+def check_name(check):
+    """Name of a check run (CheckRun) or a commit status (StatusContext): the context the ruleset lists."""
+    return check.get("name") or check.get("context") or ""
+
+
+def check_state(check):
+    return (check.get("conclusion") or check.get("state") or check.get("status") or "").upper()
+
+
+def required_contexts(path=RULESET_PATH):
+    """Context names that main's ruleset requires. None if the file is unreadable or requires none: then every check
+    counts, as it did before the ruleset was read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            ruleset = json.load(f)
+        names = {c["context"] for rule in ruleset["rules"] if rule["type"] == "required_status_checks"
+                 for c in rule["parameters"]["required_status_checks"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return names or None
+
+
+def ci_state(rollup, required=None):
+    """red / running / green / none. With `required` (the ruleset's contexts) only those checks count; a required
+    context that has not reported yet is running, as GitHub treats it."""
+    checks = rollup or []
+    if required:
+        checks = [c for c in checks if check_name(c) in required]
+    states = [check_state(c) for c in checks]
+    if required and not required <= {check_name(c) for c in checks}:
+        states.append("")
+    if any(s in FAILED_STATES for s in states):
         return "red"
-    if any(s in ("", "PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "EXPECTED", "REQUESTED") for s in states):
+    if any(s in PENDING_STATES for s in states):
         return "running"
     return "green" if states else "none"
 
 
-def waits_for(pr, owner):
+def non_required_reds(rollup, required):
+    """Failing checks that the ruleset does not require: listed in the status, never blocking."""
+    if not required:
+        return []
+    return sorted({check_name(c) for c in rollup or []
+                   if check_name(c) not in required and check_state(c) in FAILED_STATES})
+
+
+def waits_for(pr, owner, required=None):
     if "needs-human" in names(pr):
         return "needs-human"
     if any(same_login(r.get("login"), owner) for r in pr.get("reviewRequests", [])):
         return "waiting for Daniel"
-    if pr.get("reviewDecision") == "REVIEW_REQUIRED" and ci_state(pr.get("statusCheckRollup")) == "green":
+    if pr.get("reviewDecision") == "REVIEW_REQUIRED" and ci_state(pr.get("statusCheckRollup"), required) == "green":
         return "waiting for code owner review"
     return ""
 
 
-def pr_line(pr, owner):
-    bits = [f"CI {ci_state(pr.get('statusCheckRollup'))}", f"review {(pr.get('reviewDecision') or 'none').lower()}"]
+def pr_line(pr, owner, required=None):
+    rollup = pr.get("statusCheckRollup")
+    bits = [f"CI {ci_state(rollup, required)}", f"review {(pr.get('reviewDecision') or 'none').lower()}"]
     if pr.get("mergeStateStatus") == "DIRTY":
         bits.append("merge conflict")
-    w = waits_for(pr, owner)
+    w = waits_for(pr, owner, required)
     if w:
         bits.append(w)
+    extra = non_required_reds(rollup, required)
+    if extra:
+        bits.append(f"red but not required: {', '.join(extra)}")
     return f"- [#{pr['number']}]({pr['url']}) {pr['title']}: " + ", ".join(bits)
 
 
@@ -337,10 +383,10 @@ def merged_rows(merged, now, hours=24):
 
 
 def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner, scheduled=None, added=None,
-               merged=None, watch_since=None):
+               merged=None, watch_since=None, required=None):
     run_rows = [f"- [{r['workflowName']}]({r['url']}) {r.get('displayTitle', '')} ({r['status']}, "
                 f"{age(r['createdAt'], now)})" for r in runs]
-    pr_rows = [pr_line(p, owner) for p in prs]
+    pr_rows = [pr_line(p, owner, required) for p in prs]
     issue_rows = [f"- #{i['number']} {i['title']} (agent:dev for {ages[i['number']]})" for i in issues]
     if orchestrator:
         state = f"{orchestrator['status']} {orchestrator.get('conclusion') or ''}".strip()
@@ -523,7 +569,7 @@ def run_status(env, now, run=gh):
     merged = safe(jlist, run, "pr", "list", "--state", "merged", "--limit", "30", "--json",
                   "number,title,mergedAt,labels")
     number = update_issue(build_body(runs, prs, issues, ages, orch, ideas, actions, now, owner, successes, added,
-                                     merged, watch_since), run, bot)
+                                     merged, watch_since, required_contexts()), run, bot)
     print(f"status issue #{number}; actions: {len(actions)}")
     for a in actions:
         print(a)
