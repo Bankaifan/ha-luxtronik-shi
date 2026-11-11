@@ -114,7 +114,7 @@ def async_migrate_renamed_entity_ids(hass: HomeAssistant, entry: ConfigEntry) ->
 def async_migrate_english_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Rename entity IDs that Home Assistant generated from the German names to the English form.
 
-    Before 0.19.0 the entity ID came from the names in the system language, so a German system gave
+    Before 1.1.0 the entity ID came from the names in the system language, so a German system gave
     German IDs. An entity is renamed only while its ID still equals the ID generated from the German names
     (never when the user changed it by hand); a target that already exists is skipped. Each rename and each
     skip is logged, unique IDs do not change, and a second run finds nothing to do.

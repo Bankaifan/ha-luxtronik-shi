@@ -11,13 +11,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
-## [0.19.0] – 2026-11-11
+## [1.1.0] – 2026-11-12
 
 ### Action required
 
 * **Entity IDs of German-language installations are renamed to English at setup (breaking).** Until now the entity
   ID came from the entity names in the Home Assistant system language, so a German system had German IDs. From
-  0.19.0 the ID is the device name you chose plus the English names, whatever the language; display names stay
+  1.1.0 the ID is the device name you chose plus the English names, whatever the language; display names stay
   translated and unique IDs do not change (history and settings stay). An ID is renamed only while it still equals
   the ID Home Assistant generated from the German names; an ID you changed by hand, or one whose English target
   already exists, is left alone and logged. English-language installations see no change. **Automations,
@@ -914,8 +914,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.19.0...HEAD
-[0.19.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.18.0...v0.19.0
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v1.0.0...v1.1.0
 [0.18.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.0...v0.16.1

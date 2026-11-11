@@ -1,6 +1,6 @@
 """Generate the ready-made Lovelace dashboards in ``dashboards/`` (run from the repo root).
 
-Since 0.19.0 an entity ID is built from the device name and the English entity names, whatever the Home
+Since 1.1.0 an entity ID is built from the device name and the English entity names, whatever the Home
 Assistant language (earlier versions used the names of the system language). Installations that were created
 earlier are migrated at setup. This script does two things:
 
@@ -154,7 +154,7 @@ class Resolver:
         return entry["name"].replace("{address}", info.key.removeprefix("raw_"))
 
     def _predict(self, info: Info) -> str | None:
-        """Entity ID since 0.19.0: device name plus the English names, whatever the language."""
+        """Entity ID since 1.1.0: device name plus the English names, whatever the language."""
         if not info.enabled_default or not set(info.features) <= set(self.features):
             return None
         device = self.name

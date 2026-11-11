@@ -597,13 +597,13 @@ those who deliberately stay on YAML, no longer used in production and not tested
   mode for it is not *off*; proven). The registry entries move over, so history and settings stay. An entity ID
   that was generated from the old name (e.g. `..._equipment_heating`) is renamed automatically to the new name; an ID
   you chose yourself, or one whose new name is already taken, is left alone (the log says so).
-* **English entity IDs (0.19.0, breaking for German-language installations):** the entity ID is now the device name
+* **English entity IDs (1.1.0, breaking for German-language installations):** the entity ID is now the device name
   plus the English names, whatever the Home Assistant language (display names stay translated, unique IDs do not
   change). At setup an ID that still equals the one generated from the German names (e.g.
   `sensor.warmepumpe_temperatur_vorlauf`) is renamed to the English one (`sensor.warmepumpe_temperature_flow`); an ID
   you changed yourself, or one whose English name is taken, is left alone (the log says so). **Update automations,
   dashboards and the Heat Pump Optimizer configuration** that use the old IDs; the CHANGELOG lists them.
-* **Faster feedback after a button press (0.19.0):** after a successful press of the `extra_dhw` / `circulation`
+* **Faster feedback after a button press (1.1.0):** after a successful press of the `extra_dhw` / `circulation`
   buttons the pump and status registers they influence are read once more after 5 s (2 or 1 extra reads).
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
