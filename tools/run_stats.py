@@ -126,15 +126,18 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 # A script line echoed in the log (`echo "::error::..."` or an unexpanded `${!name}`), not the error text itself
 SOURCE_RE = re.compile(r'echo "::error::|\$\{!')
 ANNOTATION_RE = re.compile(r"^::error::")
+# A standalone number (run id, count, duration) becomes #; a digit run that continues an identifier (MAX_DEV2) stays.
+# Applied to lowercased text, so the identifier characters are a-z and _.
+NUMBER_RE = re.compile(r"(?<![a-z_\d])\d+")
 # Runtime message of the agent tool, not repo code: the repo has no tsconfig.json (design 0015)
 TOOL_RE = re.compile(r"\binternal error:", re.IGNORECASE)
 TOOL_LABEL = "tool environment, not repo code: "
 
 
 def failure_class(log):
-    """Normalized first error line of a failed model run (digits become #), or None. Limit or rate errors are not a
-    role failure and give None. Script source lines echoed in the log are skipped, so the expanded message wins.
-    Heuristic (design 0015): same text = same class."""
+    """Normalized first error line of a failed model run (standalone numbers become #), or None. Limit or rate errors
+    are not a role failure and give None. Script source lines echoed in the log are skipped, so the expanded message
+    wins. Digits inside identifiers (MAX_DEV2) are kept. Heuristic (design 0015): same text = same class."""
     if LIMIT_RE.search(log):
         return None
     for line in log.splitlines():
@@ -142,7 +145,7 @@ def failure_class(log):
         if not ERROR_RE.search(text) or SOURCE_RE.search(text):
             continue
         label = TOOL_LABEL if TOOL_RE.search(text) else ""
-        return label + re.sub(r"\d+", "#", ANNOTATION_RE.sub("", text).lower())[:120]
+        return label + NUMBER_RE.sub("#", ANNOTATION_RE.sub("", text).lower())[:120]
     return None
 
 
