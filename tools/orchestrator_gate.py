@@ -29,6 +29,7 @@ from agent_guard import gh, same_login
 GATED = ("approved", "auto-ok")
 WINDOW = 180  # seconds, label events
 LOOP_GRACE = 60  # seconds after a run ended in which its own echo is still ignored
+NEVER_RAN = ("skipped", "cancelled")
 BRAKE_RUNS = 3
 BRAKE_GAP = 300  # seconds
 EVENTS = ("issues", "issue_comment", "pull_request", "pull_request_target", "pull_request_review")
@@ -41,8 +42,13 @@ def parse(ts):
 
 
 def debounced(run_id, created, runs):
-    """True if an earlier run (lower id) was created at most WINDOW seconds before `created` (a datetime)."""
-    return any(r["databaseId"] < run_id and 0 <= (created - parse(r["createdAt"])).total_seconds() <= WINDOW
+    """True if an earlier run (lower id) was created at most WINDOW seconds before `created` (a datetime).
+
+    Runs that ended `skipped` (job-level `if`: any other label, issue opened) or `cancelled` never read the
+    candidate list, so they must not swallow a later `approved` label.
+    """
+    return any(r["databaseId"] < run_id and r.get("conclusion") not in NEVER_RAN
+               and 0 <= (created - parse(r["createdAt"])).total_seconds() <= WINDOW
                for r in runs)
 
 
@@ -161,7 +167,7 @@ def main() -> int:
               "live": live_login(event, action, env)}
     elif event == "issues":
         runs = json.loads(gh("run", "list", "--workflow", "orchestrator.yml", "--limit", "20",
-                             "--json", "databaseId,createdAt"))
+                             "--json", "databaseId,createdAt,conclusion"))
     run, reason = decide(event, env.get("LABEL", ""), env.get("SENDER", ""), env.get("OWNER", "Bankaifan"),
                          run_id, runs, now, action=action, **kw)
     if reason.startswith("brake"):

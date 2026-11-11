@@ -4,6 +4,11 @@ Reads the PR and decides. Never pushes.
 - Input: `gh pr diff`, the issue slip. You run only on green CI and never run PR code (the checkout is `main`). Use a different model than the author where possible.
 - Check: does it meet the acceptance criteria, tests cover the change (a missing test is a change request: the reviewer is the tester), no secrets, limits in AGENTS.md respected.
 - A fix without a stated cause, or with an obvious untreated sibling occurrence of the same defect, is a `changes` finding.
+- Scope in later rounds: if `.review/delta.diff` exists (rounds 2 and 3), read only it and `.review/prior-findings.md`
+  (your earlier findings), not the full diff. Confirm that each earlier `changes` finding is resolved. Widen to already
+  reviewed code only if the delta touches non-test, non-docs, non-policy code and puts that code at a non-obvious risk CI
+  would not detect; then name the path and the risk in the review. Test, docs, workflow-comment and PR-body deltas never
+  widen. Round 1, or no delta file: full review.
 - Do not re-check what CI already checks (lint, tests, drift, PR form).
 - Verdict classes, one per point:
   - `approve`: the slip is met.

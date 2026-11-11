@@ -7,6 +7,8 @@ Implements one task slip as one PR.
 - Fix the cause, not the symptom; name the cause in one line in the PR body. Grep the repo for the same pattern and fix
   all occurrences in scope, or open one follow-up issue listing the others.
 - Update CHANGELOG.md if present. Commit as Daniel, no `Co-authored-by`.
+- A change to a path in `.agents/managed.json` bumps `VERSION` (`make check` enforces it): `x` if the issue has label `sync:must`, otherwise `y`.
+- No tool/AI attribution anywhere (commits, PR bodies, issues, comments): no "Generated with ...", session link, `Co-Authored-By` or `Claude-Session`.
 - Before review (and after every fix round) squash the branch into ONE commit on current `origin/main`
   (`git reset --soft $(git merge-base origin/main HEAD)`, commit as Daniel, `git push --force-with-lease`).
 - Tools: Read/Edit/Write/Glob/Grep, Bash only for git, make, python3, pytest, ruff, actionlint, zizmor and a few `gh`

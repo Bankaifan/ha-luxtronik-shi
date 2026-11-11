@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from template_sync import CONFIG, ConfigError, is_managed, parse_config
 
+MANAGED_FILE = pathlib.Path(".agents/managed.json")
 SYNC_TITLE = "Template sync"
 PART1_TITLE = re.compile(r"Template sync [0-9a-f]{7,40} part 1(?!\w)", re.IGNORECASE)
 FILES_LINE =re.compile(r"^\s*Files touched:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
@@ -35,6 +36,21 @@ def load(path=CONFIG):
         return parse_config(pathlib.Path(path).read_text())
     except (OSError, ConfigError):
         return None
+
+
+def template_managed(path=MANAGED_FILE):
+    """Managed path prefixes of the template repo itself; a missing file gives an empty list."""
+    try:
+        text = pathlib.Path(path).read_text()
+    except FileNotFoundError:
+        return []
+    try:
+        managed = json.loads(text).get("managed", [])
+    except (ValueError, AttributeError) as exc:
+        raise ConfigError(f"{path} is not a JSON object with a 'managed' list: {exc}") from exc
+    if not isinstance(managed, list) or not all(isinstance(m, str) for m in managed):
+        raise ConfigError(f"{path}: 'managed' must be a list of strings")
+    return managed
 
 
 def is_template_repo(cfg, project):

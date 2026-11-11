@@ -117,6 +117,14 @@ jobs:
               || echo "not fetched: $f"
           done < .review/files.txt
           wc -l .review/pr.diff .review/files.txt
+      # Round 2 and 3: also stage the delta since the last reviewed head and the earlier findings. Round 1, a rebase
+      # (head not an ancestor) or a compare error stage nothing and the reviewer keeps the full diff.
+      - name: Stage the delta since the last reviewed head
+        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.round.outputs.pr }}
+        run: python3 tools/review_delta.py "$PR" "$SHA"
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
@@ -135,6 +143,8 @@ jobs:
             `.review/pr.diff` (full diff), `.review/files.txt` (changed paths) and `.review/files/<path>` (each changed
             file at the PR head). Read them with Read (long files in parts with offset/limit). Use `gh pr view` for the
             body and `gh issue view` for the linked issue.
+            If `.review/delta.diff` exists this is a later round: follow the scope rule for later rounds in the role
+            (read the delta and `.review/prior-findings.md`, not the full diff). Without it, review the full diff.
             Use the verdict classes of the role: approve; changes (defects against the slip, AGENTS.md or CI only);
             scope (work outside the slip: name it, never block the in-scope part); non-blocking `carry:` notes.
             Submit exactly one review: `gh pr review ${{ steps.round.outputs.pr }} --approve --body "..."` or

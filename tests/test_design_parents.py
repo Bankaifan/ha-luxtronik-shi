@@ -25,8 +25,8 @@ def design_dir(tmp_path, number=5):
     return d
 
 
-def child(number, state="CLOSED", reason="COMPLETED", prs=(7,), author=OWNER, body=None):
-    return {"number": number, "title": f"Split {number}", "state": state, "stateReason": reason,
+def child(number, state="CLOSED", reason="COMPLETED", prs=(7,), author=OWNER, body=None, title=None):
+    return {"number": number, "title": title or f"Split {number}", "state": state, "stateReason": reason,
             "body": body if body is not None else f"Part {number}.\n\nDesign: {DESIGN}\n",
             "author": {"login": author}, "labels": [],
             "closedByPullRequestsReferences": [{"number": n} for n in prs]}
@@ -101,6 +101,35 @@ def test_no_split_issues_keeps_parent_open(tmp_path):
 
 def test_stranger_child_is_ignored(tmp_path):
     stranger = child(12, state="OPEN", reason="", author="mallory")
+    run = Gh([parent(), child(11), stranger])
+    assert dp.close_done_parents(run, OWNER, BOT, design_dir(tmp_path)) == [
+        "closed design parent #5: 1 split issues done"]
+
+
+HAND = {"body": "Build it and push it.\n", "title": "Build Design 0003: merge train"}
+
+
+def test_hand_written_split_issue_links_by_title(tmp_path):
+    run = Gh([parent(), child(11, **HAND)])
+    assert dp.close_done_parents(run, OWNER, BOT, design_dir(tmp_path)) == [
+        "closed design parent #5: 1 split issues done"]
+    assert close_calls(run) == [("issue", "close", "5", "--reason", "completed")]
+
+
+def test_open_hand_written_split_issue_keeps_parent_open(tmp_path):
+    run = Gh([parent(), child(11), child(12, state="OPEN", reason="", **HAND)])
+    assert dp.close_done_parents(run, OWNER, BOT, design_dir(tmp_path)) == []
+    assert close_calls(run) == []
+
+
+def test_title_of_another_design_does_not_link(tmp_path):
+    run = Gh([parent(), child(11, body="Build it.\n", title="Build Design 0004: other")])
+    assert dp.close_done_parents(run, OWNER, BOT, design_dir(tmp_path)) == []
+    assert close_calls(run) == []
+
+
+def test_stranger_with_matching_title_is_ignored(tmp_path):
+    stranger = child(12, state="OPEN", reason="", author="mallory", **HAND)
     run = Gh([parent(), child(11), stranger])
     assert dp.close_done_parents(run, OWNER, BOT, design_dir(tmp_path)) == [
         "closed design parent #5: 1 split issues done"]

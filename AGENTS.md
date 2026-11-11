@@ -68,6 +68,8 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
   `gen_dashboard`; a generator diff in CI means you forgot to run it.
 - Setup: `pip install -r requirements_test.txt pytest-timeout ruff` (CI: `bash tools/ci/install_tools.sh`).
 - Claim only what you measured (command + output). Unsure: ask in the issue, mark facts "open", never guess.
+- Size caps for this file and `.agents/roles/*.md` live in `docs/budgets.json` (checked by `make check`): shrink
+  freely, raise a cap only by a deliberate edit there.
 - Read only the files the task names. HANDOVER.md (max 60 lines) is rewritten by the orchestrator only; developer and
   fix runs put notes in the PR body.
 - Everything on GitHub in English (files, commits, PR titles and bodies, issues, CHANGELOG, README, code comments);
@@ -77,6 +79,8 @@ Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. C
 ## Commits and PRs
 - Author: `git config user.name "Daniel"` and `user.email "476059+Bankaifan@users.noreply.github.com"`.
   No `Co-authored-by` trailer.
+- No tool or AI attribution of any kind in commits, PR bodies, issues or comments: no "Generated with ...", no
+  claude.ai/code session link, no `Co-Authored-By` or `Claude-Session` trailer. Enforced by CI.
 - PR title: English, ASCII only, meaningful. Body: what and why in a few lines, link the issue, proposed version.
   The form is enforced by CI (`tools/check/check_pr_form.py`).
 

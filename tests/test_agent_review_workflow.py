@@ -73,6 +73,22 @@ def test_staging_loops_url_encode_the_path():
     assert "contents/$f?ref" not in SEC
 
 
+def test_delta_is_staged_after_the_full_change_and_prompt_scopes_to_it():
+    assert step_index("Stage the change as files") < step_index("Stage the delta since") < step_index("id: claude")
+    block = TEXT[step_index("Stage the delta since"):step_index("id: claude")]
+    assert 'python3 tools/review_delta.py "$PR" "$SHA"' in block
+    prompt = TEXT[step_index("id: claude"):]
+    assert ".review/delta.diff" in prompt and ".review/pr.diff" in prompt
+    role = (WORKFLOW.parent.parent.parent / ".agents" / "roles" / "reviewer.md").read_text(encoding="utf-8")
+    assert ".review/delta.diff" in role and ".review/prior-findings.md" in role and "widen" in role
+
+
+def test_body_hash_and_one_review_per_head_are_unchanged():
+    block = TEXT[step_index("id: round"):step_index("id: reapprove")]
+    assert 'guard body-hash "$num"' in block and 'guard reviewed "$num" "$SHA" "$bhash"' in block
+    assert 'guard round "$num" "$SHA"' in block
+
+
 def test_developer_role_names_the_current_pr_body_file():
     role = (WORKFLOW.parent.parent.parent / ".agents" / "roles" / "developer.md").read_text(encoding="utf-8")
     assert ".agent-out/pr-body.md" in role and "/tmp/pr-body.md" not in role

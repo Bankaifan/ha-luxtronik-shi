@@ -6,6 +6,9 @@ the author app. A parent is closed when it has split issues and every one is clo
 the parent's prio:* and agent:dev labels are removed, one comment lists the split issues, then the parent is closed
 as completed. One open split issue, or one closed as not planned, keeps the parent open. If the issue or merged PR
 list is truncated, nothing is closed. Needs the gh CLI (GH_TOKEN, GH_REPO).
+
+A split issue written by hand (issue #400: #389 "Build Design 0011: ...") has no `Design:` line; it links to the design
+by its title `Design NNNN` (NNNN = the number of the design file). Without that link the parent never closed.
 """
 import json
 import pathlib
@@ -21,6 +24,7 @@ MERGED_PR_LIMIT = 500
 ISSUE_FIELDS = "number,title,body,state,stateReason,author,labels,closedByPullRequestsReferences"
 _HEADER = re.compile(r"^Issue: #(\d+)\b")
 _SPLIT = re.compile(r"^Design: (docs/design/\d{4}-[a-z0-9-]+\.md)\s*$", re.MULTILINE)
+_TITLE = re.compile(r"\bDesign (\d{4})\b")
 
 
 def gh(*args):
@@ -44,13 +48,16 @@ def parent_designs(design_dir=DESIGN_DIR):
 
 
 def split_issues(issues, parent, paths, owner, author_bot):
-    """Issues by Daniel or the author app (never the parent itself) with a `Design:` line naming one of `paths`."""
+    """Issues by Daniel or the author app (never the parent itself) that name one of `paths`: a `Design:` line in the
+    body, or a title `Design NNNN` with the number of one of the designs."""
+    numbers = {p.rsplit("/", 1)[-1][:4] for p in paths}
     out = []
     for i in issues:
         login = (i.get("author") or {}).get("login")
         if i["number"] == parent or not (same_login(login, owner) or same_login(login, author_bot)):
             continue
-        if set(_SPLIT.findall(i.get("body") or "")) & set(paths):
+        title = _TITLE.search(i.get("title") or "")
+        if set(_SPLIT.findall(i.get("body") or "")) & set(paths) or (title and title.group(1) in numbers):
             out.append(i)
     return out
 
