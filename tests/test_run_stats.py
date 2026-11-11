@@ -81,3 +81,13 @@ def test_failure_class_labels_tool_runtime_errors():
 def test_failure_class_keeps_limit_and_plain_errors():
     assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z usage limit reached\n") is None
     assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z build failed: 3 tests\n") == "build failed: # tests"
+
+
+def test_failure_class_keeps_digits_in_variable_names():
+    log = "dev\tcheck\t2026-11-10T08:00:01Z ::error::Repo variable MAX_DEV2 is not set\n"
+    assert s.failure_class(log) == "repo variable max_dev2 is not set"
+
+
+def test_failure_class_normalizes_standalone_numbers_only():
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z failed after 42 attempts\n") == "failed after # attempts"
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z error in abc123 run 7\n") == "error in abc123 run #"
