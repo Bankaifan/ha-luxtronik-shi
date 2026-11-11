@@ -18,6 +18,7 @@ Home Assistant integration for **alpha innotec / Luxtronik heat pumps** via the 
 Developed and used daily on an **alpha innotec LWDV 91-1/3** (Luxtronik 2.x with SHI, firmware 3.92.3).
 Other Luxtronik controllers with SHI should work but are untested. If yours works, please tell us with a
 [model report](https://github.com/Bankaifan/ha-luxtronik-shi/issues/new/choose).
+User feedback reports the Novelan-SICV 12.2H3 as working (source: user feedback, not tested by the maintainer).
 
 ## Highlights
 

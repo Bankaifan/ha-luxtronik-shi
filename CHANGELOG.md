@@ -59,6 +59,7 @@ versioning follows [Semantic Versioning](https://semver.org/):
 - The README entity overviews (English and German) use the 0.18.0 names: demand borders instead of limit
   temperatures, and the circulation run is shown by the pump output *Pump: circulation (ZIP)*, not a
   "circulation: run active" sensor that does not exist.
+- Both READMEs name the Novelan-SICV 12.2H3 as reported working (source: user feedback, not tested by the maintainer; issue #129).
 
 ### Fixed
 
