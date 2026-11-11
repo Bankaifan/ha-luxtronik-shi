@@ -1,4 +1,4 @@
-"""English entity IDs regardless of the Home Assistant language (0.19.0), their migration, and the status
+"""English entity IDs regardless of the Home Assistant language (1.1.0), their migration, and the status
 re-read after a trigger button press."""
 
 from __future__ import annotations
