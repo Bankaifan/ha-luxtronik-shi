@@ -19,12 +19,15 @@ MAX_NEW = 5
 MAX_PAGES = 3
 MAX_BACK = datetime.timedelta(hours=24)
 OVERLAP = datetime.timedelta(minutes=5)
-KEPT = ("failure", "timed_out", "startup_failure")
+KEPT = ("failure", "timed_out", "startup_failure", "cancelled")
 FAILED_JOB = ("failure", "timed_out")
+CANCELLED_CLASS = "cancelled"  # step of a job that never started (displaced by concurrency, design 0001 4.2)
+# Cancellations that are normal: cancel-in-progress workflows; validate.yml only if a newer run of the same branch exists.
+EXPECTED_CANCEL = {"agent-review.yml": False, "validate.yml": True}  # value: needs a newer run for the same branch
 MERGE_GATES = ("validate.yml", "risk.yml", "agent-security-review.yml")
 PR_ONLY = ("risk.yml", "agent-security-review.yml", "agent-review.yml")  # green on any non-agent ref counts
 AGENT_OWNED = ("validate.yml", "agent-review.yml")  # failures on agent/* branches belong to agent-fix rounds
-SELF = "status.yml"
+SELF = "status.yml"  # default only: each caller passes its own workflow file (status.yml, later watch.yml)
 ESCALATE_AT = 3
 PART_MAX = 60
 _BAD = re.compile(r"[^A-Za-z0-9 ._:/()-]")
@@ -47,18 +50,19 @@ def run_url(run_obj):
     return run_obj.get("html_url") or ""
 
 
-def keep(run_obj):
-    """Section 4.1 filter: only real failures, not the status run, not forks, not agent-owned branches."""
+def keep(run_obj, self_wf=SELF):
+    """Section 4.1 filter: only real failures, not the calling workflow's own runs, not forks, not agent-owned branches."""
     wf = workflow_file(run_obj)
-    if run_obj.get("conclusion") not in KEPT or wf == SELF:
+    if run_obj.get("conclusion") not in KEPT or wf == self_wf:
         return False
     if (run_obj.get("head_repository") or {}).get("fork"):
         return False
     return not (wf in AGENT_OWNED and (run_obj.get("head_branch") or "").startswith("agent/"))
 
 
-def collect(since, now, run=liveness.gh):
-    """Kept failed runs completed since SINCE (minus overlap, at most 24h back), oldest first."""
+def collect(since, now, run=liveness.gh, self_wf=SELF):
+    """Kept failed runs completed since SINCE (minus overlap, at most 24h back), oldest first.
+    A kept run gets `newer_run` = a later run of the same workflow and branch exists in the fetched window."""
     start = max(since - OVERLAP, now - MAX_BACK)
     found = []
     for page in range(1, MAX_PAGES + 1):
@@ -68,15 +72,42 @@ def collect(since, now, run=liveness.gh):
         found += runs
         if len(runs) < 100:
             break
-    return sorted((r for r in found if keep(r)), key=lambda r: r["id"])
+    kept = sorted((r for r in found if keep(r, self_wf)), key=lambda r: r["id"])
+    for r in kept:
+        r["newer_run"] = any(o["id"] > r["id"] and o.get("path") == r.get("path")
+                             and o.get("head_branch") == r.get("head_branch") for o in found)
+    return kept
+
+
+def _first(items, conclusions):
+    return next((i for i in items if i.get("conclusion") in conclusions), None)
+
+
+def analyse(run_obj, run=liveness.gh):
+    """(signature, started): `<workflow file> / <job> / <step>` and whether the cancelled job ran any step.
+    The names come from workflow files, not from logs, and are sanitised. A cancelled job without steps never
+    started (displaced by concurrency): its step is the class `cancelled`."""
+    jobs = _api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_obj['id']}/jobs", run).get("jobs") or []
+    job = _first(jobs, FAILED_JOB) or _first(jobs, ("cancelled",))
+    steps = (job or {}).get("steps") or []
+    step = _first(steps, FAILED_JOB) or _first(steps, ("cancelled",))
+    name = (step or {}).get("name")
+    if job and not steps and job.get("conclusion") == "cancelled":
+        name = CANCELLED_CLASS
+    sig = " / ".join(clean(p) for p in (workflow_file(run_obj), (job or {}).get("name"), name))
+    return sig, bool(steps)
 
 
 def signature(run_obj, run=liveness.gh):
-    """`<workflow file> / <job> / <step>`; the names come from workflow files, not from logs, and are sanitised."""
-    jobs = _api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_obj['id']}/jobs", run).get("jobs") or []
-    job = next((j for j in jobs if j.get("conclusion") in FAILED_JOB), None)
-    step = next((s for s in (job or {}).get("steps") or [] if s.get("conclusion") in FAILED_JOB), None)
-    return " / ".join(clean(p) for p in (workflow_file(run_obj), (job or {}).get("name"), (step or {}).get("name")))
+    return analyse(run_obj, run)[0]
+
+
+def expected_cancel(run_obj, started):
+    """Design 0001 4.2: a cancelled run with started steps is normal for the EXPECTED_CANCEL workflows
+    (agent-review always, validate.yml only when a newer run for the same branch replaced it)."""
+    wf = workflow_file(run_obj)
+    return (run_obj.get("conclusion") == "cancelled" and started and wf in EXPECTED_CANCEL
+            and (not EXPECTED_CANCEL[wf] or bool(run_obj.get("newer_run"))))
 
 
 def title_for(sig):
@@ -243,19 +274,23 @@ def close_overdue(overdue_labels, key, run=liveness.gh):
     return closed
 
 
-def watch(since, now, overdue_labels, key=None, run=liveness.gh):
-    """One tick. Returns (actions, next_since). Without GUARD_KEY nothing is verifiable, so nothing is done."""
+def watch(since, now, overdue_labels, key=None, run=liveness.gh, self_wf=SELF):
+    """One tick. Returns (actions, next_since). Without GUARD_KEY nothing is verifiable, so nothing is done.
+    SELF_WF: the caller's own workflow file, whose runs are never watched (no loop)."""
     key = guard_mark.key_from_env() if key is None else key
     if not key:
         return [], since
     issues = load_issues(key, run)
     actions, touched, deferred, new = [], set(), [], 0
     handled = since
-    for r in collect(since, now, run):
-        sig = signature(r, run)
+    for r in collect(since, now, run, self_wf):
+        sig, started = analyse(r, run)
+        created = datetime.datetime.fromisoformat(r["created_at"])
+        if expected_cancel(r, started):
+            handled = max(handled, created)
+            continue
         title = title_for(sig)
         issue = issues.get(title)
-        created = datetime.datetime.fromisoformat(r["created_at"])
         if issue and parse_body(issue["body"])["last_id"] >= r["id"]:
             touched.add(title)
             continue

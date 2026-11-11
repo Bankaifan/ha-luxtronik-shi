@@ -52,6 +52,7 @@ LIMIT_IDLE_MIN = 30
 RETRIGGER = "status:retriggered"
 AGENT_WORKFLOWS = {"agent-dev", "agent-fix", "agent-review", "orchestrator", "scout", "rule-keeper"}
 TICK_MIN = 30
+SELF_WORKFLOW = "status.yml"  # the failure watch of this run skips its own workflow
 SINCE_LABEL = "Failure watch since:"
 PR_LIMIT = 20  # 50 made the GraphQL query exceed 500,000 nodes (statusCheckRollup x commits)
 
@@ -430,7 +431,7 @@ def watch_failures(env, now, successes, added, actions, run):
     try:
         since = previous_since(run, now, bot)
         late = liveness.overdue_runs(successes, now, added)
-        done, since = failure_watch.watch(since, now, late, None, run)
+        done, since = failure_watch.watch(since, now, late, None, run, SELF_WORKFLOW)
         actions += done
     except Exception as e:  # noqa: BLE001 - the status issue must always be written
         print(f"failure watch failed: {type(e).__name__}")

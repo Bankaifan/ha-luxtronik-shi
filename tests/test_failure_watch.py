@@ -111,7 +111,75 @@ def test_collect_keeps_real_failures_and_drops_the_rest():
               mkrun(4, conclusion="cancelled"), mkrun(5, conclusion="skipped"), mkrun(6, conclusion="success"),
               mkrun(7, wf="validate.yml", branch="agent/9-x"), mkrun(8, wf="agent-review.yml", branch="agent/9-x"),
               mkrun(9, wf="status.yml"), mkrun(10, fork=True), mkrun(11, wf="validate.yml", branch="main")]
-    assert [r["id"] for r in fw.collect(SINCE, NOW, f)] == [1, 2, 3, 11]
+    assert [r["id"] for r in fw.collect(SINCE, NOW, f)] == [1, 2, 3, 4, 11]
+
+
+def test_collect_parametrised_self_excludes_only_the_callers_workflow():
+    f = Fake()
+    f.runs = [mkrun(1, wf="status.yml"), mkrun(2, wf="watch.yml")]
+    assert [r["id"] for r in fw.collect(SINCE, NOW, f, "watch.yml")] == [1]
+    assert [r["id"] for r in fw.collect(SINCE, NOW, f, "status.yml")] == [2]
+
+
+def test_failed_status_run_opens_an_issue_for_the_watch_workflow_but_watch_itself_is_ignored():
+    f = Fake()
+    failing(f, 1, wf="status.yml")
+    failing(f, 2, wf="watch.yml")
+    actions, _ = fw.watch(SINCE, NOW, [], KEY, f, "watch.yml")
+    assert actions == ["opened failure issue #1"] and f.issues[1]["title"] == title("status.yml / build / test")
+
+
+# --- cancelled and startup_failure -----------------------------------------------------------------------
+
+def cancelled(f, rid, wf="orchestrator.yml", job="gate", steps=(), branch="main"):
+    f.runs.append(mkrun(rid, wf, "cancelled", branch))
+    f.jobs[rid] = {"jobs": [{"name": job, "conclusion": "cancelled",
+                             "steps": [{"name": s, "conclusion": "cancelled"} for s in steps]}]}
+
+
+def test_cancelled_job_without_steps_opens_a_cancelled_class_issue():
+    f = Fake()
+    cancelled(f, 1)  # the #136 shape: displaced by concurrency, never started
+    actions, _ = tick(f)
+    assert actions == ["opened failure issue #1"]
+    assert f.issues[1]["title"] == title("orchestrator.yml / gate / cancelled")
+
+
+def test_startup_failure_has_step_dash():
+    f = Fake()
+    f.runs.append(mkrun(1, "ci.yml", "startup_failure"))
+    f.jobs[1] = {"jobs": []}
+    tick(f)
+    assert f.issues[1]["title"] == title("ci.yml / - / -")
+
+
+def test_unexpected_cancel_with_started_steps_opens_an_issue_with_the_step():
+    f = Fake()
+    cancelled(f, 1, wf="ci.yml", job="build", steps=("test",))
+    tick(f)
+    assert f.issues[1]["title"] == title("ci.yml / build / test")
+
+
+def test_expected_cancel_table():
+    f = Fake()
+    cancelled(f, 1, wf="agent-review.yml", job="review", steps=("run",), branch="feature")
+    cancelled(f, 2, wf="validate.yml", job="check", steps=("run",), branch="feature")
+    f.runs.append(mkrun(3, "validate.yml", "success", "feature"))  # newer run for the same branch
+    cancelled(f, 4, wf="validate.yml", job="check", steps=("run",), branch="other")  # no newer run: unexpected
+    cancelled(f, 5, wf="agent-review.yml", job="review", steps=())  # never started: not expected
+    actions, _ = tick(f)
+    assert sorted(i["title"] for i in f.issues.values()) == [
+        title("agent-review.yml / review / cancelled"), title("validate.yml / check / run")]
+    assert len(actions) == 2
+
+
+def test_hostile_job_name_of_a_cancelled_job_is_sanitised():
+    f = Fake()
+    cancelled(f, 1, job="x\n@admin ![img](http://evil)")
+    tick(f)
+    issue = f.issues[1]
+    text = issue["title"] + guard_mark.split(issue["body"])[0]
+    assert "\n" not in issue["title"] and "@" not in text and "[" not in text and "`" not in text
 
 
 def test_collect_looks_back_at_most_24_hours_and_overlaps_five_minutes():

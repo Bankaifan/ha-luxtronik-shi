@@ -406,8 +406,15 @@ def empty(*args):
 
 
 def test_watch_runs_after_overdue_and_writes_since_line(monkeypatch):
-    order, bodies = wire(monkeypatch, lambda since, now, late, key, run: (["opened failure issue #9"], ago_dt(10)))
+    seen = []
+
+    def fake_watch(since, now, late, key, run, self_wf):
+        seen.append(self_wf)
+        return ["opened failure issue #9"], ago_dt(10)
+
+    order, bodies = wire(monkeypatch, fake_watch)
     assert st.run_status({"GH_REPO": "o/r"}, NOW, empty) == 0
+    assert seen == ["status.yml"]
     assert order == ["overdue", "watch"]
     assert "- opened failure issue #9" in bodies[0]
     assert "Failure watch since: 2026-11-09T11:50:00Z" in bodies[0]

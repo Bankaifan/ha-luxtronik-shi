@@ -37,6 +37,9 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ### Development
 
+- The failure watch now sees `cancelled` runs (a job that never started becomes the class `cancelled`; expected
+  cancels of agent-review and superseded validate runs are ignored) and `startup_failure`; the workflow it skips is a
+  parameter (issue #142, design 0001). No change for users, no release.
 - ADR 0002 proposes moving the protocol code into a PyPI library (design only, no code change, no release).
 - Agent system for maintaining the repository (workflows for developer, reviewer, fix rounds, auto-merge, scout,
   orchestrator, Dependabot), `AGENTS.md` as the single source of working rules (`CLAUDE.md` imports it), `make check`
