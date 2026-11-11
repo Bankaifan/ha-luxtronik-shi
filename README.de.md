@@ -18,6 +18,7 @@ Home-Assistant-Integration für **alpha innotec / Luxtronik Wärmepumpen** über
 Entwickelt und im Alltag genutzt an einer **alpha innotec LWDV 91-1/3** (Luxtronik 2.x mit SHI, Firmware 3.92.3).
 Andere Luxtronik-Anlagen mit SHI sollten funktionieren, sind aber nicht getestet. Wenn deine läuft, freuen wir uns
 über einen [Modellbericht](https://github.com/Bankaifan/ha-luxtronik-shi/issues/new/choose).
+Rückmeldungen von Nutzern melden die Novelan-SICV 12.2H3 als funktionsfähig (Quelle: Nutzerrückmeldung, nicht vom Entwickler getestet).
 
 ## Auf einen Blick
 
