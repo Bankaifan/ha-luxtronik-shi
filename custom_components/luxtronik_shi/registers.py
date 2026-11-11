@@ -1027,20 +1027,26 @@ OUTPUT_FLAGS: tuple[Register, ...] = (
     ),
     _flag(
         "output_vbo", 10350, "Ausgang: VBO", "Output: VBO", 4,
-        "proven: firmware VBOout (t0/0x45); measured: runs with the compressor", diagnostic=True,
+        "proven: firmware VBOout (t0/0x45), text \"Ventil.-BOSUP\"; per manual: fan / well or brine pump; "
+        "measured: runs with the compressor",
+        diagnostic=True,
     ),
     _flag(
         "output_fp1", 10351, "Ausgang: FP1", "Output: FP1", 4,
-        "proven: firmware FP1out (t0/0x6d); measured: follows the heating pump", diagnostic=True,
+        "proven: firmware FP1out (t0/0x6d); web page \"FUP 1\", per manual: circulation pump of mixing circuit 1; "
+        "measured: follows the heating pump",
+        diagnostic=True,
     ),
     _flag(
         "output_fp2", 10352, "Ausgang: FP2", "Output: FP2", 30,
-        "proven: firmware FP2out (t0/0x4c); not measured (no second circuit)",
+        "proven: firmware FP2out (t0/0x4c); web page \"FUP 2\", per manual: circulation pump of mixing circuit 2; "
+        "not measured (no second circuit)",
         diagnostic=True, enabled_default=False,
     ),
     _flag(
         "output_fp3", 10353, "Ausgang: FP3", "Output: FP3", 30,
-        "proven: firmware FP3out (t0/0x4d); not measured (no third circuit)",
+        "proven: firmware FP3out (t0/0x4d); web page \"FUP 3\", per manual: circulation pump of mixing circuit 3; "
+        "not measured (no third circuit)",
         diagnostic=True, enabled_default=False,
     ),
     _flag(
@@ -1147,6 +1153,14 @@ TRIGGER_ACTION_KEYS: tuple[str, ...] = tuple(action.key for action in TRIGGER_AC
 # reads 0 while hot water is not equipped or its operating mode is "off" (full analysis, 2.3; proven). The button
 # is unavailable while that flag is off; "holiday" cannot be read, a press is then silently without effect.
 TRIGGER_REQUIRES: dict[str, str] = {CIRCULATION_KEY: HOT_WATER_AVAILABLE_KEY}
+# Status registers a trigger influences. The SHI has no push, so the pump state would show up to one poll interval
+# late; after a successful press (start or stop) these are read once more (``const.TRIGGER_REREAD_DELAY``), nothing
+# else. Extra hot water starts the hot water pump (BUP) and changes the hot water status; circulation runs the
+# circulation pump (ZIP).
+TRIGGER_FOLLOWUPS: dict[str, tuple[str, ...]] = {
+    EXTRA_DHW_KEY: ("pump_hot_water", "hot_water_status"),
+    CIRCULATION_KEY: ("pump_circulation",),
+}
 
 # Entities of the climate platform. They are not registers of their own: they combine existing registers
 # (``cfg_heating_mode``, ``cfg_heating_setpoint``, ``flow``). Their keys are part of the entity contract.

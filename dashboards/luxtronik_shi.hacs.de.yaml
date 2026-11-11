@@ -24,10 +24,10 @@ views:
       span:
         end: hour
       series:
-      - entity: sensor.warmepumpe_temperatur_vorlauf
-      - entity: sensor.warmepumpe_temperatur_rucklauf
-      - entity: sensor.warmepumpe_temperatur_aussen
-      - entity: sensor.warmepumpe_warmwasser_temperatur
+      - entity: sensor.warmepumpe_temperature_flow
+      - entity: sensor.warmepumpe_temperature_return
+      - entity: sensor.warmepumpe_temperature_outside
+      - entity: sensor.warmepumpe_hot_water_temperature
     - type: markdown
       content: Braucht die HACS-Karte apexcharts-card.
   - type: grid
@@ -44,6 +44,6 @@ views:
       span:
         end: hour
       series:
-      - entity: sensor.warmepumpe_leistung_elektrisch
-      - entity: sensor.warmepumpe_leistung_thermisch
+      - entity: sensor.warmepumpe_power_electric
+      - entity: sensor.warmepumpe_power_thermal
       - entity: sensor.warmepumpe_cop_10_min

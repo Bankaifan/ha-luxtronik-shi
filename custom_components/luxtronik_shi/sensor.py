@@ -11,7 +11,7 @@ from homeassistant.util import dt as dt_util
 
 from . import LuxtronikConfigEntry
 from .coordinator import LuxtronikCoordinator
-from .entity import LuxtronikEntity
+from .entity import LuxtronikEntity, set_english_entity_id
 from .registers import (
     DERIVED_SENSORS,
     DIFFERENCE_SENSORS,
@@ -100,6 +100,7 @@ class LuxtronikCopSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{sensor.key}"
         self._attr_translation_key = sensor.key
         self._attr_device_info = coordinator.device_info_for(sensor.key)
+        set_english_entity_id(self, coordinator, "sensor", sensor.key)
         self._previous: tuple[float, float] | None = None
         self._window = WindowedCop()
         self._attr_native_value = None
@@ -134,6 +135,7 @@ class LuxtronikDifferenceSensor(CoordinatorEntity[LuxtronikCoordinator], SensorE
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{sensor.key}"
         self._attr_translation_key = sensor.key
         self._attr_device_info = coordinator.device_info_for(sensor.key)
+        set_english_entity_id(self, coordinator, "sensor", sensor.key)
         # No temperature device class: Home Assistant would convert a difference like an absolute temperature.
         self._attr_native_unit_of_measurement = sensor.unit
 
@@ -169,6 +171,7 @@ class LuxtronikFirmwareSensor(CoordinatorEntity[LuxtronikCoordinator], SensorEnt
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{FIRMWARE_SENSOR_KEY}"
         self._attr_device_info = coordinator.device_info_for(FIRMWARE_SENSOR_KEY)
         self._attr_translation_key = FIRMWARE_SENSOR_KEY
+        set_english_entity_id(self, coordinator, "sensor", FIRMWARE_SENSOR_KEY)
 
     @property
     def native_value(self) -> str | None:

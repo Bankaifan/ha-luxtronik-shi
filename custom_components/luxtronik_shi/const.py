@@ -164,6 +164,9 @@ DEFERRED_KEYS: frozenset[str] = frozenset(
     {"cfg_dhw_mode", "cfg_dhw_setpoint", "cfg_dhw_offset", "cfg_dhw_level"}
 )
 DEFERRED_RECHECK = 15  # seconds
+# After a successful trigger button press the status registers it influences are read once more after this
+# delay (registers.TRIGGER_FOLLOWUPS); the regular poll interval is unchanged.
+TRIGGER_REREAD_DELAY = 5  # seconds
 # Hot water group writes wait while the hot water block reads on (owner measurement on the reference
 # installation: the hot water mode can only be set while the block is not active; mechanism unknown).
 DHW_BLOCK_KEY = "dhw_block"

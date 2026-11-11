@@ -28,6 +28,7 @@ from . import LuxtronikConfigEntry
 from .compat import WATER_HEATER_NATIVE_TEMPERATURE
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
+from .entity import set_english_entity_id
 from .registers import BY_KEY, CONTROL_MODES, WATER_HEATER_DHW_KEY, encode_int16
 from .setpoint import setpoint_attributes, validate_setpoint_write
 
@@ -75,6 +76,7 @@ class LuxtronikHotWaterHeater(CoordinatorEntity[LuxtronikCoordinator], WaterHeat
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{WATER_HEATER_DHW_KEY}"
         self._attr_device_info = coordinator.device_info_for(_SETPOINT_REG.key)
+        set_english_entity_id(self, coordinator, "water_heater", WATER_HEATER_DHW_KEY)
         self._attr_entity_registry_enabled_default = coordinator.water_heater_enabled_default
 
     def _data(self, reg):

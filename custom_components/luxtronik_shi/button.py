@@ -26,8 +26,16 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import LuxtronikConfigEntry
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
-from .entity import LuxtronikEntity
-from .registers import BY_KEY, TRIGGER_ACTIONS, TRIGGER_REQUIRES, Register, TriggerAction, usable
+from .entity import LuxtronikEntity, set_english_entity_id
+from .registers import (
+    BY_KEY,
+    TRIGGER_ACTIONS,
+    TRIGGER_FOLLOWUPS,
+    TRIGGER_REQUIRES,
+    Register,
+    TriggerAction,
+    usable,
+)
 
 # One write at a time per platform; the Modbus client serialises access to the SHI anyway.
 PARALLEL_UPDATES = 1
@@ -65,6 +73,8 @@ class LuxtronikTriggerButton(LuxtronikEntity, ButtonEntity):
         if action is not None:
             self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{action.key}"
             self._attr_translation_key = action.key
+            set_english_entity_id(self, coordinator, "button", action.key)
+        self._followups = TRIGGER_FOLLOWUPS.get(reg.key, ())
         self._requires = TRIGGER_REQUIRES.get(reg.key)
 
     def _blocked(self) -> bool:
@@ -90,3 +100,4 @@ class LuxtronikTriggerButton(LuxtronikEntity, ButtonEntity):
                 translation_placeholders={"key": self._reg.key, "flag": self._requires or ""},
             )
         await self.coordinator.async_write(self._reg, self._raw)
+        self.coordinator.schedule_reread(self._reg.key, self._followups)

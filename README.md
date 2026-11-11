@@ -468,6 +468,17 @@ Pre-release versions (`X.Y.Z-beta.N`) are published as GitHub pre-releases. To t
 choose **Redownload** and enable **Show beta versions**. Beta versions may change between releases and are meant for
 testing. Users who do not enable this option are not affected and only get stable versions.
 
+## Using this integration together with BenPru/luxtronik
+
+[BenPru/luxtronik](https://github.com/BenPru/luxtronik) talks to the classic Luxtronik interface instead of the Smart
+Home Interface. Some values overlap, and each integration has values the other lacks. Not available in the SHI are, for
+example, pressures, flow rate, PWM and analogue outputs, mixer open/close, compressor frequency and starts, auxiliary
+heater hours, run-time timers and the error and shutdown history. Both integrations can run side by side.
+
+For controlling from automations the SHI is the better choice: its setpoints are volatile (per firmware analysis they
+are dropped after a restart or after 600 s without access, and the controller returns to its own settings), whereas the
+classic interface changes the controller's stored parameters.
+
 ## Running alongside the native Luxtronik integration (port 8889)
 
 Both integrations can run side by side but should be clearly separated:
@@ -586,6 +597,14 @@ those who deliberately stay on YAML, no longer used in production and not tested
   mode for it is not *off*; proven). The registry entries move over, so history and settings stay. An entity ID
   that was generated from the old name (e.g. `..._equipment_heating`) is renamed automatically to the new name; an ID
   you chose yourself, or one whose new name is already taken, is left alone (the log says so).
+* **English entity IDs (0.19.0, breaking for German-language installations):** the entity ID is now the device name
+  plus the English names, whatever the Home Assistant language (display names stay translated, unique IDs do not
+  change). At setup an ID that still equals the one generated from the German names (e.g.
+  `sensor.warmepumpe_temperatur_vorlauf`) is renamed to the English one (`sensor.warmepumpe_temperature_flow`); an ID
+  you changed yourself, or one whose English name is taken, is left alone (the log says so). **Update automations,
+  dashboards and the Heat Pump Optimizer configuration** that use the old IDs; the CHANGELOG lists them.
+* **Faster feedback after a button press (0.19.0):** after a successful press of the `extra_dhw` / `circulation`
+  buttons the pump and status registers they influence are read once more after 5 s (2 or 1 extra reads).
 * **Pool block and power limit:** the pool block switch (register 10053) only exists with a pool selected. The power
   limit consists of a mode select (none / soft / hard, register 10040) and a value number (0–30 kW, register 10041).
 * **Mixing circuit valve:** the SHI only provides temperatures and mode/setpoints of the mixing circuits, no valve

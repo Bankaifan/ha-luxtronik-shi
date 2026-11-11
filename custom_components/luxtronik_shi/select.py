@@ -12,7 +12,7 @@ from . import LuxtronikConfigEntry
 from .block_views import MODE_BLOCKS, async_write_sequence, blocks, mode_for, writes_for_mode
 from .const import DOMAIN
 from .coordinator import LuxtronikCoordinator
-from .entity import LuxtronikEntity
+from .entity import LuxtronikEntity, set_english_entity_id
 from .registers import BLOCK_MODE_KEY, BLOCK_MODES, Register
 
 # One write at a time per platform; the Modbus client serialises access to the SHI anyway.
@@ -78,6 +78,7 @@ class LuxtronikBlockModeSelect(CoordinatorEntity[LuxtronikCoordinator], SelectEn
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{BLOCK_MODE_KEY}"
         self._attr_device_info = coordinator.device_info_for(BLOCK_MODE_KEY)
+        set_english_entity_id(self, coordinator, "select", BLOCK_MODE_KEY)
         self._attr_entity_registry_enabled_default = coordinator.block_views_enabled_default
 
     @property

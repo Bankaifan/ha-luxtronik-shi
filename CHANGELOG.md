@@ -11,18 +11,55 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [0.19.0] – 2026-11-11
+
 ### Action required
 
+* **Entity IDs of German-language installations are renamed to English at setup (breaking).** Until now the entity
+  ID came from the entity names in the Home Assistant system language, so a German system had German IDs. From
+  0.19.0 the ID is the device name you chose plus the English names, whatever the language; display names stay
+  translated and unique IDs do not change (history and settings stay). An ID is renamed only while it still equals
+  the ID Home Assistant generated from the German names; an ID you changed by hand, or one whose English target
+  already exists, is left alone and logged. English-language installations see no change. **Automations,
+  dashboards and the Heat Pump Optimizer configuration that reference the old IDs must be updated.** The IDs of
+  the keys the Heat Pump Optimizer depends on, for the device name `Wärmepumpe` (old, German -> new):
+  `flow` `sensor.warmepumpe_temperatur_vorlauf` -> `sensor.warmepumpe_temperature_flow`;
+  `return` `sensor.warmepumpe_temperatur_rucklauf` -> `sensor.warmepumpe_temperature_return`;
+  `outside` `sensor.warmepumpe_temperatur_aussen` -> `sensor.warmepumpe_temperature_outside`;
+  `dhw` `sensor.warmepumpe_warmwasser_temperatur` -> `sensor.warmepumpe_hot_water_temperature`;
+  `compressor_thermal_power` `sensor.warmepumpe_leistung_thermisch` -> `sensor.warmepumpe_power_thermal`;
+  `energy_el_heating` `sensor.warmepumpe_heizung_energie_strom` -> `sensor.warmepumpe_heating_energy_electric`;
+  `aux_heater_1` `binary_sensor.warmepumpe_status_zusatzheizung_1_zwe_aktiv` -> `binary_sensor.warmepumpe_status_auxiliary_heater_1_active`;
+  `cfg_heating_setpoint` `number.warmepumpe_heizung_sollwert` -> `number.warmepumpe_heating_setpoint`;
+  `cfg_mk1_setpoint` `number.warmepumpe_heizung_mischkreis_1_sollwert` -> `number.warmepumpe_heating_mixing_circuit_1_setpoint`;
+  `heating_block` `switch.warmepumpe_heizung_sperren` -> `switch.warmepumpe_heating_block`;
+  `dhw_block` `switch.warmepumpe_warmwasser_sperren` -> `switch.warmepumpe_hot_water_block`;
+  `circulation` `button.warmepumpe_warmwasser_zirkulation_lauf_starten` -> `button.warmepumpe_hot_water_circulation_start_run`;
+  the mode selects `select.warmepumpe_heizung_betriebsart` -> `select.warmepumpe_heating_mode`,
+  `select.warmepumpe_warmwasser_betriebsart` -> `select.warmepumpe_hot_water_mode`,
+  `select.warmepumpe_heizung_mischkreis_1_betriebsart` -> `select.warmepumpe_heating_mixing_circuit_1_mode`
+  (their option keys are unchanged). Other IDs follow the same rule; `tools/gen_dashboard.py` predicts them.
 * The entity IDs of `heating_available` and `hot_water_available` (were `cap_heating`, `cap_hot_water`) are renamed
   at setup, but only while they still carry the generated old name: `binary_sensor.warmepumpe_ausstattung_heizen`
   becomes `binary_sensor.warmepumpe_heating_available_equipped_mode_not_off`, and
-  `binary_sensor.warmepumpe_ausstattung_warmwasser` becomes `binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off`.
-  On a German-language Home Assistant the new ID is derived from the German name instead: `binary_sensor.warmepumpe_heizen_verfugbar_ausgestattet_betriebsart_nicht_aus`
-  and `binary_sensor.warmepumpe_warmwasser_verfugbar_ausgestattet_betriebsart_nicht_aus`.
+  `binary_sensor.warmepumpe_ausstattung_warmwasser` becomes `binary_sensor.warmepumpe_hot_water_available_equipped_mode_not_off`
+  (also on a German-language Home Assistant, see the entry above).
   Automations and dashboards that reference the old IDs must be updated to the new ones. User-chosen IDs and IDs whose
   target is already taken are not renamed (see the log); for those, nothing changes (issue #103).
 
+### Added
+
+* **Faster feedback after a button press.** After a successful press of `extra_dhw` or `circulation` (or their
+  stop buttons) the status registers the button influences are read once more after 5 s: `pump_hot_water` and
+  `hot_water_status` (extra hot water), `pump_circulation` (circulation), if their entities are enabled. That is
+  2 or 1 extra reads per press and nothing else; the regular update interval is unchanged (issue #150).
+
 ### Changed
+
+* The documentation of `output_vbo` and `output_fp1` to `output_fp3` names what they switch: VBO is "Ventil.-BOSUP"
+  in the firmware text of register 10350 (proven), the controller manual names it fan / well or brine circulation
+  pump; FP is labelled "FUP 1" to "FUP 3" on the controller's web page and is, per the Luxtronik manual (not proven
+  by the firmware), the circulation pump of mixing circuit 1 to 3.
 
 * The orchestrator workflow installs the CI tools before its run and tells the model to use a plain `git commit`,
   so runs no longer end silently with denied tool calls (issue #104).
@@ -877,7 +914,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.0...v0.16.1

@@ -514,6 +514,18 @@ Vorabversionen (`X.Y.Z-beta.N`) werden als GitHub-Pre-Releases veröffentlicht. 
 aktivieren. Beta-Versionen können sich zwischen den Releases ändern und sind zum Testen gedacht. Wer die Option nicht
 aktiviert, ist nicht betroffen und erhält nur stabile Versionen.
 
+## Zusammen mit BenPru/luxtronik nutzen
+
+[BenPru/luxtronik](https://github.com/BenPru/luxtronik) spricht die klassische Luxtronik-Schnittstelle statt des Smart
+Home Interface. Einige Werte überschneiden sich, und jede Integration hat Werte, die der anderen fehlen. Im SHI nicht
+vorhanden sind zum Beispiel Drücke, Durchfluss, PWM- und Analogausgänge, Mischer auf/zu, Verdichterfrequenz und -starts,
+Betriebsstunden der Zusatzheizung, Laufzeit-Timer sowie Fehler- und Abschaltungshistorie. Beide Integrationen können
+nebeneinander laufen.
+
+Für die Steuerung aus Automationen ist das SHI die bessere Wahl: Seine Sollwerte sind flüchtig (laut Firmware-Analyse
+verfallen sie nach einem Neustart oder nach 600 s ohne Zugriff, die Regelung kehrt zu ihren eigenen Einstellungen
+zurück), während die klassische Schnittstelle die gespeicherten Parameter der Regelung ändert.
+
 ## Zusammenspiel mit der nativen Luxtronik-Integration (Port 8889)
 
 Beide Integrationen können nebeneinander laufen, sollten aber klar getrennt werden:
@@ -636,6 +648,16 @@ absichtlich so benannt wie die früheren Entity-IDs (`lwdv_shi_<schluessel>`). S
   bleiben erhalten. Eine Entity-ID, die aus dem alten Namen erzeugt wurde (z. B. `..._ausstattung_heizen`), wird
   automatisch auf den neuen Namen umbenannt; selbst gewählte IDs oder bereits belegte Ziel-IDs bleiben unverändert
   (das Log nennt es).
+* **Englische Entity-IDs (0.19.0, Breaking Change für deutschsprachige Installationen):** Die Entity-ID besteht jetzt
+  aus dem Gerätenamen und den englischen Namen, unabhängig von der Home-Assistant-Sprache (Anzeigenamen bleiben
+  übersetzt, Unique-IDs ändern sich nicht). Beim Start wird eine ID, die noch der aus den deutschen Namen erzeugten
+  entspricht (z. B. `sensor.warmepumpe_temperatur_vorlauf`), auf die englische umbenannt
+  (`sensor.warmepumpe_temperature_flow`); selbst geänderte IDs oder bereits belegte englische Ziel-IDs bleiben
+  unverändert (das Log nennt es). **Automationen, Dashboards und die Konfiguration des Heat Pump Optimizers**, die die
+  alten IDs verwenden, müssen angepasst werden; das CHANGELOG listet sie auf.
+* **Schnelleres Feedback nach einem Tastendruck (0.19.0):** Nach einem erfolgreichen Druck auf die Taster
+  `extra_dhw` / `circulation` werden die Pumpen- und Statusregister, die sie beeinflussen, nach 5 s einmal erneut
+  gelesen (2 bzw. 1 zusätzliche Abfrage).
 * **Pool-Sperre und Leistungsbegrenzung:** Der Schalter für die Pool-Sperre (Register 10053) existiert nur mit gewähltem
   Pool. Die Leistungsbegrenzung besteht aus einer Auswahl für den Modus (keine / weich / hart, Register 10040) und einer
   Zahl für den Wert (0–30 kW, Register 10041).
