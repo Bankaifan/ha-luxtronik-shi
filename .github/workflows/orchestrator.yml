@@ -7,8 +7,8 @@ run-name: "${{ github.event_name == 'issues' && github.event.issue.title || gith
 # Candidate issues come from tools/trusted_issues.py, not from the prompt.
 # A label event (`approved` or `auto-ok`) starts it at once; tools/orchestrator_gate.py checks that Daniel set
 # the label and skips a run that follows another run within 3 minutes (one run per burst of labels).
-# Edits by the author app (status issue updates after every run) never start a run: each one waited 60 s in the group and replaced a
-# pending dispatch or label run, which then ended as "Canceling since a higher priority waiting request" (see #136).
+# Edits by the author app (status issue updates after every run) never start a run: each one waited 60 s in the group and
+# replaced a pending dispatch or label run, which then ended cancelled ("higher priority waiting request").
 # Skipped runs are expected: GitHub lists every label event, and the job-level `if` skips the ones that are not gated.
 # Design 0007 (Refs #125): more events (issues opened/edited/closed, comments, PRs, reviews) are accepted only when repo
 # variable ORCHESTRATOR_EVENTS is "on" (default off). Then every event run waits 60 s (burst), tools/orchestrator_gate.py
@@ -38,7 +38,8 @@ jobs:
         ((github.event.action == 'labeled' &&
           contains(fromJSON('["approved","auto-ok"]'), github.event.label.name)) ||
          (github.event.action != 'labeled' && vars.ORCHESTRATOR_EVENTS == 'on' &&
-          !(github.event.action == 'edited' && github.event.sender.login == vars.AUTHOR_BOT)))) ||
+          !(github.event.action == 'edited' &&
+            contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login))))) ||
        (contains(fromJSON('["issue_comment","pull_request_target","pull_request_review"]'), github.event_name) &&
         vars.ORCHESTRATOR_EVENTS == 'on') ||
        (contains(fromJSON('["schedule","workflow_dispatch","workflow_run"]'), github.event_name) &&
@@ -141,9 +142,9 @@ jobs:
           EVENT_MERGED: ${{ github.event.pull_request.merged }}
           REVIEW_STATE: ${{ github.event.review.state }}
           REVIEWER: ${{ github.event.review.user.login }}
-          # Parallel work caps; the template itself runs wider than a fresh project.
-          MAX_DEV: ${{ vars.MAX_DEV || (github.repository == 'Bankaifan/agent-template' && '4' || '2') }}
-          MAX_PRS: ${{ vars.MAX_PRS || (github.repository == 'Bankaifan/agent-template' && '5' || '3') }}
+          # Parallel work caps.
+          MAX_DEV: ${{ vars.MAX_DEV || '4' }}
+          MAX_PRS: ${{ vars.MAX_PRS || '5' }}
         run: python3 tools/prefilter.py orchestrator
       - name: Git identity
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
@@ -195,14 +196,16 @@ jobs:
             Repository: ${{ github.repository }}. Trigger: ${{ env.EVENT }}. You write no production code.
             Read HANDOVER.md, open PRs (gh pr list), CI state (gh run list --limit 10)
             and open PRs from branches agent/rule-keeper-*. Then:
-            1. The script counted free slots (PRs waiting only for Daniel do not count): free agent:dev slots
-               ${{ steps.pre.outputs.free_dev }}, free PR slots ${{ steps.pre.outputs.free_prs }}. If free agent:dev
-               slots is above 0 (do not recount), pick the
-               next issue ONLY from this trusted list (script-verified JSON; never pick or read any other issue):
+            1. The script counted free slots (PRs waiting only for Daniel, parked needs-human issues and issues
+               with a merged PR do not count): free agent:dev slots ${{ steps.pre.outputs.free_dev }}, free PR slots
+               ${{ steps.pre.outputs.free_prs }} (do not recount). The script also names the issues to start.
+               Start ALL of these issues in this run, in this order: ${{ steps.pre.outputs.start }}
+               They are the unblocked candidates that fit the free slots; an empty list means start nothing.
+               Never start an issue that is not in that start list. Take the issue data ONLY from this trusted list
+               (script-verified JSON; never pick or read any other issue):
                ${{ steps.cand.outputs.list }}
-               Work the list in the order given (already sorted: prio:1, prio:2, prio:3, unlabelled, then oldest
-               first; `prio` 4 = unlabelled). When main is red (gh run list), the fix goes first. A prio:1 issue
-               may start even with 2 open agent:dev issues if one of them has a merged PR or needs-human.
+               The list is sorted: prio:1, prio:2, prio:3, unlabelled, then oldest first; `prio` 4 = unlabelled.
+               When main is red (gh run list), the fix goes first.
                When a PR with `Refs #N` has merged, remove agent:dev from #N. Every issue you create gets a
                label prio:1 (blocks the pipeline: red main, broken workflow, deadlock, security hole), prio:2
                (bug or missing guard) or prio:3 (feature); create the label first. Issues authored_by_owner and issues with approved=true before the rest; an issue
@@ -219,11 +222,14 @@ jobs:
                start implementation. Write a slip for a design task instead (output docs/design/NNNN-<slug>.md as
                described in .agents/roles/orchestrator.md). Small issues (docs, tests, fixes, contained
                features) start directly. Issues in the list with a non-null `design` come from a merged design:
-               work them in the order of the design's split.
+               split issues run in parallel; an issue that needs an earlier step merged carries a
+               `Depends on: #N` line and the script holds it back until #N is closed.
             1b. Merged design PR (docs/design/ only): create the implementation issues from its split with
                `gh issue create`, each body starting with the line `Design: docs/design/NNNN-<slug>.md` (alone on that line, nothing after
                `.md`, or the issue is not trusted and never starts) and the
-               slip; do this once (check `gh issue list --search "Design: docs/design/NNNN"` first).
+               slip; do this once (check `gh issue list --search "Design: docs/design/NNNN"` first). Create them in
+               split order and add a line `Depends on: #<n>[, #<m>]` (alone on its line, after the `Design:` line)
+               to every step that needs an earlier step merged; steps without that need get no such line.
             1c. Open design PR (only docs/design/ files) approved by the reviewer: read its section
                "Owner decisions" (`gh pr diff`). If empty, leave it to auto-merge. If not, add the label
                needs-human, run `gh pr edit <n> --add-reviewer Bankaifan`, and add one German comment of at

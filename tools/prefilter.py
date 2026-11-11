@@ -3,8 +3,10 @@
 Usage: python3 prefilter.py orchestrator|scout
 Needs the gh CLI (GH_TOKEN, GH_REPO) and git history. Environment: OWNER (default Bankaifan),
 IDEAS (scout, issues per run), STALE_DAYS (default 7), TRUSTED (orchestrator, JSON from trusted_issues.py),
-MAX_DEV (agent:dev issues at once, default 2) and MAX_PRS (open agent PRs, default 3). An empty or non-numeric
+MAX_DEV (agent:dev issues at once, default 4) and MAX_PRS (open agent PRs, default 5). An empty or non-numeric
 MAX_DEV/MAX_PRS falls back to the default (a warning goes to stderr).
+Slots: an open agent:dev issue holds one unless it is parked (needs-human), done (a merged PR names it) or waits
+only for the owner. Output `start` = the issues to start now: unblocked candidates (`deps.py`), at most `free_dev`.
 Orchestrator events (design 0007 4.3): EVENT, EVENT_ACTION, EVENT_NUMBER (issue or PR), EVENT_SENDER, EVENT_MERGED,
 REVIEW_STATE, REVIEWER. With an EVENT the table row decides `work`; without a row (schedule, dispatch) the counts do.
 The Claude step runs only when `work=true`; the counts and `reason` are printed to the log.
@@ -16,6 +18,7 @@ import subprocess
 import sys
 import time
 
+import deps
 import train
 
 
@@ -31,8 +34,8 @@ def env_cap(name, default):
         return default
 
 
-MAX_DEV = env_cap("MAX_DEV", 2)  # open agent:dev issues (agent jobs at once)
-MAX_PRS = env_cap("MAX_PRS", 3)  # open agent PRs
+MAX_DEV = env_cap("MAX_DEV", 4)  # open agent:dev issues (agent jobs at once)
+MAX_PRS = env_cap("MAX_PRS", 5)  # open agent PRs
 MAX_OPEN_IDEAS = 10
 
 
@@ -40,25 +43,24 @@ def closing_issues(body):
     return {int(n) for n in re.findall(r"(?:Closes|Refs) #(\d+)\b", body or "")}
 
 
-def free_slots(dev_open, open_prs, waiting_issues, waiting_prs):
-    """(free agent:dev slots, free PR slots). Issues and PRs waiting only for the owner do not count against the caps."""
-    return (max(0, MAX_DEV - (dev_open - waiting_issues)), max(0, MAX_PRS - (open_prs - waiting_prs)))
+def free_slots(dev, waiting, stuck, open_prs, waiting_prs):
+    """(free agent:dev slots, free PR slots). DEV, WAITING, STUCK are sets of issue numbers: an open agent:dev issue
+    holds a slot unless its PR waits only for the owner or it is stuck (`stuck_slots`). PRs waiting only for the
+    owner do not count against MAX_PRS."""
+    return (max(0, MAX_DEV - len(set(dev) - set(waiting) - set(stuck))), max(0, MAX_PRS - (open_prs - waiting_prs)))
 
 
-def startable(trusted, dev_open, stuck=0, waiting=0, waiting_prs=0):
-    """Trusted issues the orchestrator could start: no agent:dev yet, ideas only when approved/auto-ok.
-    `stuck` = open agent:dev issues with a merged PR or needs-human; they must not block a prio:1 issue.
-    `waiting` = open agent:dev issues whose PR waits only for the owner: they free their slot (not for prio:1 beyond
-    the existing stuck rule). At MAX_WAITING waiting PRs (`waiting_prs`) new risk:security slips wait."""
-    dev_open = max(0, dev_open - waiting)
+def startable(trusted, free_dev, waiting_prs=0, blocked=()):
+    """Trusted issues the orchestrator could start, in list order: no agent:dev yet, ideas only when approved/auto-ok,
+    not in BLOCKED (an open `Depends on:` issue). At MAX_WAITING waiting PRs (`waiting_prs`) new risk:security slips wait."""
+    if free_dev <= 0:
+        return []
     out = []
     for item in trusted:
         if waiting_prs >= train.MAX_WAITING and "risk:security" in item["labels"]:
             continue
-        if dev_open >= MAX_DEV and not (item.get("prio") == 1 and dev_open - stuck < MAX_DEV):
-            continue
         labels = set(item["labels"])
-        if "agent:dev" in labels or "needs-human" in labels:
+        if "agent:dev" in labels or "needs-human" in labels or item["number"] in blocked:
             continue
         if "idea" in labels and not (item["approved"] or item["auto_ok"]):
             continue
@@ -66,12 +68,13 @@ def startable(trusted, dev_open, stuck=0, waiting=0, waiting_prs=0):
     return out
 
 
-def start_candidates(trusted, dev_open, free_prs, stuck=0, waiting=0, waiting_prs=0):
-    """What the orchestrator may start. No free PR slot means nothing (the prompt says so), and the guard reads
-    STARTABLE=true with no visible action as a silent run: the same rule as `event_facts`, not only the dev slots."""
+def start_candidates(trusted, free_dev, free_prs, waiting_prs=0, blocked=()):
+    """What the orchestrator starts in this run: the startable issues that fit the free agent:dev and PR slots. No free PR
+    slot means nothing (the prompt says so), and the guard reads STARTABLE=true with no visible action as a silent
+    run: the same rule as `event_facts`, not only the dev slots."""
     if free_prs <= 0:
         return []
-    return startable(trusted, dev_open, stuck, waiting, waiting_prs)
+    return startable(trusted, free_dev, waiting_prs, blocked)[:min(free_dev, free_prs)]
 
 
 def handover_stale(age_days, newer_commits, stale_days):
@@ -120,7 +123,7 @@ def event_reason(event, action, f):
     return False, "no-match"
 
 
-def event_facts(event, number, free_prs, trusted_numbers, owner, approver):
+def event_facts(event, number, free_prs, trusted_numbers, owner, approver, start=()):
     """Facts for `event_reason`, read live for NUMBER (issue or PR) with the gh CLI. Environment: EVENT_SENDER,
     EVENT_MERGED (true|false), REVIEW_STATE and REVIEWER (pull_request_review). Nothing here comes from comment text."""
     sender, reviewer = os.environ.get("EVENT_SENDER", ""), os.environ.get("REVIEWER", "")
@@ -145,7 +148,7 @@ def event_facts(event, number, free_prs, trusted_numbers, owner, approver):
     names = {lab["name"] for lab in issue["labels"]}
     f["needs_human"], f["agent_dev"] = "needs-human" in names, "agent:dev" in names
     f["trusted"] = number in trusted_numbers
-    f["startable"] = number in trusted_numbers and free_prs > 0 and not (names & {"agent:dev", "needs-human"})
+    f["startable"] = number in start  # the start list of this run: trusted, unblocked, within the free slots
     comments = issue["comments"]
     f["receiver_marker"] = bool(comments) and "<!-- answer-receiver" in (comments[-1].get("body") or "")
     prs = json.loads(gh("pr", "list", "--state", "open", "--search", f"#{number} in:body", "--json", "number,body"))
@@ -165,19 +168,20 @@ def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
-def stuck_slots():
-    """Open agent:dev issues that are stuck: needs-human, or a merged PR mentions them."""
-    n = 0
-    for i in json.loads(gh("issue", "list", "--state", "open", "--label", "agent:dev", "--limit", "50",
-                           "--json", "number,labels")):
+def stuck_slots(dev):
+    """Numbers of the open agent:dev issues in DEV (number, labels) that are stuck: needs-human, or a merged PR
+    mentions them. They hold no slot. Only same-repo `agent/` PRs count: anyone can write `Refs #N` into a PR body."""
+    out = set()
+    for i in dev:
         if any(lab["name"] == "needs-human" for lab in i["labels"]):
-            n += 1
+            out.add(i["number"])
             continue
         merged = json.loads(gh("pr", "list", "--state", "merged", "--search", f"#{i['number']} in:body",
-                               "--limit", "5", "--json", "number,body"))
-        if any(re.search(rf"(?:Closes|Refs) #{i['number']}\b", p.get("body") or "") for p in merged):
-            n += 1
-    return n
+                               "--limit", "5", "--json", "number,body,headRefName,isCrossRepository"))
+        if any(i["number"] in closing_issues(p.get("body")) for p in merged
+               if p.get("headRefName", "").startswith("agent/") and not p.get("isCrossRepository")):
+            out.add(i["number"])
+    return out
 
 
 def waiting_for_owner(owner, approver):
@@ -210,15 +214,18 @@ def handover_state():
 
 def main(mode) -> int:
     if mode == "orchestrator":
-        dev_open = count("issue", "list", "--state", "open", "--label", "agent:dev")
+        dev = json.loads(gh("issue", "list", "--state", "open", "--label", "agent:dev", "--limit", "200",
+                            "--json", "number,labels"))
         w_issues, w_prs = waiting_for_owner(os.environ.get("OWNER", "Bankaifan"), os.environ.get("APPROVER_BOT", ""))
-        w_dev = sum(1 for i in json.loads(gh("issue", "list", "--state", "open", "--label", "agent:dev",
-                                             "--limit", "50", "--json", "number")) if i["number"] in w_issues)
-        free_dev, free_prs = free_slots(dev_open, count("pr", "list", "--state", "open"), w_dev, w_prs)
+        stuck = stuck_slots(dev)
+        free_dev, free_prs = free_slots({i["number"] for i in dev}, w_issues, stuck,
+                                        count("pr", "list", "--state", "open"), w_prs)
         trusted = json.loads(os.environ.get("TRUSTED") or subprocess.run(
             [sys.executable, "tools/trusted_issues.py"], check=True, capture_output=True, text=True).stdout)
-        cands = start_candidates(trusted, dev_open, free_prs, stuck_slots() if dev_open - w_dev >= MAX_DEV else 0,
-                                 w_dev, w_prs)
+        issues = json.loads(gh("issue", "list", "--state", "open", "--limit", "200", "--json", "number,body"))
+        open_numbers = {i["number"] for i in issues}
+        blocked = {i["number"] for i in issues if deps.blocked(i["number"], i.get("body"), open_numbers)}
+        cands = start_candidates(trusted, free_dev, free_prs, w_prs, blocked)
         human = count("pr", "list", "--state", "open", "--label", "needs-human")
         age, newer = handover_state()
         stale = handover_stale(age, newer, float(os.environ.get("STALE_DAYS", "7")))
@@ -227,11 +234,12 @@ def main(mode) -> int:
         verdict = None
         if event:
             facts = event_facts(event, env_cap("EVENT_NUMBER", 0), free_prs, {t["number"] for t in trusted},
-                                os.environ.get("OWNER", "Bankaifan"), os.environ.get("APPROVER_BOT", ""))
+                                os.environ.get("OWNER", "Bankaifan"), os.environ.get("APPROVER_BOT", ""), cands)
             verdict = event_reason(event, action, facts)
         if verdict:
             work, reason = verdict
-        print(f"dev_open={dev_open} waiting_prs={w_prs} free_dev={free_dev} free_prs={free_prs} candidates={cands} needs_human_prs={human} "
+        print(f"dev_open={len(dev)} stuck={sorted(stuck)} waiting_prs={w_prs} free_dev={free_dev} free_prs={free_prs} "
+              f"blocked={sorted(blocked)} start={cands} needs_human_prs={human} "
               f"handover_age_days={age:.1f} commits_since={newer} stale={stale} event={event or '-'}/{action or '-'} "
               f"reason={reason} work={work}")
     elif mode == "scout":
@@ -246,7 +254,7 @@ def main(mode) -> int:
         with open(out, "a") as f:
             f.write(f"work={str(work).lower()}\n")
             if mode == "orchestrator":
-                f.write(f"startable={str(bool(cands)).lower()}\nreason={reason}\n")
+                f.write(f"startable={str(bool(cands)).lower()}\nstart={','.join(map(str, cands))}\nreason={reason}\n")
                 f.write(f"free_dev={free_dev}\nfree_prs={free_prs}\nwaiting_prs={w_prs}\n")
     return 0
 

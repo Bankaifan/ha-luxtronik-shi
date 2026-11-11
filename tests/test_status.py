@@ -72,6 +72,65 @@ def test_ci_state():
     assert st.ci_state([{"status": "IN_PROGRESS", "conclusion": ""}]) == "running"
 
 
+REQUIRED = {"validate", "risk"}
+
+
+def test_ci_state_counts_only_required_checks():
+    ok = {"name": "validate", "conclusion": "SUCCESS"}
+    risk_ok = {"name": "risk", "conclusion": "SUCCESS"}
+    orch = {"name": "orchestrate", "conclusion": "CANCELLED"}
+    assert st.ci_state([ok, risk_ok, orch], REQUIRED) == "green"
+    assert st.ci_state([ok, {"name": "risk", "conclusion": "FAILURE"}], REQUIRED) == "red"
+    assert st.ci_state([ok, {"name": "risk", "status": "IN_PROGRESS", "conclusion": ""}], REQUIRED) == "running"
+    assert st.ci_state([ok, risk_ok, {"name": "orchestrate", "status": "IN_PROGRESS", "conclusion": ""}],
+                       REQUIRED) == "green"
+    assert st.ci_state([ok, {"context": "risk", "state": "FAILURE"}], REQUIRED) == "red"
+
+
+def test_required_check_not_reported_yet_is_running():
+    assert st.ci_state([{"name": "validate", "conclusion": "SUCCESS"}], REQUIRED) == "running"
+    assert st.ci_state([], REQUIRED) == "running"
+
+
+def test_ci_state_without_required_set_counts_every_check():
+    ok = {"name": "validate", "conclusion": "SUCCESS"}
+    orch = {"name": "orchestrate", "conclusion": "CANCELLED"}
+    for null in (None, set()):  # unreadable or empty ruleset: as before
+        assert st.ci_state([ok, orch], null) == "red"
+        assert st.ci_state([ok], null) == "green"
+        assert st.ci_state([], null) == "none"
+
+
+def test_non_required_reds_are_listed_not_blocking():
+    ok = {"name": "validate", "conclusion": "SUCCESS"}
+    rollup = [ok, {"name": "orchestrate", "conclusion": "CANCELLED"}, {"name": "risk", "conclusion": "FAILURE"}]
+    assert st.non_required_reds(rollup, REQUIRED) == ["orchestrate"]
+    assert st.non_required_reds(rollup, None) == []
+    green = [ok, {"name": "risk", "conclusion": "SUCCESS"}, rollup[1]]
+    line = st.pr_line(pr(7, statusCheckRollup=green), "Bankaifan", REQUIRED)
+    assert "CI green" in line and "red but not required: orchestrate" in line
+    assert "red but not required" not in st.pr_line(pr(7, statusCheckRollup=green), "Bankaifan")
+
+
+def test_required_contexts_reads_ruleset(tmp_path):
+    path = tmp_path / "main.json"
+    rules = [{"type": "deletion"},
+             {"type": "required_status_checks",
+              "parameters": {"required_status_checks": [{"context": "validate"}, {"context": "risk"}]}}]
+    path.write_text(json.dumps({"rules": rules}), encoding="utf-8")
+    assert st.required_contexts(str(path)) == {"validate", "risk"}
+
+
+def test_required_contexts_null_cases(tmp_path):
+    assert st.required_contexts(str(tmp_path / "missing.json")) is None
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    assert st.required_contexts(str(broken)) is None
+    none_required = tmp_path / "none.json"
+    none_required.write_text(json.dumps({"rules": [{"type": "deletion"}]}), encoding="utf-8")
+    assert st.required_contexts(str(none_required)) is None
+
+
 def test_waits_for_daniel():
     assert st.waits_for(pr(labels=["needs-human"]), "Bankaifan") == "needs-human"
     assert st.waits_for(pr(reviewRequests=[{"login": "Bankaifan"}]), "Bankaifan") == "waiting for Daniel"

@@ -233,8 +233,8 @@ def test_env_int_falls_back_to_default(monkeypatch):
 
 def test_summary_step_passes_caps_read_only():
     text = WORKFLOW_YML.read_text(encoding="utf-8")
-    assert "MAX_DEV: ${{ vars.MAX_DEV || (github.repository == 'Bankaifan/agent-template' && '4' || '2') }}" in text
-    assert "MAX_PRS: ${{ vars.MAX_PRS || (github.repository == 'Bankaifan/agent-template' && '5' || '3') }}" in text
+    assert "MAX_DEV: ${{ vars.MAX_DEV || '4' }}" in text
+    assert "MAX_PRS: ${{ vars.MAX_PRS || '5' }}" in text
     assert "gh variable" not in text and "gh secret" not in text
 
 
