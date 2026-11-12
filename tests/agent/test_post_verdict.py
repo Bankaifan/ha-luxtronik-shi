@@ -3,7 +3,7 @@ import json
 import pathlib
 
 spec = importlib.util.spec_from_file_location(
-    "post_verdict", pathlib.Path(__file__).resolve().parents[1] / "tools" / "ci" / "post_verdict.py")
+    "post_verdict", pathlib.Path(__file__).resolve().parents[2] / "tools" / "ci" / "post_verdict.py")
 pv = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pv)
 
