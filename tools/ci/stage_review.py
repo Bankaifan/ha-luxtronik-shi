@@ -57,7 +57,7 @@ def bad(b):
 
 
 def is_test_of_security_tool(path):
-    m = re.fullmatch(r"tests/test_(.+)\.py", path)
+    m = re.fullmatch(r"tests/(?:agent/)?test_(.+)\.py", path)
     return bool(m) and any(m.group(1) == s or m.group(1).startswith(s + "_") for s in SECURITY_STEMS)
 
 

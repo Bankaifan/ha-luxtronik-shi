@@ -2,7 +2,7 @@
 
 security: the diff touches workflow `permissions:`, `allowedTools`, `allowed_bots`, secrets/token handling,
   trust logic (tools/trusted_issues.py, tools/agent_guard.py), `.github/rulesets/`, CODEOWNERS, this check,
-  or the "Limits" section of AGENTS.md. infra: any other change to agent infrastructure. none: everything else.
+  `.agents/checks.json` (the project's required checks), or the "Limits" section of AGENTS.md. infra: any other change to agent infrastructure. none: everything else.
 
 CLI:
   risk.py classify [AGENTS_MD]   read a unified diff on stdin, print the level (AGENTS_MD: base file for the Limits section)
@@ -28,8 +28,9 @@ import liveness
 
 SECURITY_FILES = (".github/rulesets/", ".github/CODEOWNERS", "tools/trusted_issues.py", "tools/agent_guard.py",
                   "tools/exec_log.py", "tools/guard_mark.py",
-                  "tools/ci/risk.py", ".github/workflows/risk.yml")
-INFRA_PATHS = (".github/", ".agents/", "tools/", "AGENTS.md", "CLAUDE.md", "Makefile", ".claude/", ".mcp.json")
+                  "tools/ci/risk.py", ".github/workflows/risk.yml", ".agents/checks.json")
+INFRA_PATHS = (".github/", ".agents/", "tools/", "AGENTS.md", "AGENTS.project.md", "CLAUDE.md", "Makefile", ".claude/",
+              ".mcp.json")
 SECURITY_LINES = re.compile(
     r"permissions:|allowedTools|allowed_bots|secrets\.|_TOKEN|\btoken\b|app-token|APP_KEY", re.IGNORECASE)
 LINE_SCANNED = (".github/", "tools/", ".claude/", ".mcp.json", "Makefile")  # prose in docs and roles is no token handling

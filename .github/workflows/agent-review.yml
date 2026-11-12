@@ -176,4 +176,5 @@ jobs:
           EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
           PR: ${{ steps.round.outputs.pr }}
           BHASH: ${{ steps.round.outputs.bhash }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
         run: python3 tools/agent_guard.py silent review "$PR" "$SHA" ${BHASH:+"$BHASH"}

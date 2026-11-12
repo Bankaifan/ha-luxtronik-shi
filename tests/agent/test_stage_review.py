@@ -2,7 +2,7 @@ import importlib.util
 import pathlib
 import sys
 
-_path = pathlib.Path(__file__).parent.parent / "tools" / "ci" / "stage_review.py"
+_path = pathlib.Path(__file__).parent.parent.parent / "tools" / "ci" / "stage_review.py"
 sys.path.insert(0, str(_path.parent))
 _spec = importlib.util.spec_from_file_location("stage_review", _path)
 sr = importlib.util.module_from_spec(_spec)
@@ -20,22 +20,29 @@ def run(tmp_path, diff, fetch=None):
 
 
 def test_stages_workflow_and_tool_and_lists_test(tmp_path):
-    diff = block(".github/workflows/a.yml") + block("tools/x.py") + block("tests/test_x.py", add=3, delete=2)
+    diff = block(".github/workflows/a.yml") + block("tools/x.py") + block("tests/agent/test_x.py", add=3, delete=2)
     turns, staged, skipped = run(tmp_path, diff, lambda p: "content of " + p)
     assert ".github/workflows/a.yml" in staged and "tools/x.py" in staged
-    assert "tests/test_x.py" not in staged
-    assert skipped == "tests/test_x.py\tmodified\t+3/-2\n"
+    assert "tests/agent/test_x.py" not in staged
+    assert skipped == "tests/agent/test_x.py\tmodified\t+3/-2\n"
     assert (tmp_path / "files" / "tools" / "x.py").read_text() == "content of tools/x.py"
     assert turns == 13
 
 
 def test_deleted_test_and_security_tool_test_stay(tmp_path):
-    diff = (block("tests/test_old.py", add=0, delete=4, mode="deleted file mode 100644\n")
-            + block("tests/test_risk.py") + block("tests/test_other.py") + block("tools/y.py"))
+    diff = (block("tests/agent/test_old.py", add=0, delete=4, mode="deleted file mode 100644\n")
+            + block("tests/agent/test_risk.py") + block("tests/agent/test_other.py") + block("tools/y.py"))
     _, staged, skipped = run(tmp_path, diff)
-    assert "tests/test_old.py" in staged and "tests/test_risk.py" in staged
+    assert "tests/agent/test_old.py" in staged and "tests/agent/test_risk.py" in staged
+    assert "tests/agent/test_other.py" not in staged and "tests/agent/test_other.py" in skipped
+    assert not (tmp_path / "files" / "tests" / "agent" / "test_old.py").exists()
+
+
+def test_root_test_of_security_tool_is_staged(tmp_path):
+    diff = block("tests/test_guard_mark.py") + block("tests/test_agent_guard.py") + block("tests/test_other.py")
+    _, staged, skipped = run(tmp_path, diff)
+    assert "tests/test_guard_mark.py" in staged and "tests/test_agent_guard.py" in staged
     assert "tests/test_other.py" not in staged and "tests/test_other.py" in skipped
-    assert not (tmp_path / "files" / "tests" / "test_old.py").exists()
 
 
 def test_turns_grow_and_cap():
@@ -47,7 +54,7 @@ def test_turns_grow_and_cap():
 
 
 def test_no_relevant_file_stages_full_diff(tmp_path):
-    diff = block("docs/a.md") + block("tests/test_z.py")
+    diff = block("docs/a.md") + block("tests/agent/test_z.py")
     _, staged, skipped = run(tmp_path, diff)
     assert staged == diff and skipped == ""
 

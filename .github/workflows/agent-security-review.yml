@@ -109,6 +109,8 @@ jobs:
             with status and +/- counts, left out of the diff) and `.review/files/<path>` (a staged file at the PR head).
             Read them with Read (long files in parts with offset/limit); open a skipped path with `gh pr diff` only if
             its name makes it relevant. Use `gh pr view` for the body and `gh issue view` for the linked issue.
+            Bash allows only plain `gh pr view|diff` and `gh issue view` calls: no cd, pipes, `;` or `&&` (denied). Read AGENTS.md
+            and other files with Read or Grep. A denied call is no reason to stop: use those tools and give the verdict.
             If you could not read the change, give no verdict line at all (the run then fails and can be re-run);
             `changes` is only for findings in the code.
             Do not post anything yourself: end your final reply with your verdict, whose first line is exactly

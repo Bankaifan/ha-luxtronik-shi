@@ -4,7 +4,7 @@ import pathlib
 
 import pytest
 
-_path = pathlib.Path(__file__).parent.parent / "tools" / "ci" / "risk.py"
+_path = pathlib.Path(__file__).parent.parent.parent / "tools" / "ci" / "risk.py"
 _spec = importlib.util.spec_from_file_location("risk", _path)
 risk = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(risk)
@@ -23,7 +23,8 @@ def test_plain_code_and_docs_are_none():
 
 
 def test_infra_paths():
-    for p in (".github/workflows/scout.yml", ".agents/roles/developer.md", "tools/status.py", "Makefile"):
+    for p in (".github/workflows/scout.yml", ".agents/roles/developer.md", "tools/status.py", "Makefile",
+              "AGENTS.project.md", "CLAUDE.md"):
         assert risk.classify(diff(p, "+echo hi")) == "infra", p
 
 
