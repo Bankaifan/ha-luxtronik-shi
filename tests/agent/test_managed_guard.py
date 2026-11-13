@@ -5,6 +5,8 @@ import pathlib
 
 import pytest
 
+pytestmark = pytest.mark.template_only
+
 ROOT = pathlib.Path(__file__).parent.parent.parent
 _spec = importlib.util.spec_from_file_location("managed_guard", ROOT / "tools" / "managed_guard.py")
 mod = importlib.util.module_from_spec(_spec)

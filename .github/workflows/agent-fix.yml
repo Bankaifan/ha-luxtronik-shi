@@ -4,10 +4,10 @@ run-name: "${{ github.event_name == 'pull_request_review' && github.event.pull_r
 #  - the approver app requesting changes (pull_request_review), or
 #  - a failed `validate` run (workflow_run), which counts as a round too.
 # Both triggers run in the base repo context and get the repo secrets.
-# Also started by `workflow_dispatch` with input `pr` (the status run, for a PR that conflicts with main; it has
-# already bumped the round label).
+# Also started by `workflow_dispatch` with input `pr` (the status run, for a PR that conflicts with main): a conflict
+# is no finding, so it starts a fix without reading or bumping the round labels.
 # Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else needs-human.
-# A red CI bumps the label first.
+# A red CI bumps the label first; the first PR-form or VERSION/CHANGELOG failure of a PR gets an uncounted fix run (formfix).
 on:
   pull_request_review:
     types: [submitted]
@@ -50,6 +50,7 @@ jobs:
       REVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
       RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
       RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
       REVIEWER: ${{ github.event.review.user.login }}
       REVIEW_STATE: ${{ github.event.review.state }}
       REVIEW_COMMIT: ${{ github.event.review.commit_id }}
@@ -69,6 +70,7 @@ jobs:
           client-id: ${{ vars.APPROVER_CLIENT_ID }}
           private-key: ${{ secrets.APPROVER_APP_KEY }}
           permission-pull-requests: write
+          permission-actions: read
       # main only: the label and login helper.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -143,7 +145,19 @@ jobs:
           echo "model=$model" >> "$GITHUB_OUTPUT"
           case "$labels" in *,needs-human,*) echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
           if [ "$EVENT" = workflow_run ]; then
-            # A red CI is a round: bump the counter like the reviewer does.
+            # A red CI caused by PR form or VERSION/CHANGELOG is no finding on the diff: the first one per PR gets a
+            # fix run without a round (label formfix); a second one counts a round like any red CI, so it cannot loop.
+            # An unreadable log counts as a round, as before.
+            if guard form-failure "$RUN_ID"; then
+              case "$labels" in
+                *,formfix,*) echo "Second form red CI on this PR: counts a round" ;;
+                *)
+                  guard label pr "$pr" formfix
+                  echo "Red CI from PR form or VERSION/CHANGELOG: fix run without a round"
+                  echo "fix=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+              esac
+            fi
+            # Any other red CI is a round: bump the counter like the reviewer does.
             case "$labels" in
               *,review:3,*) limit; exit 0 ;;
               *,review:2,*) guard label pr "$pr" review:3; limit; exit 0 ;;
@@ -151,6 +165,8 @@ jobs:
               *) guard label pr "$pr" review:1 ;;
             esac
             echo "fix=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            echo "fix=true" >> "$GITHUB_OUTPUT"  # conflict with main: no round
           else
             # The reviewer already bumped the counter before reviewing.
             case "$labels" in
@@ -188,17 +204,38 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          # No `workflows` and no `actions` scope: GitHub refuses a push that changes .github/workflows/ (design 0017, step 3).
           permission-contents: write
-          permission-workflows: write
           permission-pull-requests: write
           permission-issues: write
+      # The PR can be merged (branch deleted) between `prepare` and here (#311): then there is nothing to fix.
+      - id: open
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$(gh pr view "$PR" --json state --jq .state)" = OPEN ]; then
+            echo "open=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "PR $PR is no longer open: no fix round"; echo "open=false" >> "$GITHUB_OUTPUT"
+          fi
+      # Reads the failed CI log and triggers CI: both need `actions`, which the model token no longer has. This short-lived token
+      # is used by these script steps only, never by the model step.
+      - id: ci-app
+        if: steps.open.outputs.open == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
           permission-actions: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+        if: steps.open.outputs.open == 'true'
         with:
           token: ${{ steps.app.outputs.token }}
           ref: ${{ needs.prepare.outputs.branch }}
           fetch-depth: 0
       - id: before
+        if: steps.open.outputs.open == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -209,25 +246,29 @@ jobs:
           rm -rf .agent-out && mkdir .agent-out && echo ".agent-out/" >> .git/info/exclude
           gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/body-before.txt"
       - name: Git identity
+        if: steps.open.outputs.open == 'true'
         run: |
           git config user.name "Daniel"
           git config user.email "476059+Bankaifan@users.noreply.github.com"
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: steps.open.outputs.open == 'true'
         with:
           python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
       - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
+        if: steps.open.outputs.open == 'true'
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
       # A large `gh run view --log-failed` output lands in a tool-results file the agent may not read, and pipes are
       # denied; so the failing lines are fetched here into the checkout (git-ignored) and the agent reads that file.
       - name: Fetch the failed CI log
-        if: env.EVENT == 'workflow_run'
+        if: steps.open.outputs.open == 'true' && env.EVENT == 'workflow_run'
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
         run: |
           gh run view "$RUN_ID" --log-failed | tail -n 400 > ci-failure.log || echo "log not available" > ci-failure.log
       - id: claude
+        if: steps.open.outputs.open == 'true'
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -251,24 +292,28 @@ jobs:
             authored by Daniel (no Co-authored-by) on top of current origin/main and `git push --force-with-lease`.
             No tool or AI attribution in commits, PR bodies or comments (no "Generated with", session link, Co-Authored-By, Claude-Session).
             The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
-            never `pip install`. Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects
+            never `pip install`. Use one simple command per Bash call (a pipe may end in head, tail, grep, sort, wc or jq); no `&&`, `;`, `$(...)` or redirects
             (they do not match the allow list and are denied).
+            Changes under .github/workflows/ are allowed: commit them like any file. After your run a script carries them
+            past the token as a patch file (workflow-apply applies it after the security review). Older comments saying a
+            workflow push was refused or that Daniel applies it by hand are outdated: implement and commit anyway.
             Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
             comment on the issue/PR saying which one instead of stopping silently.
             If the review only asks for a change of the PR body (title or body text, e.g. `Closes #N` -> `Refs #N`),
             write the complete new body (max 5 lines, ASCII, no Closes/Fixes/Resolves keywords) to .agent-out/pr-body.md
             and do not run `gh pr edit` yourself: a fixed step after you applies that file to PR #${{ env.PR }}. Never change labels.
             Do not open a new PR.
+          # DEV_SHELL=free (repo variable, design 0017 step 6) gives bare Bash; unset keeps the command list below.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 60
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,${{ vars.DEV_SHELL == 'free' && 'Bash' || 'Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(sort:*),Bash(jq:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)' }}"
       # Deterministic, fixed flags: the agent only writes the file, it never runs `gh pr edit`.
       # Only after a successful agent run. The file must be a regular file (no symlink) and pass the checks below.
       - name: Apply the PR body the agent wrote
-        if: ${{ !cancelled() && steps.claude.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.open.outputs.open == 'true' && steps.claude.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -299,29 +344,61 @@ jobs:
             echo "::error::PR body looks like it contains a secret; not applied"; exit 1
           fi
           gh pr edit "$PR" --body-file "$f"
-      # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
-      - name: Make sure CI runs on the PR head
-        if: ${{ !cancelled() }}
+      # git runs here, without the guard key: the agent may have planted hooks or config in the checkout.
+      - name: Fetch guard tools (no key)
+        if: ${{ always() && steps.open.outputs.open == 'true' }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # The agent may edit the checkout: run the helpers as they are on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
+      # A push that changes .github/workflows/ is refused (no `workflows` scope on the model token): the workflow changes
+      # travel as .agents/workflow-patches/<issue>.patch and workflow-apply.yml applies them after the security review.
+      - name: Carry workflow changes as a patch
+        if: ${{ always() && steps.open.outputs.open == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+          out=$(python3 "$RUNNER_TEMP/guard/tools/workflow_patch.py" stash "$BRANCH")
+          if [ -n "$out" ]; then
+            gh pr comment "$PR" --body "Workflow changes of this fix travel as a patch file; workflow-apply applies them after the security review."
+          fi
+      # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
+      - name: Find the CI trigger inputs
+        id: ci-in
+        if: ${{ !cancelled() && steps.open.outputs.open == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: echo "sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
+      - name: Make sure CI runs on the PR head
+        id: ci
+        if: ${{ !cancelled() && steps.open.outputs.open == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ steps.ci-in.outputs.sha }}
+        run: |
           for _ in 1 2 3 4 5 6; do
-            n=$(gh run list --workflow validate.yml --commit "$sha" --json databaseId --jq length)
-            if [ "$n" -gt 0 ]; then echo "validate already runs for $sha"; exit 0; fi
+            n=$(gh run list --workflow validate.yml --commit "$SHA" --json databaseId --jq length)
+            if [ "$n" -gt 0 ]; then echo "validate already runs for $SHA"; exit 0; fi
             sleep 10
           done
           gh workflow run validate.yml --ref "$BRANCH"
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
-          python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" label pr "$PR" agent:review
+          echo "triggered=true" >> "$GITHUB_OUTPUT"
+      - name: Label the PR for review
+        if: ${{ steps.open.outputs.open == 'true' && steps.ci.outputs.triggered == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" label pr "$PR" agent:review
       # Never end silently: no new commit on the PR head means a comment, needs-human and Daniel's review.
       - name: Escalate a run that pushed no fix
-        if: ${{ always() }}
+        if: ${{ always() && steps.open.outputs.open == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -329,11 +406,10 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
           HEAD_BEFORE: ${{ steps.before.outputs.sha }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}  # without it the note can never offer a restart (#624)
         run: |
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
           # Rule: the guard comes from main, this call from the PR branch. `silent` ignores extra trailing args and a
           # usage error escalates ("guard error"); only ever append args, never reorder or remove them.
           python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent fix "$PR" "$HEAD_BEFORE" "$RUNNER_TEMP/body-before.txt"

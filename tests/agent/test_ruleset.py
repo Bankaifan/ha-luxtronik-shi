@@ -17,6 +17,4 @@ def test_strict_status_checks_policy_is_true():
 
 def test_required_checks_unchanged():
     checks = _rule("required_status_checks")["parameters"]["required_status_checks"]
-    # Project override: the project jobs replace the template's `validate` as required checks.
-    project = ["hassfest", "hacs", "version", "tests", "tests-min-ha", "tests-latest-ha", "workflow-lint"]
-    assert [c["context"] for c in checks] == [*project, "agent-smoke", "risk", "security-review"]
+    assert [c["context"] for c in checks] == ["validate", "agent-smoke", "risk", "security-review"]

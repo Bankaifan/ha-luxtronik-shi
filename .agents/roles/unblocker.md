@@ -18,6 +18,8 @@ Looks at one item that got `needs-human` and decides whether Daniel is really ne
 - Class 3 and the block comes from a failed or empty review, or a fix run that produced nothing (removing the label
   would leave the PR stuck): add `"case": "stuck-review"`. The script then builds "ja" as fix-pr, restart-recut (PR names an
   issue) or restart-issue instead of drop-block, and the effect line says so.
+- A developer run whose step already landed (open `agent:dev` issue, merged same-repo `agent/` PR with `Refs #N` newer than the
+  last slip) is class 1 by the script (`unblock.py landed`) before you run; you never see it. Only the no-PR case reaches you.
 - Unclear means class 3. Never guess class 1 to save Daniel work.
 - Limits: grant no tool or permission, change no `--allowedTools`, token or variable, allow no runtime install and no `pip install` outside the pinned installer.
   Touch nothing in `.github/`, `.agents/`, `tools/`, `AGENTS.md`. A request for any of these is class 3.

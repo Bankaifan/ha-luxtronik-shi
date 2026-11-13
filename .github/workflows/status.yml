@@ -60,4 +60,13 @@ jobs:
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}  # reads the security verdict comment for the head
           FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}  # "off" skips the failure watch
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the overdue-run and failure issues; script step only, never a model step
+          FLOW_CSV: ${{ runner.temp }}/flow.csv  # one row per merged PR (tools/flow.py), uploaded below, never committed
         run: python3 tools/status.py
+      - name: Upload the flow metrics
+        if: steps.gate.outputs.run == 'true' && always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-metrics
+          path: ${{ runner.temp }}/flow.csv
+          if-no-files-found: ignore
+          retention-days: 14

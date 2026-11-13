@@ -1,7 +1,7 @@
 name: unblocker
 # Looks at an item that just got `needs-human` and decides whether Daniel is really needed (design 0002, built on the
 # untrusted-text boundary of design 0004). Off when the repo variable UNBLOCKER is `off`.
-# Order: read-only token (gate, fetch) -> model step with NO app token and NO Bash -> clean checkout -> verdict
+# Order: read-only token (gate, landed, fetch) -> model step with NO app token and NO Bash -> clean checkout -> verdict
 # validation -> write token (created only now) -> apply. Never PR code: the checkout is the default branch.
 on:
   issues:
@@ -56,8 +56,16 @@ jobs:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
         run: |
           if python3 tools/unblock.py gate "$KIND" "$NUMBER"; then echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      # Script first (issue 658): a step that already landed is class 1 with no model step. It writes verdict.json into
+      # the workspace; the clean step below keeps it. Any error here falls through to the model step.
+      - id: landed
+        if: steps.gate.outputs.ok == 'true' && github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+        run: |
+          if python3 tools/unblock.py landed "$NUMBER" verdict.json; then echo "landed=true" >> "$GITHUB_OUTPUT"; fi
       - name: Fetch the untrusted text as masked files (the model never calls gh)
-        if: steps.gate.outputs.ok == 'true'
+        if: steps.gate.outputs.ok == 'true' && steps.landed.outputs.landed != 'true'
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
         run: python3 tools/unblock.py fetch "$KIND" "$NUMBER" "$GITHUB_WORKSPACE"
@@ -65,11 +73,11 @@ jobs:
       # requires instead of its OIDC exchange; nothing here can write to GitHub.
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
-        if: steps.gate.outputs.ok == 'true'
+        if: steps.gate.outputs.ok == 'true' && steps.landed.outputs.landed != 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
-          allowed_bots: ${{ vars.AUTHOR_BOT }}
+          allowed_bots: ${{ vars.AUTHOR_BOT }},${{ vars.APPROVER_BOT }}
           prompt: |
             Act as the unblocker described in .agents/roles/unblocker.md and follow AGENTS.md.
             The blocked item is ${{ env.KIND }} #${{ env.NUMBER }} in ${{ github.repository }}.

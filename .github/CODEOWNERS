@@ -11,3 +11,4 @@
 # Project: the release workflow publishes to users, and its version check gates it.
 /.github/workflows/release.yml @Bankaifan
 /tools/check_version.py @Bankaifan
+/.agents/checks.json @Bankaifan

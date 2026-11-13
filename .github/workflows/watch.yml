@@ -1,0 +1,85 @@
+name: watch
+run-name: "${{ github.event_name == 'workflow_run' && format('watch {0}', github.event.workflow_run.name) || 'watch (sweep)' }}"
+# Actions watcher (design 0012, step 2). No model: tools/actions_watch.py reruns a startup failure or a displaced run once
+# and otherwise keeps one signed "Failing workflow:" issue per signature. The sweep (schedule, workflow_dispatch) catches
+# events GitHub did not deliver. DRY_RUN prints the actions and writes nothing; FAILURE_WATCH=off disables it.
+# The list below must cover every other workflow file (tests/test_actions_watch.py); watch itself is never in it.
+on:
+  schedule:
+    - cron: "22,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the actions, write nothing"
+        type: boolean
+        default: false
+  workflow_run:  # zizmor: ignore[dangerous-triggers] no PR code runs; the job checks out the default branch only, fork runs are dropped by keep()
+    workflows:
+      - agent-dev
+      - agent-fix
+      - agent-review
+      - agent-security-review
+      - answer-receiver
+      - automerge
+      - branch-cleanup
+      - canary
+      - dependabot-automerge
+      - design-split
+      - dispatch
+      - nightly
+      - orchestrator
+      - risk
+      - rule-keeper
+      - scout
+      - setup
+      - status
+      - strip-attribution
+      - template-sync
+      - train
+      - unblocker
+      - validate
+      - weekly-summary
+      - workflow-apply
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  watch:
+    # Skipped runs take no minutes and, at job level, do not take over the concurrency group.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      contains(fromJSON('["failure","timed_out","startup_failure","cancelled"]'), github.event.workflow_run.conclusion)
+    concurrency:
+      group: failure-watch
+      cancel-in-progress: false
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+        run: |
+          [ -n "$AUTHOR_CLIENT_ID" ] || { echo "::error::Repo variable AUTHOR_CLIENT_ID is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-issues: write
+          permission-actions: write
+      - name: Rerun once or update the failure issue (no model)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}
+          FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}
+          OWNER: Bankaifan
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          MAX_DEV: ${{ vars.MAX_DEV || '4' }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the failure issues; script step only, never a model step
+        run: python3 tools/actions_watch.py

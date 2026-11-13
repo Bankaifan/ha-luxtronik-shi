@@ -4,9 +4,13 @@ on:
     types: [submitted]
   # A security-review that finishes after the approval must still be able to release the merge.
   # GitHub cannot filter `status` by context before a run exists, so every commit status creates one run that the job
-  # `if:` below skips at once (no runner, no token). workflow_run was rejected: it fires on every completion of the
-  # risk and security-review workflows, not only on success, and the success status is posted by two workflows.
+  # `if:` below skips at once (no runner, no token).
   status:  # zizmor: ignore[dangerous-triggers] runs from main, never checks out PR code, only enables auto-merge
+  # A success status posted with github.token starts no workflow, so a late security-review success would never get here.
+  # The agent-security-review run itself completes as a workflow_run; the job scans open agent PRs for it.
+  workflow_run:  # zizmor: ignore[dangerous-triggers] runs from main, never checks out PR code, only enables auto-merge
+    workflows: [agent-security-review]
+    types: [completed]
 permissions:
   contents: read
 jobs:
@@ -16,10 +20,11 @@ jobs:
       github.event.review.state == 'approved' &&
       github.event.pull_request.user.type == 'Bot' &&
       github.event.pull_request.user.login != 'dependabot[bot]') ||
-      (github.event_name == 'status' && github.event.context == 'security-review' && github.event.state == 'success')
+      (github.event_name == 'status' && github.event.context == 'security-review' && github.event.state == 'success') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     # Two approvals in the same second start two runs for one PR; queue them per PR instead of racing.
     concurrency:
-      group: automerge-${{ github.event.pull_request.number || github.event.sha }}
+      group: automerge-${{ github.event.pull_request.number || github.event.sha || github.event.workflow_run.head_sha }}
       cancel-in-progress: false
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
@@ -56,6 +61,20 @@ jobs:
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
         run: |
           if [ "$EVENT" = "pull_request_review" ]; then echo "number=$PR_FROM_REVIEW" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$EVENT" = "workflow_run" ]; then
+            # Scan the open agent PRs: the first one that is approved and has security-review success for its head.
+            # The gate steps below check everything again.
+            prs=$(gh api --paginate "repos/$GH_REPO/pulls?state=open&per_page=100" --jq '.[] | select(.user.type == "Bot" and .user.login != "dependabot[bot]") | "\(.number) \(.head.sha)"')
+            while read -r num head; do
+              [ -n "$num" ] || continue
+              st=$(gh api "repos/$GH_REPO/commits/$head/statuses" --jq '[.[] | select(.context == "security-review")][0].state // "none"')
+              [ "$st" = "success" ] || continue
+              [ "$(python3 tools/approval.py check "$num")" = "approved" ] || continue
+              echo "number=$num" >> "$GITHUB_OUTPUT"
+              exit 0
+            done <<<"$prs"
+            echo "No approved open agent PR with security-review success"; exit 0
+          fi
           n=$(gh api "repos/$GH_REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open" and .head.sha == "'"$SHA"'" and .user.type == "Bot" and .user.login != "dependabot[bot]")][0].number // empty')
           if [ -z "$n" ]; then echo "No open agent PR with head $SHA"; exit 0; fi
           if [ "$(python3 tools/approval.py check "$n")" != "approved" ]; then echo "PR #$n is not approved yet"; exit 0; fi
@@ -75,9 +94,23 @@ jobs:
           if [ "$n" -gt 0 ]; then echo "design=true" >> "$GITHUB_OUTPUT"; echo "PR touches docs/design/: no auto-merge"; fi
       # A risk:security PR merges only when security-review is success for exactly the current head SHA.
       # Pending or failed is not an error: the PR waits, and the status event re-runs this workflow on success.
+      - name: Refuse PRs with a pending workflow patch
+        id: patch
+        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GH_REPO/pulls/$PR/files" --jq '.[].filename')
+          if grep -q '^\.agents/workflow-patches/' <<<"$files"; then
+            echo "wait=true" >> "$GITHUB_OUTPUT"
+            echo "PR holds a workflow patch: workflow-apply applies it first"
+            gh pr merge "$PR" --disable-auto || true
+          fi
       - name: Wait for security-review on risk:security PRs
         id: gate
-        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true'
+        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true' && steps.patch.outputs.wait != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -99,7 +132,7 @@ jobs:
             echo "risk:security PR #$PR: security-review is $state for $sha; not merging yet"
           fi
       - name: Enable auto-merge (rebase, keeps Daniel as author); GitHub merges once the ruleset is satisfied
-        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true' && steps.gate.outputs.wait != 'true'
+        if: steps.pr.outputs.number != '' && steps.design.outputs.design != 'true' && steps.patch.outputs.wait != 'true' && steps.gate.outputs.wait != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}

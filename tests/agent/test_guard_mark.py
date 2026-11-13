@@ -133,10 +133,23 @@ def test_guard_key_only_in_script_steps(path):
             assert "uses:" not in step, "pass the key to run: steps only"
 
 
+GIT_CMD = re.compile(r"(?:^|[\s;&|(`])git\s", re.MULTILINE)
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_guard_key_never_with_git_in_workspace(path):
+    """git reads hooks and config from the checkout, which the agent may have edited: fetch in a key-free step."""
+    for step in _blocks(path.read_text(encoding="utf-8"))[1]:
+        if "GUARD_KEY" in step:
+            code = "\n".join(ln for ln in step.splitlines() if not ln.lstrip().startswith("#"))
+            assert not GIT_CMD.search(code), "a step with GUARD_KEY must not run git; fetch the tools in a step without it"
+
+
 def test_guard_key_used_where_expected():
     users = {p.name for p in WORKFLOWS if "GUARD_KEY" in p.read_text(encoding="utf-8")}
     assert users == {"orchestrator.yml", "status.yml", "setup.yml", "rule-keeper.yml", "scout.yml",
-                     "weekly-summary.yml", "nightly.yml", "dispatch.yml", "agent-review.yml"}
+                     "weekly-summary.yml", "nightly.yml", "dispatch.yml", "watch.yml", "canary.yml",
+                     "agent-dev.yml", "agent-fix.yml", "agent-review.yml"}
 
 
 def test_setup_requires_guard_key():

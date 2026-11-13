@@ -7,8 +7,8 @@ run-name: "${{ github.event_name == 'issues' && github.event.issue.title || gith
 # Candidate issues come from tools/trusted_issues.py, not from the prompt.
 # A label event (`approved` or `auto-ok`) starts it at once; tools/orchestrator_gate.py checks that Daniel set
 # the label and skips a run that follows another run within 3 minutes (one run per burst of labels).
-# Edits by the author app (status issue updates after every run) never start a run: each one waited 60 s in the group and
-# replaced a pending dispatch or label run, which then ended cancelled ("higher priority waiting request").
+# Edits and comments by the author app (status issue updates, slips, failure reports) never start a run: each one waited
+# 60 s in the group and replaced a pending dispatch or label run, which then ended cancelled ("higher priority waiting request").
 # Skipped runs are expected: GitHub lists every label event, and the job-level `if` skips the ones that are not gated.
 # Design 0007 (Refs #125): more events (issues opened/edited/closed, comments, PRs, reviews) are accepted only when repo
 # variable ORCHESTRATOR_EVENTS is "on" (default off). Then every event run waits 60 s (burst), tools/orchestrator_gate.py
@@ -41,7 +41,9 @@ jobs:
           !(github.event.action == 'edited' &&
             contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login))))) ||
        (contains(fromJSON('["issue_comment","pull_request_target","pull_request_review"]'), github.event_name) &&
-        vars.ORCHESTRATOR_EVENTS == 'on') ||
+        vars.ORCHESTRATOR_EVENTS == 'on' &&
+        !(github.event_name == 'issue_comment' &&
+          contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login))) ||
        (contains(fromJSON('["schedule","workflow_dispatch","workflow_run"]'), github.event_name) &&
         (github.event_name != 'workflow_run' ||
          (github.event.workflow_run.conclusion == 'success' &&
@@ -74,12 +76,13 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
-          permission-contents: write
           permission-pull-requests: write
           permission-issues: write
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
+      # No contents scope on the app token (design 0017 step 5): the model and the gate never write the repo, and the
+      # checkout keeps no git credentials. The commit of HANDOVER.md is a later script step with its own token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ steps.app.outputs.token }}
+          persist-credentials: false
           fetch-depth: 0
       # Checked-out main only (no PR code). Label events: owner and debounce (tools/orchestrator_gate.py).
       # merges: skip when only HANDOVER.md changed. Schedule and dispatch always go on.
@@ -88,6 +91,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
+          CONTENTS_TOKEN: ${{ github.token }}  # read-only: the commit check of a merge (the app token has no contents scope)
           LABEL: ${{ github.event.label.name }}
           SENDER: ${{ github.event.sender.login }}
           OWNER: Bankaifan
@@ -109,7 +113,7 @@ jobs:
               if [ "$run" != true ]; then echo "Event not gated: nothing to do"; echo "skip=true" >> "$GITHUB_OUTPUT"; fi
               ;;
             workflow_run)
-              others=$(gh api "repos/$GH_REPO/commits/$SHA" --jq '[.files[].filename | select(. != "HANDOVER.md")] | length')
+              others=$(GH_TOKEN="$CONTENTS_TOKEN" gh api "repos/$GH_REPO/commits/$SHA" --jq '[.files[].filename | select(. != "HANDOVER.md")] | length')
               if [ "$others" -eq 0 ]; then
                 echo "Only HANDOVER.md changed: nothing to do"
                 echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -142,6 +146,7 @@ jobs:
           EVENT_MERGED: ${{ github.event.pull_request.merged }}
           REVIEW_STATE: ${{ github.event.review.state }}
           REVIEWER: ${{ github.event.review.user.login }}
+          DISPATCH: ${{ vars.DISPATCH }}  # on: tools/dispatch.py starts issues with a slip (design 0015)
           # Parallel work caps.
           MAX_DEV: ${{ vars.MAX_DEV || '4' }}
           MAX_PRS: ${{ vars.MAX_PRS || '5' }}
@@ -161,22 +166,6 @@ jobs:
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
-      # The model cannot match a branch name in its allow list (prefix rules stop at whole words), so the
-      # handover branch is created here; the model only commits and runs `git push origin HEAD`.
-      - name: Handover branch
-        id: handover
-        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
-        run: |
-          branch="agent/orchestrator-handover-$(date -u +%F)"
-          git checkout -b "$branch"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-      # Run 42889616904: `rm slip-116.md` was denied and the run ended silently. Body files for gh go to .agent-out/,
-      # which git ignores here; the model writes them there and never deletes them.
-      - name: Agent output directory (git-ignored, for --body-file)
-        if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
-        run: |
-          mkdir -p .agent-out
-          echo ".agent-out/" >> .git/info/exclude
       - id: started
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -196,6 +185,13 @@ jobs:
             Repository: ${{ github.repository }}. Trigger: ${{ env.EVENT }}. You write no production code.
             Read HANDOVER.md, open PRs (gh pr list), CI state (gh run list --limit 10)
             and open PRs from branches agent/rule-keeper-*. Then:
+            0. Dispatcher (repo variable DISPATCH=on, design 0015): ${{ vars.DISPATCH == 'on' && 'on' || 'off' }}. When on, a
+               script (tools/dispatch.py) starts the issues that hold a slip and removes agent:dev after a merge: you add no
+               label and remove no agent:dev, you start nothing. You only write the slip comment (goal, a `Files:` line,
+               a `Model: sonnet` or `Model: haiku` line, acceptance) for these issues without a slip: ${{ steps.pre.outputs.needs_slip }}
+               (the script starts them once the comment lands). HANDOVER.md (step 3) only when the script says
+               handover due: ${{ steps.pre.outputs.handover_due }}. Everything in steps 1 to 3 about labels and starting
+               applies only when the dispatcher is off.
             1. The script counted free slots (PRs waiting only for Daniel, parked needs-human issues and issues
                with a merged PR do not count): free agent:dev slots ${{ steps.pre.outputs.free_dev }}, free PR slots
                ${{ steps.pre.outputs.free_prs }} (do not recount). The script also names the issues to start.
@@ -218,18 +214,13 @@ jobs:
                do not start the slip (it stays approved, retried next run). Never start more
                issues than the free agent:dev slots. Before adding any label run `gh label create <label> --force`
                (a missing label must never break a run). Start nothing when free PR slots is 0.
-               Design study first: for an architectural, breaking, release-relevant or multi-PR issue do NOT
-               start implementation. Write a slip for a design task instead (output docs/design/NNNN-<slug>.md as
-               described in .agents/roles/orchestrator.md). Small issues (docs, tests, fixes, contained
-               features) start directly. Issues in the list with a non-null `design` come from a merged design:
+               Design study first only if the issue changes who or what is trusted, token or app permissions,
+               CODEOWNERS paths, or what leaves the repo: then do NOT start implementation. Write a slip for a
+               design task instead (output docs/design/NNNN-<slug>.md as described in .agents/roles/orchestrator.md).
+               Every other issue, also architectural, breaking or multi-PR, starts directly; its split is in the issue.
+               Issues in the list with a non-null `design` come from a merged design:
                split issues run in parallel; an issue that needs an earlier step merged carries a
                `Depends on: #N` line and the script holds it back until #N is closed.
-            1b. Merged design PR (docs/design/ only): create the implementation issues from its split with
-               `gh issue create`, each body starting with the line `Design: docs/design/NNNN-<slug>.md` (alone on that line, nothing after
-               `.md`, or the issue is not trusted and never starts) and the
-               slip; do this once (check `gh issue list --search "Design: docs/design/NNNN"` first). Create them in
-               split order and add a line `Depends on: #<n>[, #<m>]` (alone on its line, after the `Design:` line)
-               to every step that needs an earlier step merged; steps without that need get no such line.
             1c. Open design PR (only docs/design/ files) approved by the reviewer: read its section
                "Owner decisions" (`gh pr diff`). If empty, leave it to auto-merge. If not, add the label
                needs-human, run `gh pr edit <n> --add-reviewer Bankaifan`, and add one German comment of at
@@ -243,30 +234,26 @@ jobs:
             3. HANDOVER.md is stale only if the open PR set, the trusted list, the main CI state or an Open/Next item
                changed materially since the file was written (compare with what you read in it; the state comes from
                `gh pr list --state open`, `gh issue list` and `gh run list --json name,conclusion,headSha,url`).
-               A run number, a timestamp or a new day alone is never a reason. At most one handover PR per UTC day:
-               get today with `date -u +%F` and skip if `gh pr list --state all --search "head:agent/orchestrator-handover-<date>"`
-               lists any PR (open or merged). If the file is not stale, or today's PR exists, leave HANDOVER.md untouched
-               and do nothing more in this step. Otherwise skip if `gh pr list --state open --search "head:agent/orchestrator-handover"`
-               lists a PR. Else you are already on branch ${{ steps.handover.outputs.branch }} (created from main; do not
-               create or switch branches). Overwrite HANDOVER.md (max 60 lines, facts you measured, unknowns marked "open"),
-               run `make check`, commit as Daniel (no Co-authored-by), push with exactly `git push origin HEAD` and open
-               ONE PR (English, ASCII title, body max 5 lines). No tool or AI attribution anywhere (no "Generated with",
-               session link, Co-Authored-By, Claude-Session). To drop your HANDOVER.md edit use `git restore HANDOVER.md`.
-            The git identity (user.name, user.email) is already configured and the tools for `make check` are
-            installed. Commit with a plain `git commit -m "..."`: never `git -c ...` and never a `cd` prefix
-            (they do not match the allow list and are denied).
+               A run number, a timestamp or a new day alone is never a reason. Only if handover due is
+               ${{ steps.pre.outputs.handover_due }} and the file is stale: write the new HANDOVER.md (max 60 lines, facts
+               you measured, unknowns marked "open") as the last part of your answer, between the lines
+               `<!-- handover-begin -->` and `<!-- handover-end -->`, with no attribution. You write no file and open no PR:
+               a script checks the block, commits it as Daniel and opens the PR (at most one handover PR per UTC day).
+               Otherwise write no block. Put any block before your Conclusion line.
+            A note that parks an item with Daniel is never a free comment: post it with
+            `python3 tools/agent_guard.py park pr|issue <n> <yes-action|-> <no-action|-> "<German note>"`
+            (the script adds the decision marker and refuses an invalid one).
             Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects (they do not match
-            the allow list and are denied). Use gh's --json/--jq flags instead of pipes; inside `--jq` write a plain
+            the allow list and are denied), never a `cd` prefix. Use gh's --json/--jq flags instead of pipes; inside `--jq` write a plain
             path only (e.g. `--jq .comments[-1].body`), no `|`, `{` or `}` (an unquoted `|` is a shell pipe and is denied).
             These calls are NOT allowed and end the run as failed: `gh issue close` (comment instead and leave
             closing to Daniel), `gh workflow list` (use `gh run list`), `gh run view` (also with `--log-failed`; use
-            `gh run list --json name,conclusion,headSha,url` and name the red run in the issue slip), `gh api`, `git checkout`, `git switch`,
-            `git fetch`, `git -c ...` (identity is already set: plain `git commit -m "<one line>"`), `make -n check`,
-            `pip install ...` (the tools are installed; if `make check` still fails, say so in the PR body),
-            `rm` (run 42889616904 ended silently on `rm slip-116.md`; never delete a file).
-            For `gh issue create` and `gh pr create` keep --title and --body on one line without backticks or
-            `$(...)`; for longer text write the file with Write to `.agent-out/<name>.md` (git ignores that
-            directory) and pass --body-file. Leave the file there.
+            `gh run list --json name,conclusion,headSha,url` and name the red run in the issue slip), `gh api`, `gh variable` and `gh secret` (step 0 already gives the DISPATCH value: read no repo variable), `git checkout`, `git switch`,
+            `git fetch`, `git -c ...`, `git commit` (a script commits), `make -n check`,
+            `pip install ...` (the tools are installed).
+            For `gh issue create` keep --title and --body on one line without backticks or
+            `$(...)`; for longer text Write it to .agent-out/<name>.md (the only path you may write; never /tmp;
+            change it with Edit, never sed) and pass --body-file .agent-out/<name>.md.
             Never push to main, never merge, no secrets in comments. Finish with a short status report.
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
@@ -274,7 +261,19 @@ jobs:
             --max-turns 40
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git restore:*),Bash(gh pr create:*),Bash(make check),Bash(date:*),Bash(python3 tools/overlap.py:*)"
+            --allowedTools "Read,Glob,Grep,Edit(.agent-out/**),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(python3 tools/overlap.py:*),Bash(python3 tools/agent_guard.py park:*)"
+      # git runs here, without the guard key: the agent may have planted hooks or config in the checkout.
+      - name: Fetch guard tools (no key)
+        if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ github.token }}  # read-only; the archive needs no git credentials
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # The agent may edit the checkout: run the helpers as they are on the default branch.
+          mkdir -p "$RUNNER_TEMP/guard"
+          gh api "repos/$GH_REPO/tarball/$DEFAULT_BRANCH" > "$RUNNER_TEMP/guard.tgz"
+          tar -xzf "$RUNNER_TEMP/guard.tgz" -C "$RUNNER_TEMP/guard" --strip-components=1 --wildcards '*/tools/*'
       - name: Run report (script, no model)
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
         env:
@@ -286,12 +285,51 @@ jobs:
           MODEL: sonnet
           WORKFLOW_FILE: .github/workflows/orchestrator.yml
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: python3 "$RUNNER_TEMP/guard/tools/run_report.py" orchestrator
+      # Handover (design 0017 step 5): the model wrote no file, it ends with the block. The commit runs without any
+      # contents token; the app token with contents write is minted for the push step only.
+      - name: Handover commit (script, no model, no contents token)
+        id: handover-commit
+        if: ${{ !cancelled() && steps.claude.outcome == 'success' }}
+        env:
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          HANDOVER_DUE: ${{ steps.pre.outputs.handover_due }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}  # pull-requests and issues only
+          GH_REPO: ${{ github.repository }}
         run: |
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
-          python3 "$RUNNER_TEMP/guard/tools/run_report.py" orchestrator
+          set -eu
+          if [ "$HANDOVER_DUE" != "true" ]; then echo "Handover not due: nothing to write"; exit 0; fi
+          day=$(date -u +%F)
+          branch="agent/orchestrator-handover-$day"
+          open=$(gh pr list --state open --search "head:agent/orchestrator-handover" --json number --jq length)
+          today=$(gh pr list --state all --head "$branch" --json number --jq length)
+          if [ "$open" != "0" ] || [ "$today" != "0" ]; then echo "A handover PR is open or today's exists: nothing to write"; exit 0; fi
+          python3 "$RUNNER_TEMP/guard/tools/handover_text.py" "$EXEC_FILE" HANDOVER.md
+          if git diff --quiet -- HANDOVER.md; then echo "HANDOVER.md unchanged: nothing to commit"; exit 0; fi
+          git checkout -b "$branch"
+          make check
+          git add HANDOVER.md
+          git commit -m "Rewrite HANDOVER.md ($day)"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - id: handover-app
+        if: ${{ !cancelled() && steps.handover-commit.outputs.branch != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Push the handover branch and open its PR (script, contents token here only)
+        if: ${{ !cancelled() && steps.handover-commit.outputs.branch != '' }}
+        env:
+          GH_TOKEN: ${{ steps.handover-app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ steps.handover-commit.outputs.branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "HEAD:refs/heads/$BRANCH"
+          gh pr create --head "$BRANCH" --title "Orchestrator handover $(date -u +%F)" --body "Rewrites HANDOVER.md: the orchestrator run found it stale (open PRs, trusted issues, CI or Open/Next items changed). make check passed in that run. Run: $RUN_URL"
       # A run with denied tool calls, or with a startable issue and no visible action, must not end green.
       - name: Fail a silent run
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
@@ -305,9 +343,5 @@ jobs:
           STARTABLE: ${{ steps.pre.outputs.startable }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           STATUS_ISSUE: "57"
-        run: |
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
-          python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent orchestrator - "$STARTED"
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent orchestrator - "$STARTED"

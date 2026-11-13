@@ -245,7 +245,7 @@ def test_render_issue_contents():
 def _big(n):
     clean = [{"path": f"tools/f{i}.py", "status": "added"} for i in range(n)]
     clean.append({"path": "tools/ci/risk.py", "status": "modified"})
-    clean.append({"path": "tests/test_risk.py", "status": "modified"})
+    clean.append({"path": "tests/agent/test_risk.py", "status": "modified"})
     return clean
 
 
@@ -254,7 +254,7 @@ def test_render_issue_splits_large_change_with_reviewer_files():
     p1, p2 = body.index("## Part 1: reviewer pipeline"), body.index("## Part 2: rest")
     assert p1 < p2
     assert p1 < body.index("`tools/ci/risk.py`") < p2
-    assert p1 < body.index("`tests/test_risk.py`") < p2
+    assert p1 < body.index("`tests/agent/test_risk.py`") < p2
     assert body.index("`tools/f0.py`") > p2
     assert body.rstrip().endswith("Template-Sync: " + "c" * 40)
 
@@ -293,3 +293,39 @@ def test_parse_config_errors():
         with pytest.raises(mod.ConfigError):
             mod.parse_config(bad)
     assert mod.parse_config('{"template": "o/t", "synced_sha": ""}')["template"] == "o/t"
+
+
+def test_sync_title_has_the_shapes_the_guard_accepts():
+    assert mod.sync_title("1.1", "b" * 40, []) == "Template sync 1.1"
+    assert mod.sync_title("1.1", "b" * 40, ["tools/x.py"]) == "Template sync bbbbbbb part 1"
+
+
+def test_pr_body_closes_without_conflicts_and_has_at_most_five_lines():
+    result = {"written": ["tools/a.py"], "deleted": [], "merged": [], "conflicted": [], "managed_added": ["docs/x/"]}
+    body = mod.pr_body("b" * 40, "1.1", result, 477)
+    lines = body.splitlines()
+    assert len(lines) <= 5
+    assert lines[0] == "Template 1.1 (bbbbbbb): 1 written, 0 deleted, 0 overridden merged."
+    assert f"synced_sha set to {'b' * 40}" in body and "`docs/x/`" in body
+    assert lines[-1] == "Closes #477"
+
+
+def test_pr_body_refs_and_names_the_files_to_merge_by_hand():
+    result = {"written": [], "deleted": [], "merged": ["tools/o.py"], "conflicted": ["tools/c.py"],
+              "managed_added": []}
+    body = mod.pr_body("b" * 40, "1.1", result, 477)
+    assert "`tools/c.py`" in body and "synced_sha not set" in body
+    assert "Refs #477" in body and "Closes" not in body
+
+
+def test_pr_body_without_issue_has_no_link():
+    result = {"written": ["tools/a.py"], "deleted": [], "merged": [], "conflicted": [], "managed_added": []}
+    assert "#" not in mod.pr_body("b" * 40, "1.1", result)
+
+
+def test_template_prefixes_are_a_union_and_refuse_bad_paths():
+    assert mod.template_prefixes('{"managed": ["tools/", "docs/x/"]}', ["tools/"]) == ["docs/x/"]
+    assert mod.template_prefixes(None, ["tools/"]) == []
+    for bad in ('{"managed": ["../x/"]}', '{"managed": ["/etc/"]}', '{"managed": "tools/"}', "[]"):
+        with pytest.raises(mod.ApplyError):
+            mod.template_prefixes(bad, [])

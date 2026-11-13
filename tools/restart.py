@@ -87,11 +87,11 @@ def blocking_findings(reviews):
     return [t[:_BLOCKING].replace("```", "'''") for t in texts if t]
 
 
-def slip_comment(pr, findings):
+def slip_comment(pr, findings, why="the developer and the reviewers did not converge in 3 reviews"):
     lines = [
-        f"Restart 1/1: PR #{pr} hit the limit of 2 fix rounds. Start fresh on a new branch from main; do not patch #{pr}.",
+        f"Restart 1/1: PR #{pr} is stuck. Start fresh on a new branch from main; do not patch #{pr}.",
         "",
-        "What failed: the developer and the reviewers did not converge in 3 reviews.",
+        f"What failed: {why}.",
         "",
         "Blocking findings from the reviews:",
     ]
@@ -106,13 +106,14 @@ def slip_comment(pr, findings):
     return "\n".join(lines)
 
 
-def restart_issue(pr, issue, reviews, run=gh):
+def restart_issue(pr, issue, reviews, run=gh, why=None):
     """Restart the task once: restart:1, slip comment, agent:dev re-added (removed first so the label event fires)."""
     add_labels("issue", issue, [RESTART], run)
-    liveness.post_comment("issue", issue, slip_comment(pr, blocking_findings(reviews)), run)
+    findings = blocking_findings(reviews)
+    liveness.post_comment("issue", issue, slip_comment(pr, findings, why) if why else slip_comment(pr, findings), run)
     run("issue", "edit", str(issue), "--remove-label", "agent:dev")
     add_labels("issue", issue, ["agent:dev"], run)
-    run("pr", "close", str(pr), "--comment", f"Superseded: round limit reached, task restarted, see #{issue}")
+    run("pr", "close", str(pr), "--comment", f"Superseded: {why or 'round limit reached'}, task restarted, see #{issue}")
 
 
 def park_with_owner(pr, owner, restarted, run=gh):

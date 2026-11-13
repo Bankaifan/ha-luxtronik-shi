@@ -6,7 +6,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-import handover_text as ht  # noqa: E402
+import handover_text as ht
 
 
 def _execution(*results):

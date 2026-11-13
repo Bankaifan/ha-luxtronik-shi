@@ -4,6 +4,8 @@ CLI (gh CLI with GH_TOKEN and GH_REPO; the model step is not here, the verdict i
   unblock.py gate KIND NUMBER      exit 0 = the unblocker may look at it, 1 = leave it to Daniel (reason on stdout)
   unblock.py fetch KIND NUMBER DIR  write masked, capped untrusted input to DIR/untrusted/*.txt for the model step
   unblock.py validate FILE         check a verdict file (shape, limits, secret filter) without acting; exit 0 = valid
+  unblock.py landed NUMBER FILE    issue only, before the model step: a step that already landed writes a class 1 verdict
+                                   to FILE and exits 0; otherwise exit 1 (the model step decides)
   unblock.py apply KIND NUMBER FILE  apply the verdict in FILE ({"class": 1|2|3, "reason", "comment", "issue", "note"})
 Environment: OWNER (default Bankaifan), AUTHOR_BOT, APPROVER_BOT, RUN_URL.
 
@@ -27,7 +29,10 @@ import subprocess
 import sys
 
 import exec_log
+import ghcall
+import overlap
 import restart
+import slip
 from agent_guard import add_labels, ensure_label, is_agent_pr
 from trusted_issues import classify, label_set_by
 
@@ -79,7 +84,7 @@ NOTE_SECURITY = ("Hallo Daniel, dieser PR betrifft Rechte oder Vertrauen (risk:s
 
 
 def gh(*args):
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+    return ghcall.gh(*args)
 
 
 def gate(item, events, comments, files, owner, author_bot, approver_bot="", codeowners=""):
@@ -295,6 +300,44 @@ def _owner_note(run, kind, number, owner, v, note):
     return 3
 
 
+PR_FIELDS = "number,headRefName,mergedAt,body,isCrossRepository"
+LANDED_TEXT = ("Step already merged in PR #{pr} (Refs #{n}). This run had nothing left to build, so the task restarts "
+               "and the orchestrator writes the slip for the next step.")
+
+
+def slip_time(info, authors=overlap.DEFAULT_TRUSTED):
+    """createdAt of the newest task slip of INFO (`gh issue view` with body, author, createdAt, comments), '' if none.
+    A slip is what slip.py counts: a Files: line in the issue body or in a comment by a trusted author. A restart
+    comment without a Files: line is not a slip; the orchestrator writes the next slip after it."""
+    times = []
+    if slip.slip_files({"body": info.get("body"), "author": info.get("author")}, authors):
+        times.append(info.get("createdAt") or "")
+    times += [c.get("createdAt") or "" for c in info.get("comments") or [] if slip.slip_files(c, authors)]
+    return max(times, default="")
+
+
+def landed_verdict(number, run=gh):
+    """Deterministic check before the model step (issue 658), no model and no write: an open agent:dev issue without
+    unblock:1 whose current step already landed, i.e. a merged same-repo agent/ PR with `Refs #N` that merged after
+    the newest slip (slip_time). Returns the class 1 verdict, or None (then the model step decides as before).
+    First cut: it does not check why needs-human was set, so any block on such an item counts as a landed step."""
+    info = json.loads(run("issue", "view", str(number), "--json", "state,labels,author,body,createdAt,comments"))
+    labels = {x["name"] for x in info.get("labels") or []}
+    if str(info.get("state", "")).upper() != "OPEN" or "agent:dev" not in labels or UNBLOCK in labels:
+        return None
+    slip_at = slip_time(info)
+    if not slip_at:
+        return None
+    refs = re.compile(rf"\bRefs #{int(number)}\b")
+    prs = json.loads(run("pr", "list", "--state", "merged", "--limit", "200", "--json", PR_FIELDS))
+    for pr in prs:
+        if ((pr.get("headRefName") or "").startswith("agent/") and not pr.get("isCrossRepository")
+                and refs.search(pr.get("body") or "") and (pr.get("mergedAt") or "") > slip_at):
+            return {"class": 1, "reason": "step already merged",
+                    "comment": LANDED_TEXT.format(pr=pr["number"], n=number)}
+    return None
+
+
 def _cap(text):
     return exec_log.mask(text or "")[:MAX_UNTRUSTED]
 
@@ -332,6 +375,15 @@ def main(argv):
             return 0
         text = exec_log.read_exec(args[3])
         print(apply(kind, number, load_verdict(text), owner, author_bot=os.environ.get("AUTHOR_BOT", "")))
+        return 0
+    if len(args) == 3 and args[0] == "landed" and args[1].isdigit():
+        verdict = landed_verdict(args[1])
+        if verdict is None:
+            print("no landed step")
+            return 1
+        with open(args[2], "w", encoding="utf-8") as f:
+            json.dump(verdict, f)
+        print(f"landed step: class 1 verdict in {args[2]}")
         return 0
     if len(args) == 2 and args[0] == "validate":
         try:

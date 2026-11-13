@@ -4,6 +4,8 @@ A run counts as a model run when its conclusion is not `skipped` and a job step 
 (step conclusion not `skipped`, from the jobs API). Runs with conclusion `skipped` are gate-skipped runs.
 
 CLI (env: GH_REPO optional): run_stats.py [DAYS (default 14)] [WORKFLOW_FILE (default orchestrator.yml)]
+Denied tool calls (design 0017, step 1): run_stats.py denied [DAYS (default 7)] [DIR (default execution-files)]
+DIR holds execution files named `<workflow file>__<createdAt>.json`, e.g. `agent-dev.yml__2026-11-10T08:00:00Z.json`.
 """
 import datetime
 import json
@@ -12,10 +14,12 @@ import re
 import statistics
 import sys
 
+import exec_log
 import liveness
 
 WORKFLOW = "orchestrator.yml"
 LIMIT = 1000
+EXEC_NAME = re.compile(r"(.+\.yml)__(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)\.json")
 CLAUDE_MARK = "claude-code-action"
 # Heuristic (design 0014): a failed run whose failed-step log mentions a limit or rate error. Not a guarantee.
 LIMIT_RE = re.compile(r"rate.?limit|usage limit|too many requests|\b429\b", re.IGNORECASE)
@@ -166,8 +170,43 @@ def failure_classes(runs, jobs_of, log_of, days=28, now=None):
     return counts
 
 
+def execution_entries(directory):
+    """(workflow file, createdAt, execution-file text) for each `<workflow>__<createdAt>.json` in `directory`."""
+    entries = []
+    for path in sorted(pathlib.Path(directory).glob("*.json")):
+        m = EXEC_NAME.fullmatch(path.name)
+        if m:
+            entries.append((m.group(1), m.group(2), exec_log.read_exec(path)))
+    return entries
+
+
+def denied_per_workflow(entries, days=7, now=None):
+    """entries: (workflow file, createdAt, text) from execution_entries(). Returns {workflow file: permission denials
+    (exec_log.count_denials) of its execution files created in the last `days` days}."""
+    now = now or datetime.datetime.now(datetime.UTC)
+    cutoff = now - datetime.timedelta(days=days)
+    denied = {}
+    for workflow, created, text in entries:
+        if parse_time(created) < cutoff:
+            continue
+        denied[workflow] = denied.get(workflow, 0) + exec_log.count_denials(text)
+    return dict(sorted(denied.items()))
+
+
+def format_denied(denied, days):
+    lines = [f"Denied tool calls per workflow, last {days} days:"]
+    lines += [f"  {wf}: {n}" for wf, n in denied.items()]
+    lines.append(f"Denied tool calls: {sum(denied.values())}")
+    return "\n".join(lines)
+
+
 def main(argv):
     import os
+    if len(argv) > 1 and argv[1] == "denied":
+        days = int(argv[2]) if len(argv) > 2 else 7
+        directory = argv[3] if len(argv) > 3 else "execution-files"
+        print(format_denied(denied_per_workflow(execution_entries(directory), days), days))
+        return 0
     days = int(argv[1]) if len(argv) > 1 else 14
     workflow = argv[2] if len(argv) > 2 else WORKFLOW
     runs, jobs_of = fetch(workflow, os.environ.get("GH_REPO"))

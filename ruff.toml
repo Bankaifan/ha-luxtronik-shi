@@ -3,4 +3,4 @@ target-version = "py313"
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B"]
-per-file-ignores = { "tools/*" = ["E501"], "tests/*" = ["E501"], "custom_components/luxtronik_shi/registers.py" = ["E501", "E701"] }
+per-file-ignores = { "tools/*" = ["E501"], "tests/*" = ["E501"], "tests/agent/*" = ["E501", "E402", "E731", "B905"], "custom_components/luxtronik_shi/registers.py" = ["E501", "E701"] }

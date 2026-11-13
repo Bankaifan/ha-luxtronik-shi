@@ -10,8 +10,8 @@ Environment: OWNER (default Bankaifan), AUTHOR_BOT, APPROVER_BOT, RUN_URL.
 
 Verdict: {"intent": yes|no|option|instruction|unclear, "option", "instruction", "question", "evidence"}; the action
 comes from the decision marker (tools/decision.py) of the newest trusted note, never from the model. The confirmation
-text is built here from a fixed template per action. Items without a marker can only drop the block or pass an
-instruction to the orchestrator.
+text is built here from a fixed template per action. An item whose last question has no marker binds no action: the
+owner's answer goes to the orchestrator by comment id (label owner-answer), and needs-human is removed (#416, req. 8).
 """
 import json
 import os
@@ -29,6 +29,7 @@ from agent_guard import add_labels, is_agent_pr, same_login
 
 OWNER_DEFAULT = "Bankaifan"
 NEEDS_HUMAN = "needs-human"
+OWNER_ANSWER = "owner-answer"
 RECEIVER = "answer-receiver comment="
 INSTRUCTION = "owner-instruction comment="
 MAX_UNTRUSTED = 20000
@@ -101,6 +102,7 @@ def read_context(comments, trigger_id, owner, author_bot="", approver_bot=""):
     mine = [c for c in comments if is_owner_comment(c, owner) and since < c["id"] <= trigger_id]
     others = [c for c in comments if c not in mine and c is not note]
     return {"note": note, "marker": decision.parse(note["body"]) if note else None,
+            "asked": question is not None and note is None,  # a question without a marker binds no action
             "owner_text": _cap("\n\n".join(c["body"] or "" for c in mine)),
             "thread": _cap("\n\n---\n\n".join(f"{c['login']}:\n{c['body']}" for c in others))}
 
@@ -134,7 +136,8 @@ def validate(verdict, marker, owner_text):
         if "@" in val or "<!--" in val or "-->" in val:
             raise ValueError(f"{key} must not hold @ or marker syntax")
     out = {k: verdict[k].strip() for k in ("intent", "evidence", *INTENTS[intent])}
-    if len(out["evidence"]) > MAX_EVIDENCE or out["evidence"] not in owner_text:
+    # GitHub bodies use CRLF and the model quotes with LF: compare with whitespace runs collapsed (case stays exact)
+    if len(out["evidence"]) > MAX_EVIDENCE or " ".join(out["evidence"].split()) not in " ".join(owner_text.split()):
         raise ValueError("evidence must be a quote of the owner text, max 200 chars")
     available = effective_marker(marker)
     if intent in ("yes", "no") and intent not in available:
@@ -267,9 +270,22 @@ def confirmation(action, comment_id, instruction=None):
     return f"{text}\n<!-- {RECEIVER}{comment_id} -->"
 
 
+def hand_over(kind, number, trigger, run, owner):
+    """Owner answer to a question without a decision marker: the item gets label owner-answer and one comment that names
+    the owner comment by id and link (fixed text, no model text). needs-human goes, the orchestrator is started."""
+    add_labels(kind, number, [OWNER_ANSWER], run)
+    run(kind, "comment", str(number), "--body",
+        f"<!-- {RECEIVER}{trigger['id']} owner-answer -->\nDaniel answered a question that has no decision marker: "
+        f"owner comment {trigger['id']} ({trigger.get('url', '')}). The orchestrator acts on it within AGENTS.md Limits.")
+    run(kind, "edit", str(number), "--remove-label", NEEDS_HUMAN)
+    unblock._withdraw_owner(run, kind, number, owner)
+    run("workflow", "run", "orchestrator.yml")
+
+
 def apply(number, verdict, owner, run=gh, author_bot="", approver_bot="", trigger_id=0):
     """Validate against the live comments, run the action, close the loop. Returns "done", "unclear" (follow-up
-    question, block stays) or "0 (reason)" when the live gate refuses and nothing changed."""
+    question, block stays), "handed over" (question without marker: the orchestrator acts) or "0 (reason)" when the
+    live gate refuses and nothing changed."""
     info = json.loads(run("api", f"repos/{os.environ['GH_REPO']}/issues/{number}"))
     comments = fetch_comments(number, run)
     item = {"state": info["state"], "labels": [x["name"] for x in info["labels"]]}
@@ -277,9 +293,12 @@ def apply(number, verdict, owner, run=gh, author_bot="", approver_bot="", trigge
     if not ok:
         return f"0 ({why})"
     ctx = read_context(comments, trigger_id, owner, author_bot, approver_bot)
-    v = validate(verdict, ctx["marker"], ctx["owner_text"])
     kind = "pr" if "pull_request" in info else "issue"
     trigger = next(c for c in comments if c["id"] == trigger_id)
+    if ctx["asked"]:  # #416 req. 8: no marker, no action; the answer goes to the orchestrator by id
+        hand_over(kind, number, trigger, run, owner)
+        return "handed over"
+    v = validate(verdict, ctx["marker"], ctx["owner_text"])
     if v["intent"] == "unclear":  # needs-human stays, one follow-up question
         run(kind, "comment", str(number), "--body", f"{v['question']}\n<!-- {RECEIVER}{trigger_id} unclear -->")
         return "unclear"
@@ -353,7 +372,10 @@ def main(argv):
             if cmd == "validate":
                 _, comments = live(number)
                 ctx = read_context(comments, trigger, owner, bot, appr)
-                print(f"valid, intent {validate(verdict, ctx['marker'], ctx['owner_text'])['intent']}")
+                if ctx["asked"]:  # no marker: the verdict binds nothing, apply hands the answer over
+                    print("valid, owner answer to a question without marker: handed to the orchestrator")
+                else:
+                    print(f"valid, intent {validate(verdict, ctx['marker'], ctx['owner_text'])['intent']}")
             else:
                 print(apply(number, verdict, owner, author_bot=bot, approver_bot=appr, trigger_id=trigger))
             return 0

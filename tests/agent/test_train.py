@@ -6,12 +6,14 @@ import train
 
 ENV = {"GH_REPO": "o/r", "APPROVER_BOT": "app/approver", "OWNER": "Bankaifan"}
 REQUIRED = {"validate", "risk"}
+release_main = train.release_main  # the autouse fixture stubs train.release_main for the run_train tests
 
 
 @pytest.fixture(autouse=True)
 def ruleset(monkeypatch):
     """Pins the ruleset's required checks; run_train reads them from main.json."""
     monkeypatch.setattr(train.status, "required_contexts", lambda: set(REQUIRED))
+    monkeypatch.setattr(train, "release_main", lambda *a, **k: [])  # run_train never touches the network
 
 
 def pr(n, *, branch=None, merge="CLEAN", labels=(), files=("tools/x.py",), auto=True, checks=(), cross=False):
@@ -250,6 +252,158 @@ def test_empty_queue_does_nothing(capsys):
     assert train.run_train(ENV, run) == 0
     assert run.mutations() == []
     assert "nothing to do; approved candidates: 0" in capsys.readouterr().out
+
+
+def test_train_runs_the_release_first_and_reports_it(capsys):
+    calls = []
+    assert train.run_train(ENV, Gh([]), releaser=lambda: calls.append(1) or ["1.20", "1.21"]) == 0
+    assert calls == [1]
+    assert "opened release PR Release 1.20, 1.21" in capsys.readouterr().out
+
+
+def test_long_release_title_is_shortened_to_100_characters(capsys):
+    versions = [f"1.{n}" for n in range(21, 61)]
+    assert train.run_train(ENV, Gh([]), releaser=lambda: versions) == 0
+    assert "opened release PR Release 1.21 to 1.60 (40 versions)" in capsys.readouterr().out
+
+
+def test_failed_release_does_not_stop_the_train(capsys):
+    prs = [pr(5, merge="DIRTY")]
+    run = Gh(prs, approved(*prs))
+    assert train.run_train(ENV, run, releaser=lambda: None) == 0
+    out = capsys.readouterr().out
+    assert "release: failed" in out
+    assert ("workflow", "run", "agent-fix.yml", "-f", "pr=5") in run.calls
+
+
+def test_train_has_no_rebump_path():
+    assert not hasattr(train, "rebump_branch")
+    assert not (train.Path(train.__file__).parent / "rebump.py").exists()
+
+
+def g(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, env=train.git_env(), check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+CL = "# Changelog\n\n## [Unreleased]\n\n## [1.4] - 2026-01-01\n- old\n"
+
+
+def origin_repo(tmp_path):
+    """A bare origin whose main is at 1.4 with no fragments; returns (origin, work clone on main)."""
+    origin, work = tmp_path / "origin.git", tmp_path / "work"
+    g(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    g(tmp_path, "clone", "-q", str(origin), str(work))
+    g(work, "checkout", "-q", "-b", "main")
+    (work / "VERSION").write_text("1.4\n")
+    (work / "CHANGELOG.md").write_text(CL)
+    g(work, "add", "-A")
+    g(work, "commit", "-q", "-m", "base")
+    g(work, "push", "-q", "origin", "main")
+    return origin, work
+
+
+def merge_fragment(work, name, text):
+    """What a merged PR does to main: it adds one fragment and nothing else touches VERSION or CHANGELOG.md."""
+    (work / "changelog.d").mkdir(exist_ok=True)
+    (work / "changelog.d" / name).write_text(text)
+    g(work, "add", "-A")
+    g(work, "commit", "-q", "-m", f"merge {name}")
+    g(work, "push", "-q", "origin", "main")
+
+
+def test_release_main_two_merges_in_a_row_give_two_versions_and_sections(tmp_path):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "first change\n")
+    main_before = g(origin, "rev-parse", "main")
+    folded = []
+    assert release_main(str(origin), fragments=folded) == ["1.5"]
+    assert folded == ["10.md"]
+    assert g(origin, "rev-parse", "main") == main_before  # never a push to main
+    assert g(origin, "show", "release/next:VERSION") == "1.5"
+    g(origin, "update-ref", "refs/heads/main", "refs/heads/release/next")  # the release PR merges
+    g(work, "pull", "-q", "--rebase", "origin", "main")  # the second PR was never rebased for VERSION or CHANGELOG
+    merge_fragment(work, "11.md", "second change\nstep: x\n")
+    assert release_main(str(origin)) == ["2.0"]
+    assert g(origin, "show", "release/next:VERSION") == "2.0"
+    log = g(origin, "show", "release/next:CHANGELOG.md")
+    assert log.index("## [2.0]") < log.index("## [1.5]") < log.index("## [1.4]")
+    assert "- first change" in log and "- second change" in log
+    assert "changelog.d" not in g(origin, "ls-tree", "-r", "--name-only", "release/next")
+    assert g(origin, "log", "-1", "--format=%an <%ae>|%B", "release/next").startswith("Daniel <476059+")
+    assert "Co-authored-by" not in g(origin, "log", "-1", "--format=%B", "release/next")
+
+
+def test_release_main_unchanged_result_is_not_pushed_again(tmp_path):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "first change\n")
+    assert release_main(str(origin)) == ["1.5"]
+    first = g(origin, "rev-parse", "release/next")
+    assert release_main(str(origin)) == ["1.5"]
+    assert g(origin, "rev-parse", "release/next") == first
+    merge_fragment(work, "11.md", "more\nstep: x\n")
+    assert release_main(str(origin)) == ["1.5", "2.0"]
+    assert g(origin, "rev-parse", "release/next") != first
+
+
+def test_release_main_without_fragments_pushes_nothing(tmp_path):
+    origin, _ = origin_repo(tmp_path)
+    before = g(origin, "rev-parse", "main")
+    assert release_main(str(origin)) == []
+    assert g(origin, "rev-parse", "main") == before
+    assert g(origin, "branch", "--list", "release/next") == ""
+
+
+def test_release_main_refuses_a_bad_fragment_and_pushes_nothing(tmp_path):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "step: y\n")
+    before = g(origin, "rev-parse", "main")
+    assert release_main(str(origin)) is None
+    assert g(origin, "rev-parse", "main") == before
+    assert g(origin, "branch", "--list", "release/next") == ""
+
+
+def test_release_main_refuses_a_commit_touching_other_paths(tmp_path, monkeypatch):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "first change\n")
+    monkeypatch.setattr(train, "RELEASE_PATHS", {"VERSION"})  # CHANGELOG.md is now a foreign path
+    assert release_main(str(origin)) is None
+    assert g(origin, "branch", "--list", "release/next") == ""
+
+
+def test_fragments_on_main_open_one_release_pr_and_a_second_run_updates_it(tmp_path, capsys, monkeypatch):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "first change\n")
+    main_before = g(origin, "rev-parse", "main")
+    monkeypatch.setattr(train, "release_main",
+                        lambda remote, token="", base="main", fragments=None: release_main(str(origin), fragments=fragments))
+    run = Gh([])
+    assert train.run_train(ENV, run) == 0
+    creates = [c for c in run.calls if c[:2] == ("pr", "create")]
+    assert len(creates) == 1 and "Release 1.5" in creates[0] and "--head" in creates[0]
+    assert "release/next" in creates[0] and "10.md" in creates[0][-1]
+    assert g(origin, "rev-parse", "main") == main_before
+    run.prs = [{"number": 77, "headRefName": "release/next"}]
+    assert train.run_train(ENV, run) == 0
+    assert len([c for c in run.calls if c[:2] == ("pr", "create")]) == 1
+    assert [c for c in run.calls if c[:3] == ("pr", "edit", "77")]
+    assert g(origin, "rev-parse", "main") == main_before
+
+
+def test_nothing_to_release_closes_an_open_release_pr():
+    run = Gh([{"number": 77, "headRefName": "release/next"}])
+    assert train.run_train(ENV, run, releaser=list) == 0
+    assert ("pr", "close", "77", "--comment", "Nothing left to release.") in run.calls
+    quiet = Gh([])
+    assert train.run_train(ENV, quiet, releaser=list) == 0
+    assert not [c for c in quiet.calls if c[:2] in (("pr", "close"), ("pr", "create"))]
+
+
+def test_git_token_goes_through_the_environment_only():
+    env = train.git_env("s3cret")
+    assert env["GIT_CONFIG_KEY_0"] == "http.extraheader"
+    assert "s3cret" not in "".join(v for k, v in env.items() if k != "GIT_CONFIG_VALUE_0")
+    assert "GIT_CONFIG_COUNT" not in train.git_env()
 
 
 def test_main_usage_error():
