@@ -1,0 +1,90 @@
+name: dispatch
+run-name: "${{ github.event_name == 'issues' && format('dispatch: {0}', github.event.issue.title) || 'dispatch' }}"
+# Model-free dispatcher (design 0015, step 4). Runs only when repo variable DISPATCH is "on" (default off).
+# tools/dispatch.py starts the trusted, unblocked issues that already carry a slip (overlap check, model label, then
+# agent:dev) and, after a merged agent PR, removes agent:dev from the issues it names. No model, no PR code: the checkout
+# is the default branch. Labels are the only writes. Runs are idempotent and read live state, so a replaced pending run
+# in the group loses nothing. orchestrator.yml keeps the model work (slips, needs-human, HANDOVER.md).
+on:
+  issues:
+    types: [opened, edited, closed, labeled]
+  issue_comment:
+    types: [created]
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] the checkout is the default branch, PR code is never checked out or run; the script reads only the PR number
+    types: [closed]
+  workflow_run:  # zizmor: ignore[dangerous-triggers] only completed runs of validate on main and of orchestrator reach the job; no PR code
+    workflows: [validate, orchestrator]
+    types: [completed]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    if: >-
+      vars.DISPATCH == 'on' &&
+      (github.event_name != 'issues' ||
+       github.event.action != 'labeled' ||
+       contains(fromJSON('["approved","auto-ok"]'), github.event.label.name)) &&
+      (github.event_name != 'issues' || github.event.action != 'edited' ||
+       !contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login)) &&
+      (github.event_name != 'pull_request_target' || github.event.pull_request.merged == true) &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.head_branch == 'main' &&
+        (github.event.workflow_run.name == 'orchestrator' || github.event.workflow_run.event == 'push')))
+    # Job level on purpose: skipped runs must not take over the group.
+    concurrency:
+      group: dispatch
+      cancel-in-progress: false
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    env:
+      EVENT: ${{ github.event_name }}
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+        run: |
+          for n in AUTHOR_CLIENT_ID AUTHOR_BOT; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: read
+          permission-pull-requests: read
+          permission-issues: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Trusted candidate issues
+        id: cand
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: Bankaifan
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: echo "list=$(python3 tools/trusted_issues.py)" >> "$GITHUB_OUTPUT"
+      - name: Start ready issues (no model)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TRUSTED: ${{ steps.cand.outputs.list }}
+          OWNER: Bankaifan
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          MAX_DEV: ${{ vars.MAX_DEV || '4' }}
+          MAX_PRS: ${{ vars.MAX_PRS || '5' }}
+          MERGED_PR: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || '' }}
+        run: |
+          set -eu
+          if [ -n "$MERGED_PR" ]; then
+            python3 tools/dispatch.py after-merge "$MERGED_PR"
+          else
+            python3 tools/dispatch.py start
+          fi
