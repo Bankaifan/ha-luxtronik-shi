@@ -78,6 +78,34 @@ def test_overlap_on_non_first_path_and_app_authors():
         "tools/status.py overlaps PR #5", "c.py overlaps slip #9"]
 
 
+def test_pr_waiting_for_owner_and_its_slip_do_not_defer():
+    me = {"login": "Bankaifan"}
+
+    def lab(*n):
+        return [{"name": x} for x in n]
+
+    prs = [
+        {"number": 500, "headRefName": "agent/400-x", "author": me, "labels": lab("risk:security", "needs-human"),
+         "files": [{"path": "tools/status.py"}]},
+        {"number": 501, "headRefName": "agent/401-x", "author": me, "labels": lab("risk:security"),
+         "headRefOid": "abc", "files": [{"path": "tools/a.py"}],
+         "reviews": [{"state": "APPROVED", "author": {"login": "app/bankaifan-agent-approver"}, "commit": {"oid": "abc"}}]},
+        {"number": 502, "headRefName": "agent/402-x", "author": me, "labels": lab("risk:security"),
+         "headRefOid": "new", "files": [{"path": "tools/b.py"}],
+         "reviews": [{"state": "APPROVED", "author": {"login": "app/bankaifan-agent-approver"}, "commit": {"oid": "old"}}]},
+        {"number": 503, "headRefName": "agent/403-x", "author": me, "labels": lab("needs-human"),
+         "files": [{"path": "tools/c.py"}]},
+        {"number": 504, "headRefName": "agent/404-x", "author": me, "files": [{"path": "tools/d.py"}]},
+    ]
+    issues = [{"number": n, "author": me, "body": f"Files: tools/{f}.py", "comments": []}
+              for n, f in ((400, "status"), (401, "a"), (402, "b"), (403, "c"))]
+    others = mod.collect(prs, issues)
+    assert mod.find_overlaps(["tools/status.py", "tools/a.py"], others) == []
+    assert mod.find_overlaps(["tools/b.py", "tools/c.py", "tools/d.py"], others) == [
+        "tools/b.py overlaps PR #502", "tools/c.py overlaps PR #503", "tools/d.py overlaps PR #504",
+        "tools/b.py overlaps slip #402", "tools/c.py overlaps slip #403"]
+
+
 def test_main_exit_codes(monkeypatch, capsys):
     data = {"pr": [{"number": 5, "headRefName": "agent/7-x", "author": {"login": "Bankaifan"},
                     "files": [{"path": "tools/status.py"}]}], "issue": []}

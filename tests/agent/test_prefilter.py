@@ -251,3 +251,36 @@ def test_only_agent_prs_mark_an_issue_done(monkeypatch):
     assert mod.stuck_slots([{"number": 7, "labels": []}]) == set()
     prs.append({"number": 3, "body": "Refs #7", "headRefName": "agent/7-x"})
     assert mod.stuck_slots([{"number": 7, "labels": []}]) == {7}
+
+
+def test_dispatch_model_work_is_only_slipless_issues_needs_human_or_handover():
+    assert mod.orchestrator_work([1, 2], 0, False)  # dispatcher off: any candidate is model work
+    assert not mod.orchestrator_work([1, 2], 0, False, needs_slip=[])
+    assert mod.orchestrator_work([1, 2], 0, False, needs_slip=[2])
+    assert mod.orchestrator_work([1], 1, False, needs_slip=[])
+    assert mod.orchestrator_work([1], 0, True, needs_slip=[])
+
+
+def test_dispatch_merged_pr_event_does_not_wake_the_model_except_designs():
+    assert reason("pull_request", "closed", merged=True, closing_agent_dev=True, dispatch=True) == (False, "no-match")
+    assert reason("pull_request", "closed", merged=True, design_pr=True, dispatch=True) == (True, "merged-pr")
+    assert reason("pull_request", "closed", merged=True, closing_agent_dev=True) == (True, "merged-pr")
+
+
+def test_needs_slip_counts_issues_without_a_trusted_slip(monkeypatch):
+    issues = {
+        1: {"body": "Files: a.py", "author": {"login": "Bankaifan"}, "comments": []},
+        2: {"body": "do it", "author": {"login": "Bankaifan"}, "comments": []},
+        3: {"body": "Files: b.py", "author": {"login": "stranger"}, "comments": []},
+    }
+    monkeypatch.setattr(mod, "gh", lambda *a: json.dumps(issues[int(a[2])]))
+    assert mod.needs_slip([1, 2, 3]) == [2, 3]
+
+
+def test_handover_done_today(monkeypatch):
+    calls = []
+    monkeypatch.setattr(mod, "gh", lambda *a: calls.append(a) or json.dumps([{"number": 5}]))
+    assert mod.handover_done_today()
+    assert "head:agent/orchestrator-handover-" in calls[0][calls[0].index("--search") + 1]
+    monkeypatch.setattr(mod, "gh", lambda *a: "[]")
+    assert not mod.handover_done_today()
