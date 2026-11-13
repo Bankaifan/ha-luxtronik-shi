@@ -61,16 +61,19 @@ def test_sync_pr_is_exempt_only_with_title_and_config_change():
     assert mod.pr_errors(CFG, PROJ, "Fix", files)
 
 
-def test_part1_sync_pr_is_exempt_without_config_change():
+def test_split_sync_parts_are_exempt_without_config_change():
     files = ["tools/a.py", "AGENTS.md"]
-    assert mod.pr_errors(CFG, PROJ, "Template sync abc1234 part 1", files) == []
-    assert mod.pr_errors(CFG, PROJ, "Template sync abc1234 part 1: reviewer pipeline", files) == []
+    for title in ["Template sync abc1234 part 1", "Template sync abc1234 part 1: reviewer pipeline",
+                  "Template sync abc1234 part 2", "Template sync abc1234 part 10", "Template sync abc1234 part 2a",
+                  "Template sync 09335eb part 2b-1: leaf tools and tests"]:
+        assert mod.pr_errors(CFG, PROJ, title, files) == [], title
 
 
-def test_other_titles_are_not_part1_exempt():
+def test_other_titles_are_not_part_exempt():
     files = ["tools/a.py"]
-    for title in ["Fix", "Template sync abc1234", "Template sync abc1234 part 2", "Template sync abc1234 part 10",
-                  "Template sync part 1", "Template sync xyz part 1", "Fix: Template sync abc1234 part 1"]:
+    for title in ["Fix", "Template sync abc1234", "Template sync abc1234 part", "Template sync abc1234 part x",
+                  "Template sync abc1234 partial", "Template sync part 1", "Template sync xyz part 1",
+                  "Fix: Template sync abc1234 part 1"]:
         assert mod.pr_errors(CFG, PROJ, title, files), title
 
 
