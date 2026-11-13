@@ -12,9 +12,12 @@ import sys
 
 SCOPE_FILE = "tests/scope.json"
 ALL = "ALL"
+# Test directories side by side: the template tests (tests/agent/) and the project tests (tests/).
+TEST_DIRS = ("tests", "tests/agent")
 # Changed paths that force a full run (fnmatch patterns on the repo-relative path; `*` also matches `/`).
 FULL_RUN = (
     "tests/conftest.py",
+    "tests/agent/conftest.py",
     SCOPE_FILE,
     "tools/scope_tests.py",
     "Makefile",
@@ -62,16 +65,17 @@ def select(paths, scope, root="."):
         name = pathlib.PurePosixPath(p)
         if matches(p, NO_TESTS) and p not in scope:
             continue
-        if p.startswith("tests/") and name.parent.as_posix() == "tests" and name.name.startswith("test_") \
+        if p.startswith("tests/") and name.parent.as_posix() in TEST_DIRS and name.name.startswith("test_") \
                 and name.suffix == ".py":
             tests.add(p)
             continue
         if p.startswith("tools/") and name.suffix == ".py":
-            own = f"tests/test_{name.stem}.py"
             found = False
-            if (base / own).exists():
-                tests.add(own)
-                found = True
+            for d in TEST_DIRS:
+                own = f"{d}/test_{name.stem}.py"
+                if (base / own).exists():
+                    tests.add(own)
+                    found = True
             for extra in scope.get(p, []):
                 tests.add(extra)
                 found = True
