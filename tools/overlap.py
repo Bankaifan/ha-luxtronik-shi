@@ -20,6 +20,7 @@ DEFAULT_TRUSTED = frozenset({
     "bankaifan-agent-author", "app/bankaifan-agent-author", "bankaifan-agent-author[bot]",
     "bankaifan-agent-approver", "app/bankaifan-agent-approver", "bankaifan-agent-approver[bot]",
 })
+APPROVERS = frozenset({"bankaifan-agent-approver", "app/bankaifan-agent-approver", "bankaifan-agent-approver[bot]"})
 
 
 def clean_path(tok):
@@ -63,21 +64,40 @@ def trusted(obj, authors):
     return (obj.get("author") or {}).get("login") in authors
 
 
+def waits_for_owner(pr):
+    """risk:security PR that waits only for Daniel: labelled needs-human, or its current head approved by the approver app."""
+    names = {(lb or {}).get("name") for lb in pr.get("labels") or []}
+    if "risk:security" not in names:
+        return False
+    if "needs-human" in names:
+        return True
+    head = pr.get("headRefOid")
+    return bool(head) and any(
+        r.get("state") == "APPROVED" and (r.get("author") or {}).get("login") in APPROVERS
+        and (r.get("commit") or {}).get("oid") == head
+        for r in pr.get("reviews") or [])
+
+
 def collect(prs, issues, own_issue=None, authors=DEFAULT_TRUSTED):
     """Build (label, paths) from `gh pr list` and `gh issue list` JSON. Own issue is skipped.
-    Only same-repo PRs and slips/comments by trusted authors count; others are ignored."""
+    Only same-repo PRs and slips/comments by trusted authors count; others are ignored.
+    A PR waiting only for the owner (see waits_for_owner) and the slip of its issue do not count."""
     others = []
+    parked = set()
     for pr in prs:
         m = BRANCH_RE.match(pr.get("headRefName", ""))
         if not m or pr.get("isCrossRepository") or not trusted(pr, authors):
             continue
         if own_issue is not None and int(m.group(1)) == own_issue:
             continue
+        if waits_for_owner(pr):
+            parked.add(int(m.group(1)))
+            continue
         others.append((f"PR #{pr['number']}", [f["path"] for f in pr.get("files", [])]))
     for iss in issues:
         if own_issue is not None and iss["number"] == own_issue:
             continue
-        if not trusted(iss, authors):
+        if iss["number"] in parked or not trusted(iss, authors):
             continue
         texts = [iss.get("body", "")] + [c.get("body", "") for c in iss.get("comments", []) if trusted(c, authors)]
         paths = []
@@ -102,7 +122,7 @@ def main(argv=None):
         print("overlap: no usable paths in --files", file=sys.stderr)
         return 2
     try:
-        prs = gh_json("pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName,files,author,isCrossRepository")
+        prs = gh_json("pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName,files,author,isCrossRepository,labels,reviews,headRefOid")
         issues = gh_json("issue", "list", "--state", "open", "--label", "agent:dev", "--limit", "100",
                          "--json", "number,body,comments,author")
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
