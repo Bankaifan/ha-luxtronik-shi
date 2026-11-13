@@ -40,6 +40,7 @@ def test_status_run_does_not_flag_recently_added_never_run_workflows():
     # All scheduled workflows were added yesterday and none has succeeded yet: nothing is overdue.
     log = []
     added = {wf: "2026-11-09T10:00:39Z" for wf in st.liveness.SCHEDULED}
+    added["watch.yml"] = "2026-11-10T11:30:00Z"  # hourly workflow: "yesterday" would already be overdue
     assert st.run_status(ENV, NOW, fake_gh(added, log)) == 0
     assert overdue_creates(log) == []
     body = next(a[a.index("--body") + 1] for a in log
@@ -53,10 +54,27 @@ def test_status_run_flags_never_run_workflow_added_long_ago():
     log = []
     added = {wf: "2026-11-09T10:00:39Z" for wf in st.liveness.SCHEDULED}
     added["scout.yml"] = "2026-09-10T10:00:00Z"
+    added["watch.yml"] = "2026-11-10T11:30:00Z"
     assert st.run_status(ENV, NOW, fake_gh(added, log)) == 0
     creates = overdue_creates(log)
     assert [a[a.index("--title") + 1] for a in creates] == ["Overdue scheduled run: scout"]
     assert creates[0][creates[0].index("--label") + 1] == "prio:1"
+
+
+def test_dead_watcher_is_flagged_by_the_status_run():
+    # Mutual watch: watch.yml (60 min) is scheduled; no success for 3 h is overdue, 90 min is not.
+    assert liveness.SCHEDULED["watch.yml"] == ("actions watcher", 60)
+    stale = {"watch.yml": {"createdAt": "2026-11-10T09:00:00+00:00", "url": "u"}}
+    assert liveness.overdue_runs(stale, NOW, {"scout.yml": "2026-11-09T10:00:00Z"}).count("actions watcher") == 1
+    fresh = {"watch.yml": {"createdAt": "2026-11-10T10:30:00+00:00", "url": "u"}}
+    assert "actions watcher" not in liveness.overdue_runs(fresh, NOW)
+    log = []
+    added = {wf: "2026-11-09T10:00:39Z" for wf in st.liveness.SCHEDULED}
+    added["watch.yml"] = "2026-11-01T10:00:00Z"  # added long ago, never succeeded
+    assert st.run_status(ENV, NOW, fake_gh(added, log)) == 0
+    creates = overdue_creates(log)
+    assert [a[a.index("--title") + 1] for a in creates] == ["Overdue scheduled run: actions watcher"]
+    assert "GUARD" not in creates[0][creates[0].index("--body") + 1]
 
 
 def stale_successes():

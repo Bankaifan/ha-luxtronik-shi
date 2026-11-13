@@ -8,8 +8,10 @@ Not called by anything yet (wiring is a later PR). Needs the gh CLI (GH_TOKEN, G
 import datetime
 import json
 import re
+from urllib.parse import quote
 
 import decision
+import ghcall
 import guard_mark
 import liveness
 from agent_guard import add_labels
@@ -19,16 +21,23 @@ MAX_NEW = 5
 MAX_PAGES = 3
 MAX_BACK = datetime.timedelta(hours=24)
 OVERLAP = datetime.timedelta(minutes=5)
-KEPT = ("failure", "timed_out", "startup_failure")
+KEPT = ("failure", "timed_out", "startup_failure", "cancelled")
 FAILED_JOB = ("failure", "timed_out")
+CANCELLED_STEP = "cancelled"  # step name of a job that never started (displaced by concurrency, design 0012 4.2)
+CANCEL_TAILS = (" / " + CANCELLED_STEP, " / - / -")  # job never started, or the run has no job at all (issue #484)
+# Cancellations that are normal (design 0012 4.2): value True = only when a newer run of the same branch exists.
+EXPECTED_CANCEL = {"agent-review.yml": False, "validate.yml": True, "orchestrator.yml": True}
 MERGE_GATES = ("validate.yml", "risk.yml", "agent-security-review.yml")
 PR_ONLY = ("risk.yml", "agent-security-review.yml", "agent-review.yml")  # green on any non-agent ref counts
-AGENT_OWNED = ("validate.yml", "agent-review.yml")  # failures on agent/* branches belong to agent-fix rounds
-SELF = "status.yml"
+AGENT_OWNED = ("agent-review.yml",)  # failures on agent/* branches belong to agent-fix rounds
+MAIN_ONLY = ("validate.yml",)  # a red PR run belongs to its PR; only main opens an issue (#410, as priority() and _success_closes)
+SELF = "status.yml"  # default only: each caller passes its own workflow file
 ESCALATE_AT = 3
 PART_MAX = 60
+TURN_CAP_WORKFLOWS = ("agent-dev.yml", "agent-fix.yml")  # agent runs that can stop at their --max-turns cap (#562)
 _BAD = re.compile(r"[^A-Za-z0-9 ._:/()-]")
 _FIELD = re.compile(r"^(Failures|Reopened|Last run|Closed by): (.*)$", re.MULTILINE)
+_TURN_CAP = re.compile(r"reported a successful result after (\d+) turns,\s+exceeding the configured maximum of (\d+)")
 
 
 def _api(path, run):
@@ -47,17 +56,20 @@ def run_url(run_obj):
     return run_obj.get("html_url") or ""
 
 
-def keep(run_obj):
-    """Section 4.1 filter: only real failures, not the status run, not forks, not agent-owned branches."""
+def keep(run_obj, self_wf=SELF):
+    """Section 4.1 filter: only real failures, not the calling workflow's own runs, not forks, not agent-owned branches, validate only on main."""
     wf = workflow_file(run_obj)
-    if run_obj.get("conclusion") not in KEPT or wf == SELF:
+    if run_obj.get("conclusion") not in KEPT or wf == self_wf:
         return False
     if (run_obj.get("head_repository") or {}).get("fork"):
         return False
-    return not (wf in AGENT_OWNED and (run_obj.get("head_branch") or "").startswith("agent/"))
+    branch = run_obj.get("head_branch") or ""
+    if wf in MAIN_ONLY:
+        return branch == "main"
+    return not (wf in AGENT_OWNED and branch.startswith("agent/"))
 
 
-def collect(since, now, run=liveness.gh):
+def collect(since, now, run=liveness.gh, self_wf=SELF):
     """Kept failed runs completed since SINCE (minus overlap, at most 24h back), oldest first."""
     start = max(since - OVERLAP, now - MAX_BACK)
     found = []
@@ -68,15 +80,86 @@ def collect(since, now, run=liveness.gh):
         found += runs
         if len(runs) < 100:
             break
-    return sorted((r for r in found if keep(r)), key=lambda r: r["id"])
+    return sorted((r for r in found if keep(r, self_wf)), key=lambda r: r["id"])
+
+
+def _first(items, conclusions):
+    return next((i for i in items if i.get("conclusion") in conclusions), None)
+
+
+def analyse(run_obj, run=liveness.gh):
+    """(signature, started): `<workflow file> / <job> / <step>` and whether the job ran any step.
+    The names come from workflow files, not from logs, and are sanitised. A cancelled job without steps never
+    started (displaced by concurrency): its step is the class `cancelled`."""
+    jobs = _api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_obj['id']}/jobs", run).get("jobs") or []
+    job = _first(jobs, FAILED_JOB) or _first(jobs, ("cancelled",))
+    steps = (job or {}).get("steps") or []
+    step = _first(steps, FAILED_JOB) or _first(steps, ("cancelled",))
+    name = (step or {}).get("name")
+    if job and not steps and job.get("conclusion") == "cancelled":
+        name = CANCELLED_STEP
+    sig = " / ".join(clean(p) for p in (workflow_file(run_obj), (job or {}).get("name"), name))
+    return sig, bool(steps)
 
 
 def signature(run_obj, run=liveness.gh):
-    """`<workflow file> / <job> / <step>`; the names come from workflow files, not from logs, and are sanitised."""
-    jobs = _api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_obj['id']}/jobs", run).get("jobs") or []
-    job = next((j for j in jobs if j.get("conclusion") in FAILED_JOB), None)
-    step = next((s for s in (job or {}).get("steps") or [] if s.get("conclusion") in FAILED_JOB), None)
-    return " / ".join(clean(p) for p in (workflow_file(run_obj), (job or {}).get("name"), (step or {}).get("name")))
+    return analyse(run_obj, run)[0]
+
+
+def newer_run(run_obj, run=liveness.gh, any_branch=False):
+    """A later run of the same workflow file exists (same branch unless ANY_BRANCH), in any status (a queued one counts)."""
+    if any_branch:
+        path = f"repos/{{owner}}/{{repo}}/actions/workflows/{quote(workflow_file(run_obj), safe='')}/runs?per_page=100"
+    else:
+        branch = quote(run_obj.get("head_branch") or "", safe="")
+        path = f"repos/{{owner}}/{{repo}}/actions/runs?branch={branch}&per_page=100"
+    runs = _api(path, run).get("workflow_runs") or []
+    return any(o["id"] > run_obj["id"] and workflow_file(o) == workflow_file(run_obj)
+               and (any_branch or o.get("head_branch") == run_obj.get("head_branch")) for o in runs)
+
+
+def expected_cancel(run_obj, started, run=liveness.gh):
+    """A cancelled run that never started (no job, or no step ran) is a pending run replaced in its concurrency
+    group: expected when a newer run of the same workflow exists, a lost trigger otherwise (issue #482).
+    Design 0012 4.2: a cancelled run with started steps is normal for EXPECTED_CANCEL workflows
+    (agent-review always, validate.yml and orchestrator.yml only when a newer run of the same branch replaced it)."""
+    if run_obj.get("conclusion") != "cancelled":
+        return False
+    if not started:
+        return newer_run(run_obj, run, any_branch=True)
+    wf = workflow_file(run_obj)
+    if wf not in EXPECTED_CANCEL:
+        return False
+    return not EXPECTED_CANCEL[wf] or newer_run(run_obj, run)
+
+
+def rate_limited(run_id, conclusion, run=liveness.gh):
+    """A failed run whose log names GitHub's API rate limit: load, not a defect, and the next event or sweep redoes
+    the work (#511, #617). An issue would only add events and use up more of the budget. Unreadable log: False."""
+    if not run_id or conclusion not in FAILED_JOB:
+        return False
+    try:
+        return ghcall.rate_limited(run("run", "view", str(run_id), "--log-failed"))
+    except Exception:  # noqa: BLE001 - an unreadable log keeps the normal rules
+        return False
+
+
+def turn_cap(wf, run_id, conclusion, run=liveness.gh):
+    """(turns, maximum) when a failed agent run stopped at its --max-turns cap after a successful result (#562),
+    else None. The log is read for these two numbers only: no log text reaches a title or a body. An unreadable
+    log keeps the normal rules (None)."""
+    if wf not in TURN_CAP_WORKFLOWS or not run_id or conclusion not in FAILED_JOB:
+        return None
+    try:
+        m = _TURN_CAP.search(run("run", "view", str(run_id), "--log-failed"))
+    except Exception:  # noqa: BLE001 - an unreadable log must never stop the watch
+        return None
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def turn_cap_line(run_id, capped):
+    turns, maximum = capped
+    return f"run {run_id}: turn cap, {turns} turns over the maximum of {maximum}: no issue, no rerun"
 
 
 def title_for(sig):
@@ -227,6 +310,26 @@ def auto_close(issues, touched, key, run=liveness.gh):
     return closed
 
 
+def close_expected(issues, touched, key, run=liveness.gh):
+    """Close open `<workflow> / <job> / cancelled` issues whose last run is an expected replaced pending run."""
+    closed = []
+    for issue in issues.values():
+        if issue["state"] != "OPEN" or issue["title"] in touched or not issue["title"].endswith(CANCEL_TAILS):
+            continue
+        last_id = parse_body(issue["body"])["last_id"]
+        if not last_id:
+            continue
+        try:
+            r = _api(f"repos/{{owner}}/{{repo}}/actions/runs/{last_id}", run)
+            expected = expected_cancel(r, analyse(r, run)[1], run)
+        except Exception:  # noqa: BLE001, S112 - an unreadable run keeps the issue open
+            continue
+        if expected:
+            _close(issue, "Closed by the failure watch: the last run was a pending run replaced by a newer one.", run)
+            closed.append(issue["number"])
+    return closed
+
+
 def close_overdue(overdue_labels, key, run=liveness.gh):
     """Close signed `Overdue scheduled run: <label>` issues whose workflow is not overdue any more."""
     closed = []
@@ -243,19 +346,28 @@ def close_overdue(overdue_labels, key, run=liveness.gh):
     return closed
 
 
-def watch(since, now, overdue_labels, key=None, run=liveness.gh):
-    """One tick. Returns (actions, next_since). Without GUARD_KEY nothing is verifiable, so nothing is done."""
+def watch(since, now, overdue_labels, key=None, run=liveness.gh, self_wf=SELF):
+    """One tick. Returns (actions, next_since). Without GUARD_KEY nothing is verifiable, so nothing is done.
+    SELF_WF: the caller's own workflow file, whose runs are never watched (no loop)."""
     key = guard_mark.key_from_env() if key is None else key
     if not key:
         return [], since
     issues = load_issues(key, run)
     actions, touched, deferred, new = [], set(), [], 0
     handled = since
-    for r in collect(since, now, run):
-        sig = signature(r, run)
+    for r in collect(since, now, run, self_wf):
+        sig, started = analyse(r, run)
+        created = datetime.datetime.fromisoformat(r["created_at"])
+        capped = turn_cap(workflow_file(r), r["id"], r.get("conclusion"), run)
+        if capped:
+            actions.append(turn_cap_line(r["id"], capped))
+            handled = max(handled, created)
+            continue
+        if expected_cancel(r, started, run):
+            handled = max(handled, created)
+            continue
         title = title_for(sig)
         issue = issues.get(title)
-        created = datetime.datetime.fromisoformat(r["created_at"])
         if issue and parse_body(issue["body"])["last_id"] >= r["id"]:
             touched.add(title)
             continue
@@ -271,6 +383,7 @@ def watch(since, now, overdue_labels, key=None, run=liveness.gh):
         touched.add(title)
         handled = max(handled, created)
     actions += [f"closed failure issue #{n}" for n in auto_close(issues, touched, key, run)]
+    actions += [f"closed expected-cancel issue #{n}" for n in close_expected(issues, touched, key, run)]
     actions += [f"closed overdue issue #{n}" for n in close_overdue(overdue_labels, key, run)]
     if deferred:
         actions.append(f"failure watch: {len(deferred)} signatures deferred")

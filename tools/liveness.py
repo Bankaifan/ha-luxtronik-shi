@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 
+import ghcall
 import guard_mark
 
 # workflow file -> (label, expected interval in minutes)
@@ -19,6 +20,7 @@ SCHEDULED = {
     "rule-keeper.yml": ("rule keeper", 7 * 24 * 60),
     "weekly-summary.yml": ("weekly summary", 7 * 24 * 60),
     "nightly.yml": ("nightly heavy tests", 24 * 60),
+    "watch.yml": ("actions watcher", 60),  # mutual watch (design 0012, 4.4.5): status flags a dead watcher
 }
 # workflow file -> repo variable that must be exactly "true" for the workflow to be expected to run
 GATED = {"nightly.yml": "NIGHTLY_HEAVY_TESTS"}
@@ -32,7 +34,7 @@ class ReadbackError(RuntimeError):
 
 
 def gh(*args):
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+    return ghcall.gh(*args)
 
 
 def _norm(text):
