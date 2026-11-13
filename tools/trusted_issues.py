@@ -48,7 +48,8 @@ def is_sync_issue(issue, author_bot):
     return (issue.get("title") or "").startswith(SYNC_PREFIX) and bool(_SYNC.search(issue.get("body") or ""))
 
 
-GUARD_TITLES = ("Overdue scheduled run: ", "Denied command in ", "Failing workflow: ")
+GUARD_TITLES = ("Overdue scheduled run: ", "Denied command in ", "Failing workflow: ",
+                "Unstarted run: ", "Canary: ")
 
 
 def is_guard_issue(issue, author_bot, key):

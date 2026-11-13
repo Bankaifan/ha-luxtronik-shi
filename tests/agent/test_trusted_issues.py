@@ -204,6 +204,24 @@ def test_signed_issue_with_other_title_is_not_trusted():
     assert mod.classify(guard(title="Something else"), [], "Bankaifan", BOT, guard_key=KEY) is None
 
 
+UNSTARTED = "Unstarted run: orchestrator"
+
+
+def test_signed_unstarted_run_issue_is_trusted():
+    assert mod.classify(guard(title=UNSTARTED), [], "Bankaifan", BOT, guard_key=KEY)["guard"]
+
+
+def test_unstarted_run_issue_needs_signature_and_bot_author():
+    assert mod.classify(guard(title=UNSTARTED, signed=False), [], "Bankaifan", BOT, guard_key=KEY) is None
+    assert mod.classify(guard(title=UNSTARTED, author="mallory"), [], "Bankaifan", BOT, guard_key=KEY) is None
+    assert mod.classify(guard(title=UNSTARTED), [], "Bankaifan", BOT, guard_key="") is None
+
+
+def test_existing_guard_prefixes_unchanged():
+    for title in ("Overdue scheduled run: x", "Denied command in x", FAILING):
+        assert mod.classify(guard(title=title), [], "Bankaifan", BOT, guard_key=KEY)["guard"]
+
+
 def test_failing_workflow_issue_needs_signature_and_bot_author():
     assert mod.classify(guard(signed=False), [], "Bankaifan", BOT, guard_key=KEY) is None
     assert mod.classify(guard(author="mallory"), [], "Bankaifan", BOT, guard_key=KEY) is None
