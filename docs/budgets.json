@@ -2,12 +2,12 @@
   "files": {
     ".agents/roles/design-reviewer.md": 2140,
     ".agents/roles/developer.md": 4497,
-    ".agents/roles/orchestrator.md": 8803,
+    ".agents/roles/orchestrator.md": 9027,
     ".agents/roles/reviewer.md": 2558,
     ".agents/roles/scout.md": 1309,
     ".agents/roles/security-reviewer.md": 1171,
     ".agents/roles/unblocker.md": 3068,
-    "AGENTS.md": 11023
+    "AGENTS.md": 5800
   },
-  "total": 34708
+  "total": 29344
 }

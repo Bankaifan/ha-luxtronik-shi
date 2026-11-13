@@ -167,6 +167,13 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.round.outputs.pr }}
         run: python3 tools/ci/risk.py wait "$PR" "$SHA"
+      # A round counts only for a finding: an approved head (model or script) gives its round back.
+      - name: Give the round back for an approved head
+        if: ${{ !cancelled() && steps.round.outputs.skip != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.round.outputs.pr }}
+        run: python3 tools/agent_guard.py refund "$PR" "$SHA" || echo "refund failed"
       # Never end silently: the Claude step ran but the approver app left no review for this head SHA.
       - name: Escalate a run that left no review
         if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}

@@ -1,3 +1,7 @@
+# Project hook (design 0016): project.mk (not managed) adds `project-check::` recipes; a missing file is not an error.
+.DEFAULT_GOAL := check
+-include project.mk
+
 # Test scoping (design 0009): on pull requests (PR_BASE_REF set) only the tests covering the changed files run.
 # Output of tools/scope_tests.py: ALL (everything), a file list, or empty (nothing in scope). Unset PR_BASE_REF = ALL.
 SCOPE_OUT = $(shell if [ -n "$$PR_BASE_REF" ]; then python3 tools/scope_tests.py "origin/$$PR_BASE_REF"; else echo ALL; fi)
@@ -19,8 +23,15 @@ check:
 	python3 tools/check/check_no_bytecode.py
 	python3 tools/check/check_var_defaults.py
 	python3 tools/check/check_budget.py
+	python3 tools/design_split.py check
 	bash tools/check/check_drift.sh
 	@$(MAKE) --no-print-directory test-evidence
+	@$(MAKE) --no-print-directory project-check
+
+# Empty template default: project.mk adds recipes with `project-check::` (double-colon rules run in order).
+.PHONY: project-check
+project-check::
+	@:
 
 .PHONY: unit-tests
 unit-tests:

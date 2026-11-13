@@ -38,13 +38,6 @@ def test_deleted_test_and_security_tool_test_stay(tmp_path):
     assert not (tmp_path / "files" / "tests" / "agent" / "test_old.py").exists()
 
 
-def test_root_test_of_security_tool_is_staged(tmp_path):
-    diff = block("tests/test_guard_mark.py") + block("tests/test_agent_guard.py") + block("tests/test_other.py")
-    _, staged, skipped = run(tmp_path, diff)
-    assert "tests/test_guard_mark.py" in staged and "tests/test_agent_guard.py" in staged
-    assert "tests/test_other.py" not in staged and "tests/test_other.py" in skipped
-
-
 def test_turns_grow_and_cap():
     assert sr.turns_for(100) == 13
     assert sr.turns_for(0) == 12

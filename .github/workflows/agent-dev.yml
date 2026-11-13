@@ -129,11 +129,10 @@ jobs:
         with:
           client-id: ${{ vars.AUTHOR_CLIENT_ID }}
           private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          # No `workflows` and no `actions` scope: GitHub refuses a push that changes .github/workflows/ (design 0017, step 3).
           permission-contents: write
-          permission-workflows: write
           permission-pull-requests: write
           permission-issues: write
-          permission-actions: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes with the app token persisted by checkout
         with:
           token: ${{ steps.app.outputs.token }}
@@ -152,7 +151,9 @@ jobs:
       # A template sync issue (trusted as in tools/trusted_issues.py, line `Template-Sync: <40 hex>`) needs the template
       # files: the developer has no tool to fetch them. Download the template (repo from .agents/template.json, public)
       # at that SHA into .template/, kept out of git via .git/info/exclude. tools/ci/template_fetch.py decides; it prints
-      # nothing when this is no trusted sync issue.
+      # nothing when this is no trusted sync issue. Then `materialize` writes ours/base/theirs of each conflicted file
+      # into .template/<path>.{ours,base,theirs} (design 0014, 3 H); it reads through the contents API with the default
+      # token (the template is public).
       - name: Template files for a sync issue
         id: template
         env:
@@ -160,6 +161,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           out=$(python3 tools/ci/template_fetch.py)
           if [ -z "$out" ]; then echo "No template sync"; exit 0; fi
@@ -167,6 +169,7 @@ jobs:
           mkdir -p .template
           curl -fsSL "https://codeload.github.com/$tpl/tar.gz/$sha" | tar -xz --strip-components=1 -C .template
           echo ".template/" >> .git/info/exclude
+          python3 tools/template_sync.py materialize "$sha"
           echo "dir=.template" >> "$GITHUB_OUTPUT"
           echo "Template $tpl at $sha in .template/"
       - id: started
@@ -189,43 +192,104 @@ jobs:
             `gh pr create` (English ASCII title, body max 5 lines, "Closes #${{ env.ISSUE }}").
             No tool or AI attribution in commits, PR bodies or comments (no "Generated with", session link, Co-Authored-By, Claude-Session).
             The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
-            never `pip install`. Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects
+            never `pip install`. Use one simple command per Bash call (a pipe may end in head, tail, grep, sort, wc or jq); no `&&`, `;`, `$(...)` or redirects
             (they do not match the allow list and are denied).
+            Changes under .github/workflows/ are allowed: commit them like any file. After your run a script carries them
+            past the token as a patch file (workflow-apply applies it after the security review). Older comments saying a
+            workflow push was refused or that Daniel applies it by hand are outdated: implement and commit anyway.
+            To read a run log, run `python3 tools/run_log.py <run id>` and Read ci-failure.log: a large `gh run view`
+            output lands in a file you may not read.
             Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
             comment on the issue/PR saying which one instead of stopping silently.
             Template sync issue: the template files at the issue's `Template-Sync` SHA are in .template/
             (${{ steps.template.outputs.dir || 'not present: this is no sync issue' }}). Read them from there, never commit .template/.
+            For each conflicted file the issue lists, its three versions are .template/<path>.ours (downstream),
+            .template/<path>.base (template at synced_sha) and .template/<path>.theirs (template at the Template-Sync SHA):
+            merge it by hand, keeping the recorded intent.
             Porting files: no helper scripts (no `bash /tmp/port.sh`), no loops. Use Read then Write/Edit per file,
             or one plain `cp <src> <dst>` per file; list and compare with `ls`, `diff`, `cmp`.
+          # DEV_SHELL=free (repo variable, design 0017 step 6) gives bare Bash; unset keeps the command list below.
           claude_args: >-
             --model ${{ env.MODEL }}
             --max-turns 60
             --setting-sources user
             --settings .github/claude-judge-settings.json
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh run list:*),Bash(gh run view:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,${{ vars.DEV_SHELL == 'free' && 'Bash' || 'Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(sort:*),Bash(jq:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh run list:*),Bash(gh run view:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*)' }}"
+      # git runs here, without the guard key: the agent may have planted hooks or config in the checkout.
+      - name: Fetch guard tools (no key)
+        if: ${{ always() }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # The agent may edit the checkout: run the helpers as they are on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
+      # A push that changes .github/workflows/ is refused (no `workflows` scope on the model token). Instead the workflow
+      # changes travel as .agents/workflow-patches/<issue>.patch; workflow-apply.yml applies them after a green security
+      # review (design 0017 step 3, follow-up). The helper runs as it is on the default branch, git hooks off.
+      - name: Carry workflow changes as a patch
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          for ref in $(python3 "$RUNNER_TEMP/guard/tools/workflow_patch.py" stash "agent/${ISSUE}-*"); do
+            if [ -z "$(gh pr list --head "$ref" --state open --json number --jq '.[].number')" ]; then
+              gh pr create --head "$ref" --title "$(git log -1 --format=%s "$ref")" \
+                --body "Closes #$ISSUE. Workflow changes are in .agents/workflow-patches/ and are applied after the security review."
+            fi
+            gh issue comment "$ISSUE" --body "Workflow changes of $ref travel as a patch file; workflow-apply applies them after the security review."
+          done
       # Deterministic, inline on purpose: the agent may edit files in the checkout, never this step.
-      - name: Make sure CI runs on the PR head
+      - name: Find the open PR of this issue
+        id: pr
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           pr=$(gh pr list --state open --json number,headRefName,headRefOid \
             | jq -c --arg p "agent/${ISSUE}-" '[.[] | select(.headRefName | startswith($p))] | first // empty')
           if [ -z "$pr" ]; then echo "No open PR for issue $ISSUE"; exit 0; fi
-          num=$(jq -r .number <<<"$pr"); branch=$(jq -r .headRefName <<<"$pr"); sha=$(jq -r .headRefOid <<<"$pr")
+          {
+            echo "num=$(jq -r .number <<<"$pr")"
+            echo "branch=$(jq -r .headRefName <<<"$pr")"
+            echo "sha=$(jq -r .headRefOid <<<"$pr")"
+          } >> "$GITHUB_OUTPUT"
+      # The CI trigger needs `actions: write`, which the model token no longer has: this short-lived token goes to that step only.
+      - id: ci-app
+        if: ${{ !cancelled() && steps.pr.outputs.num != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-actions: write
+      - name: Make sure CI runs on the PR head
+        id: ci
+        if: ${{ !cancelled() && steps.pr.outputs.num != '' }}
+        env:
+          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
           for _ in 1 2 3 4 5 6; do
-            n=$(gh run list --workflow validate.yml --commit "$sha" --json databaseId --jq length)
-            if [ "$n" -gt 0 ]; then echo "validate already runs for $sha"; exit 0; fi
+            n=$(gh run list --workflow validate.yml --commit "$SHA" --json databaseId --jq length)
+            if [ "$n" -gt 0 ]; then echo "validate already runs for $SHA"; exit 0; fi
             sleep 10
           done
-          gh workflow run validate.yml --ref "$branch"
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
-          python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" label pr "$num" agent:review
+          gh workflow run validate.yml --ref "$BRANCH"
+          echo "triggered=true" >> "$GITHUB_OUTPUT"
+      - name: Label the PR for review
+        if: ${{ steps.ci.outputs.triggered == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.num }}
+        run: python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" label pr "$PR" agent:review
       # Never end silently: no PR for the branch means a comment, needs-human and Daniel assigned.
       - name: Escalate a run that produced no PR
         if: ${{ always() }}
@@ -236,11 +300,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
           STARTED: ${{ steps.started.outputs.at }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+          AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}  # a silent run retries once, then goes to a signed issue (#624)
         run: |
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
           # Rule: the guard comes from main, this call from the PR branch. `silent` ignores extra trailing args and a
           # usage error escalates ("guard error"); only ever append args, never reorder or remove them.
           python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent dev "$ISSUE" "$STARTED"

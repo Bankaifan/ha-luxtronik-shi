@@ -56,7 +56,8 @@ def test_escalate_note_carries_marker(monkeypatch):
     monkeypatch.setattr(agent_guard.liveness, "post_comment", lambda kind, n, body, run: posted.append(body))
     monkeypatch.setattr(agent_guard, "add_labels", lambda *a, **k: None)
     monkeypatch.setattr(agent_guard.owner_hold, "held", lambda *a, **k: True)
-    agent_guard.escalate("dev", 5, True, "silent", "Bankaifan", run=lambda *a: "")
+    monkeypatch.setenv("AUTHOR_BOT", "author-bot")  # known history (empty): the first denial may offer a retrigger
+    agent_guard.escalate("dev", 5, True, "silent", "Bankaifan", run=lambda *a: "[[]]" if "--paginate" in a else "")
     assert decision.parse(posted[0]) == {"yes": "drop-block", "no": "close-pr"}
     assert "(ja)" in posted[0] and "(nein)" in posted[0]
 

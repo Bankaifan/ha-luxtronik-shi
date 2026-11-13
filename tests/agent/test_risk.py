@@ -17,6 +17,11 @@ def diff(path, *lines, start=1):
     return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -{start},3 +{start},3 @@\n{body}\n"
 
 
+def test_workflow_queues_runs_instead_of_cancelling():
+    text = (pathlib.Path(__file__).parent.parent.parent / ".github" / "workflows" / "risk.yml").read_text()
+    assert "cancel-in-progress: false" in text and "cancel-in-progress: true" not in text
+
+
 def test_plain_code_and_docs_are_none():
     assert risk.classify(diff("src/app.py", "+x = 1")) == "none"
     assert risk.classify(diff("README.md", "+Mentions a token and permissions: in prose")) == "none"

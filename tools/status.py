@@ -6,8 +6,9 @@
    has no validate run for more than 10 min. First time: re-trigger and label `status:retriggered`;
    second time: needs-human, review request for OWNER, comment.
 3. Held runs: runs in `action_required` are approved only if the head belongs to an open same-repo PR of the author app.
-4. Merge conflicts: an agent PR with mergeStateStatus DIRTY gets one fix round (label review:N, then agent-fix is
-   dispatched with the PR number). After round 2 the PR gets needs-human instead.
+4. Merge conflicts: an agent PR with mergeStateStatus DIRTY gets one fix run per head (marker conflict:<sha7>, then
+   agent-fix is dispatched with the PR number). A conflict is no review round. A needs-human PR that is green and
+   approved at its head and touches no CODEOWNERS path loses the label (owner decision 2026-11-12).
 5. Exhausted rounds: an open agent PR with `review:3`, not approved, no needs-human, no agent job running and an
    idle head for more than 30 min was never handed over (the limit step failed): restart.py limit hands it over
    (issue restart once, else needs-human + review request). A failure is escalated with needs-human.
@@ -35,13 +36,19 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ci"))
+import budget
 import design_parents
 import failure_watch
+import flow
+import ghcall
 import liveness
 import owner_hold
+import risk
+import ruleset
 import stalled_dev
 from agent_guard import add_labels, same_login, tail_text
-from approval import effective_approval
+from approval import effective_approval, security_verdict
 from restart import close_superseded, handle_limit, superseded
 
 TITLE = "Agent status"
@@ -52,6 +59,7 @@ LIMIT_IDLE_MIN = 30
 RETRIGGER = "status:retriggered"
 AGENT_WORKFLOWS = {"agent-dev", "agent-fix", "agent-review", "orchestrator", "scout", "rule-keeper"}
 TICK_MIN = 30
+SELF_WORKFLOW = "status.yml"  # the failure watch of this run skips its own workflow
 SINCE_LABEL = "Failure watch since:"
 PR_LIMIT = 20  # 50 made the GraphQL query exceed 500,000 nodes (statusCheckRollup x commits)
 
@@ -59,7 +67,7 @@ PR_LIMIT = 20  # 50 made the GraphQL query exceed 500,000 nodes (statusCheckRoll
 def gh(*args):
     """Run gh; on failure print the (masked, capped) stderr first so the log explains the exit status."""
     try:
-        return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+        return ghcall.gh(*args)
     except subprocess.CalledProcessError as e:
         shown = " ".join(str(a) for a in args[:2])
         print(f"gh {shown} exited {e.returncode}: {tail_text(e.stderr or '(no stderr)')}", file=sys.stderr)
@@ -131,9 +139,6 @@ def is_agent_pr(pr):
 
 FAILED_STATES = ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE")
 PENDING_STATES = ("", "PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "EXPECTED", "REQUESTED")
-RULESET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, ".github", "rulesets", "main.json")
-
-
 def check_name(check):
     """Name of a check run (CheckRun) or a commit status (StatusContext): the context the ruleset lists."""
     return check.get("name") or check.get("context") or ""
@@ -143,14 +148,12 @@ def check_state(check):
     return (check.get("conclusion") or check.get("state") or check.get("status") or "").upper()
 
 
-def required_contexts(path=RULESET_PATH):
-    """Context names that main's ruleset requires. None if the file is unreadable or requires none: then every check
-    counts, as it did before the ruleset was read."""
+def required_contexts(path=ruleset.RULESET_PATH, checks_path=ruleset.CHECKS_PATH):
+    """Context names that main requires: the template ruleset plus `.agents/checks.json` (tools/ruleset.py, the same set
+    the build writes). None if a file is unreadable or malformed, or nothing is required: then every check counts, as
+    it did before the ruleset was read."""
     try:
-        with open(path, encoding="utf-8") as f:
-            ruleset = json.load(f)
-        names = {c["context"] for rule in ruleset["rules"] if rule["type"] == "required_status_checks"
-                 for c in rule["parameters"]["required_status_checks"]}
+        names = ruleset.contexts(path, checks_path)
     except (OSError, ValueError, KeyError, TypeError):
         return None
     return names or None
@@ -277,8 +280,63 @@ def handle_stuck_limit(pr, owner, run=gh):
         return "escalated"
 
 
+def conflict_mark(pr):
+    return f"conflict:{pr.get('headRefOid', '')[:7]}"
+
+
 def conflict_prs(prs):
-    return [p for p in prs if is_agent_pr(p) and p.get("mergeStateStatus") == "DIRTY" and "needs-human" not in names(p)]
+    """DIRTY agent PRs whose head has not had its conflict fix yet (marker conflict:<sha7>)."""
+    return [p for p in prs if is_agent_pr(p) and p.get("mergeStateStatus") == "DIRTY" and "needs-human" not in names(p)
+            and conflict_mark(p) not in names(p)]
+
+
+AUTO_PARK = ("Review limit reached", "no fix was produced")  # comments of the round-limit and silent-fix paths
+
+
+def parked_by_script(comments, approver):
+    """True if needs-human came from the round limit or a silent fix run: the newest approver comment that is no
+    security verdict or owner-hold note is one of those, and nobody else (the owner, a human) commented after it."""
+    last = None
+    for i, c in enumerate(comments or []):
+        body = c.get("body") or ""
+        if not same_login((c.get("author") or {}).get("login"), approver):
+            if last is not None:
+                last = None  # a human spoke after the script: the hold may be theirs
+            continue
+        if body.startswith(("security-review:", "Daniel removed")):
+            continue
+        last = i if any(m in body for m in AUTO_PARK) else None
+    return last is not None
+
+
+def parked_but_settled(prs, approver, required, codeowners, owner, files_of, set_by_bot=lambda p: True):
+    """Agent PRs with needs-human that the round limit or a silent fix run set, green and approved at their head (a
+    risk:security PR also needs the security `approve`), touching no CODEOWNERS path of OWNER: the label is stale.
+    A label set by a human, the guard or another path, or commented on by a human afterwards, stays. `set_by_bot(p)`
+    says whether a bot applied the newest needs-human label (a human re-label without a comment must stay)."""
+    out = []
+    for p in prs:
+        if not is_agent_pr(p) or "needs-human" not in names(p) or ci_state(p.get("statusCheckRollup"), required) != "green":
+            continue
+        sha, comments = p.get("headRefOid"), p.get("comments")
+        if not parked_by_script(comments, approver):
+            continue
+        try:
+            if not set_by_bot(p):
+                continue
+        except (ValueError, KeyError, TypeError, subprocess.CalledProcessError, OSError):  # unknown: keep the label
+            continue
+        if not effective_approval(p.get("reviewDecision"), names(p), comments, sha, approver):
+            continue
+        if "risk:security" in names(p) and security_verdict(comments, sha, approver) != "approve":
+            continue
+        try:
+            files = files_of(p)
+        except (ValueError, KeyError, TypeError, subprocess.CalledProcessError, OSError):  # files unknown: keep the label
+            continue
+        if not any(risk.owned_by(f, codeowners, owner) for f in files):
+            out.append(p)
+    return out
 
 
 def main_was_red(main_runs, at):
@@ -345,14 +403,39 @@ def clear_retrigger(kind, item, run=gh):
 
 
 def handle_conflict(pr, owner, run=gh):
-    label, limit = fix_round(names(pr))
-    if label:
-        safe_labels("pr", pr["number"], [label], run)
-    if limit:
-        escalate("pr", pr["number"], "the PR conflicts with main and the fix rounds are used up.", owner, run)
-        return "escalated"
+    """A conflict with main is no finding: no review round. One fix run per head (marker conflict:<sha7>); a run that
+    pushes nothing is escalated by agent-fix itself."""
+    safe_labels("pr", pr["number"], [conflict_mark(pr)], run)
     safe(run, "workflow", "run", "agent-fix.yml", "-f", f"pr={pr['number']}")
     return "fix dispatched"
+
+
+FILES_CAP = 3000  # GitHub's limit for pulls/N/files
+
+
+def release_settled(prs, approver, owner, run=gh):
+    """Remove needs-human from PRs that are green and approved at their head and touch no CODEOWNERS path."""
+    def files_of(p):
+        """Paginated `pulls/N/files` with old names of renames (risk.pr_paths). GitHub lists at most 3000 files:
+        a list that may be cut off raises, and the caller keeps the label."""
+        pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{os.environ['GH_REPO']}/pulls/{p['number']}/files"))
+        if sum(len(page) for page in pages) >= FILES_CAP:
+            raise ValueError("file list may be incomplete")
+        return risk.pr_paths(pages)
+
+    def set_by_bot(p):
+        """True if the newest `labeled` event of needs-human came from a bot (the script paths), not a person."""
+        pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{os.environ['GH_REPO']}/issues/{p['number']}/events"))
+        events = [e for page in pages for e in page
+                  if e.get("event") == "labeled" and (e.get("label") or {}).get("name") == "needs-human"]
+        return bool(events) and events[-1]["actor"]["type"] == "Bot"
+
+    out = []
+    for p in parked_but_settled(prs, approver, required_contexts(), risk.read_text(".github/CODEOWNERS"), owner, files_of,
+                                set_by_bot):
+        if safe(run, "pr", "edit", str(p["number"]), "--remove-label", "needs-human") is not None:
+            out.append(f"needs-human removed from PR #{p['number']}: green and approved at its head")
+    return out
 
 
 # --- status issue -----------------------------------------------------------------------------
@@ -383,7 +466,7 @@ def merged_rows(merged, now, hours=24):
 
 
 def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner, scheduled=None, added=None,
-               merged=None, watch_since=None, required=None):
+               merged=None, watch_since=None, required=None, flow_lines=None):
     run_rows = [f"- [{r['workflowName']}]({r['url']}) {r.get('displayTitle', '')} ({r['status']}, "
                 f"{age(r['createdAt'], now)})" for r in runs]
     pr_rows = [pr_line(p, owner, required) for p in prs]
@@ -400,6 +483,8 @@ def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner
              section("Open ideas", idea_rows)]
     if merged is not None:
         parts.append(section("Merged in the last 24 h (undo: Revert button on the PR)", merged_rows(merged, now)))
+    if flow_lines is not None:
+        parts.append(section("Flow, last 24 h", flow_lines))
     if scheduled is not None:
         parts.append(section("Last successful scheduled runs", scheduled_rows(scheduled, now, added)))
     parts.append(section("Actions of this run", [f"- {a}" for a in actions]))
@@ -476,7 +561,7 @@ def watch_failures(env, now, successes, added, actions, run):
     try:
         since = previous_since(run, now, bot)
         late = liveness.overdue_runs(successes, now, added)
-        done, since = failure_watch.watch(since, now, late, None, run)
+        done, since = failure_watch.watch(since, now, late, None, run, SELF_WORKFLOW)
         actions += done
     except Exception as e:  # noqa: BLE001 - the status issue must always be written
         print(f"failure watch failed: {type(e).__name__}")
@@ -492,6 +577,19 @@ def gate(env, now):
             f.write(line + "\n")
     print(line)
     return 0
+
+
+def flow_lines_for(env, repo, now, run=gh):
+    """Lines of the "Flow, last 24 h" block (tools/flow.py); the CSV goes to FLOW_CSV if set (workflow artifact).
+    A failure leaves the block out and never stops the status run."""
+    try:
+        rows, flow_runs = flow.collect(repo, run)
+        if env.get("FLOW_CSV"):
+            flow.write_csv(rows, env["FLOW_CSV"])
+        return flow.flow_block(rows, flow_runs, now)
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError) as e:
+        print(f"flow metrics failed: {type(e).__name__}")
+        return None
 
 
 def run_status(env, now, run=gh):
@@ -553,6 +651,7 @@ def run_status(env, now, run=gh):
 
     for p in limit_prs(prs, runs, now, env.get("APPROVER_BOT", ""), is_held):
         actions.append(f"review:3 PR #{p['number']}: {handle_stuck_limit(p, owner, run)}")
+    actions += release_settled(prs, env.get("APPROVER_BOT", ""), owner, run)
     if not any(r["workflowName"] == "agent-fix" for r in runs):  # one fix job at a time
         for p in [c for c in conflict_prs(prs) if not is_held(c)][:1]:
             actions.append(f"conflict PR #{p['number']}: {handle_conflict(p, owner, run)}")
@@ -568,8 +667,9 @@ def run_status(env, now, run=gh):
     watch_since = watch_failures(env, now, successes, added, actions, run)
     merged = safe(jlist, run, "pr", "list", "--state", "merged", "--limit", "30", "--json",
                   "number,title,mergedAt,labels")
+    flow_lines = flow_lines_for(env, repo, now, run)
     number = update_issue(build_body(runs, prs, issues, ages, orch, ideas, actions, now, owner, successes, added,
-                                     merged, watch_since, required_contexts()), run, bot)
+                                     merged, watch_since, required_contexts(), flow_lines), run, bot)
     print(f"status issue #{number}; actions: {len(actions)}")
     for a in actions:
         print(a)
@@ -581,6 +681,9 @@ def main(argv):
     if argv[1:] == ["gate"]:
         return gate(os.environ, now)
     if len(argv) == 1:
+        if reason := budget.low(budget.BACKGROUND):
+            print(reason)
+            return 0
         try:
             return run_status(os.environ, now)
         except liveness.ReadbackError as e:

@@ -26,7 +26,8 @@ FAILED_JOB = ("failure", "timed_out")
 CANCELLED_STEP = "cancelled"  # step name of a job that never started (displaced by concurrency, design 0012 4.2)
 CANCEL_TAILS = (" / " + CANCELLED_STEP, " / - / -")  # job never started, or the run has no job at all (issue #484)
 # Cancellations that are normal (design 0012 4.2): value True = only when a newer run of the same branch exists.
-EXPECTED_CANCEL = {"agent-review.yml": False, "validate.yml": True, "orchestrator.yml": True}
+EXPECTED_CANCEL = {"agent-review.yml": False, "validate.yml": True, "orchestrator.yml": True,
+                   "agent-security-review.yml": True}  # cancel-in-progress per head branch (#520)
 MERGE_GATES = ("validate.yml", "risk.yml", "agent-security-review.yml")
 PR_ONLY = ("risk.yml", "agent-security-review.yml", "agent-review.yml")  # green on any non-agent ref counts
 AGENT_OWNED = ("agent-review.yml",)  # failures on agent/* branches belong to agent-fix rounds

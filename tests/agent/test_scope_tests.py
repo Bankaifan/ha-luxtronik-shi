@@ -33,8 +33,7 @@ def test_tool_selects_its_test():
 
 
 def test_several_tools_are_sorted_and_deduplicated():
-    assert sel(["tools/tier.py", "tools/status.py", "tools/tier.py"]) == [
-        "tests/agent/test_status.py", "tests/agent/test_tier.py"]
+    assert sel(["tools/tier.py", "tools/status.py", "tools/tier.py"]) == ["tests/agent/test_status.py", "tests/agent/test_tier.py"]
 
 
 def test_ci_tool_gives_all():

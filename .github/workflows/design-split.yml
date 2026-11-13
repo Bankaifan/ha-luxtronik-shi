@@ -1,0 +1,42 @@
+name: design-split
+run-name: "design-split: ${{ github.sha }}"
+# Issue #417: when a push to main adds a file under docs/design/, tools/design_split.py creates one issue per step of
+# section 8 (no model). Idempotent: a rerun creates nothing. The checkout is main itself, no PR code runs.
+on:
+  push:
+    branches: [main]
+    paths: ["docs/design/**"]
+permissions:
+  contents: read
+jobs:
+  split:
+    concurrency:
+      group: design-split
+      cancel-in-progress: false
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+        run: |
+          [ -n "$AUTHOR_CLIENT_ID" ] || { echo "::error::Repo variable AUTHOR_CLIENT_ID is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: read
+          permission-pull-requests: read
+          permission-issues: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Create the split issues (no model)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: python3 tools/design_split.py run "$BEFORE" "$AFTER"

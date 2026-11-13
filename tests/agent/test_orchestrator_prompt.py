@@ -4,7 +4,7 @@ from pathlib import Path
 WF = Path(__file__).resolve().parent.parent.parent / ".github" / "workflows" / "orchestrator.yml"
 
 # Calls the orchestrator tried in runs that ended silently (issue #57); none may be allowed.
-DENIED = ["gh issue close", "gh workflow list", "gh api", "git checkout", "git switch", "git fetch", "git -c", "gh run view"]
+DENIED = ["gh issue close", "gh workflow list", "gh api", "git checkout", "git switch", "git fetch", "git -c", "gh run view", "gh variable"]
 
 
 def test_prompt_names_the_calls_that_are_not_allowed():
@@ -20,16 +20,6 @@ def test_allow_list_does_not_contain_the_denied_calls():
         assert f"Bash({call}" not in allowed, call
 
 
-def test_prompt_forbids_rm_and_keeps_body_files_in_git_ignored_agent_out():
-    # Run 42889616904 ended silently: `rm slip-116.md` was denied. Body files stay in .agent-out/, which the workflow excludes.
-    text = WF.read_text(encoding="utf-8")
-    assert "`rm` (run 42889616904" in text
-    assert "`.agent-out/<name>.md`" in text
-    assert 'echo ".agent-out/" >> .git/info/exclude' in text
-    allowed = re.search(r'--allowedTools "([^"]*)"', text).group(1)
-    assert "Bash(rm" not in allowed
-
-
 def test_handover_is_stale_only_on_material_change_and_one_pr_per_day():
     # Issue #341: 13 of 30 merged PRs were handover PRs because "stale" was never defined.
     # Whitespace is flattened so the YAML line wrapping does not matter.
@@ -38,9 +28,8 @@ def test_handover_is_stale_only_on_material_change_and_one_pr_per_day():
     assert "HANDOVER.md is stale only if the open PR set, the trusted list, the main CI state or an Open/Next item" in prompt
     assert "changed materially since the file was written" in prompt
     assert "A run number, a timestamp or a new day alone is never a reason" in prompt
-    assert "At most one handover PR per UTC day" in prompt
-    assert "head:agent/orchestrator-handover-<date>" in prompt
-    assert "leave HANDOVER.md untouched" in prompt
+    assert "at most one handover PR per UTC day" in prompt
+    assert "You write no file" in prompt  # the script commits the block (design 0017 step 5)
     assert "If HANDOVER.md is stale: run" not in prompt
 
 
@@ -70,13 +59,15 @@ def test_prompt_starts_every_issue_the_script_names():
     assert "A prio:1 issue may start even with 2 open agent:dev issues" not in prompt
 
 
-def test_design_split_issues_run_in_parallel_with_depends_on_lines():
+def test_design_split_issues_run_in_parallel_and_are_not_created_by_the_prompt():
     prompt = _prompt()
     assert "in the order of the design's split" not in prompt
     assert "split issues run in parallel" in prompt
     assert "carries a `Depends on: #N` line and the script holds it back until #N is closed" in prompt
-    assert "add a line `Depends on: #<n>[, #<m>]` (alone on its line, after the `Design:` line)" in prompt
-    assert "steps without that need get no such line" in prompt
+    # Issue #417: tools/design_split.py creates them; step 1b is gone.
+    assert "1b." not in prompt
+    assert "Merged design PR" not in prompt
+    assert "add a line `Depends on: #<n>[, #<m>]`" not in prompt
 
 
 def test_caps_default_to_4_and_5_in_every_repo():

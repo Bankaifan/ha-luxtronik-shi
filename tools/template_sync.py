@@ -4,7 +4,14 @@ Reads .agents/template.json, compares the template's main with synced_sha throug
 compare API, and creates or edits the single open issue "Template sync <short SHA>".
 Needs the gh CLI (GH_TOKEN, GH_REPO). No-op when the config is missing or synced_sha is empty,
 and when the repo is the template itself.
+
+Design 0014 adds two commands that work on a checkout (`--root`) and never open a PR themselves:
+  python3 tools/template_sync.py apply --sha <main> --body-file <file> [--issue N] [--root DIR]
+      ports the clean files, merges the overridden ones, commits once (template_apply.py) and writes the PR body.
+  python3 tools/template_sync.py materialize <main> [--root DIR] [--out .template]
+      writes ours/base/theirs of each conflicted file for the developer run (never committed).
 """
+import argparse
 import json
 import os
 import pathlib
@@ -12,12 +19,17 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+import template_apply as ta
+
 CONFIG = pathlib.Path(".agents/template.json")
+MANAGED_FILE = ".agents/managed.json"  # the template's own managed list
+AUTHOR = ("Daniel", "476059+Bankaifan@users.noreply.github.com")  # AGENTS.md: commits as Daniel, no trailer
 TITLE_PREFIX = "Template sync "
 COMPARE_CAP = 300
 SYNC_CAP = 2000
 SPLIT_MIN_FILES = 40
-# Part 1 of a large sync (design 0010, 4.3); their tests/test_<name>.py belong to it too.
+# Part 1 of a large sync (design 0010, 4.3); their tests/agent/test_<name>.py belong to it too.
 REVIEWER_FIRST = [
     ".github/workflows/agent-security-review.yml",
     ".github/workflows/agent-review.yml",
@@ -124,7 +136,7 @@ def is_reviewer_file(path):
         if path == item:
             return True
         name = pathlib.PurePosixPath(item).stem
-        if item.endswith(".py") and path == f"tests/test_{name}.py":
+        if item.endswith(".py") and path == f"tests/agent/test_{name}.py":
             return True
     return False
 
@@ -181,6 +193,171 @@ def bump(template_json_text, sha, version=None):
     return re.sub(r'(?m)^([ \t]*)("synced_sha"\s*:\s*"[^"]*")',
                   lambda m: f'{m.group(1)}{m.group(2)},\n{m.group(1)}"synced_version": "{version}"',
                   text, count=1)
+
+
+class ApplyError(Exception):
+    """The template state cannot be applied (a file missing at its ref, a bad managed list)."""
+
+
+def template_prefixes(text, managed):
+    """Managed prefixes that the template's .agents/managed.json lists and the project does not have yet (union only)."""
+    if text is None:
+        return []
+    try:
+        listed = json.loads(text).get("managed", [])
+    except (ValueError, AttributeError) as exc:
+        raise ApplyError(f"{MANAGED_FILE} of the template is not a JSON object: {exc}") from exc
+    if not isinstance(listed, list) or not all(isinstance(p, str) and p for p in listed):
+        raise ApplyError(f"{MANAGED_FILE} of the template: 'managed' must be a list of non-empty strings")
+    for p in listed:
+        if p.startswith("/") or "\\" in p or ".." in pathlib.PurePosixPath(p).parts:
+            raise ApplyError(f"{MANAGED_FILE} of the template: refused prefix {p!r}")
+    return [p for p in listed if p not in managed]
+
+
+def sync_title(version, main_sha, conflicted):
+    """The two title shapes managed_guard.is_sync_pr accepts: part 1 when files need a developer (design 0014, 4.3)."""
+    return f"{TITLE_PREFIX}{main_sha[:7]} part 1" if conflicted else f"{TITLE_PREFIX}{version}"
+
+
+def pr_body(main_sha, version, result, issue=None):
+    """At most five lines (AGENTS.md): counts, the synced state or the files to merge by hand, the issue link."""
+    counts = (f"{len(result['written'])} written, {len(result['deleted'])} deleted, "
+              f"{len(result['merged'])} overridden merged")
+    lines = [f"Template {version} ({main_sha[:7]}): {counts}."]
+    if result["conflicted"]:
+        lines.append("Developer merges by hand, synced_sha not set: "
+                     + ", ".join(f"`{p}`" for p in result["conflicted"]))
+    else:
+        lines.append(f"synced_sha set to {main_sha}, synced_version to {version}.")
+    if result["managed_added"]:
+        lines.append("Managed prefixes added: " + ", ".join(f"`{p}`" for p in result["managed_added"]))
+    if issue:
+        lines.append(f"{'Refs' if result['conflicted'] else 'Closes'} #{issue}")
+    return "\n".join(lines) + "\n"
+
+
+def apply_sync(root, cfg, cmp_json, main_sha, version, read_at, issue=None):
+    """Port one template sync into the checkout at root and commit it on template-sync/<version> (design 0014, 4.1).
+
+    read_at(ref, path) returns the template text at ref, or None when it is absent there. Returns None when no managed
+    file changed; otherwise a dict with title, body, commit (None when nothing was staged), conflicted and the file
+    lists. With conflicts synced_sha is not bumped and the title is the part 1 shape (4.3).
+    """
+    managed = list(cfg.get("managed", []))
+    changed = changed_files(cmp_json, managed)
+    if not changed:
+        return None
+    clean, overridden = ta.plan(changed, cfg.get("overrides", []))
+
+    def required(ref, path):
+        text = read_at(ref, path)
+        if text is None:
+            raise ApplyError(f"{path} is missing at {ref}")
+        return text
+
+    managed_added = template_prefixes(read_at(main_sha, MANAGED_FILE), managed)  # before any write can fail
+    clean_result = ta.apply_clean(root, clean, lambda p: required(main_sha, p), managed)
+    merged = ta.merge_overridden(root, overridden, lambda p: read_at(cfg["synced_sha"], p),
+                                 lambda p: read_at(main_sha, p), managed)
+    result = {"written": clean_result["written"], "deleted": clean_result["deleted"], "merged": merged["merged"],
+              "conflicted": merged["conflicted"], "managed_added": managed_added}
+    cfg_path = pathlib.Path(root, CONFIG)
+    text = cfg_path.read_text()
+    if result["managed_added"]:
+        obj = json.loads(text)
+        obj["managed"] = managed + result["managed_added"]
+        text = json.dumps(obj, indent=2) + "\n"
+    if not result["conflicted"]:
+        text = bump(text, main_sha, version)
+    cfg_path.write_text(text)
+    paths = [*result["written"], *result["deleted"], *result["merged"], CONFIG.as_posix()]
+    result["title"] = sync_title(version, main_sha, result["conflicted"])
+    result["body"] = pr_body(main_sha, version, result, issue)
+    result["commit"] = ta.commit_paths(root, paths, f"template-sync/{version}", result["title"], *AUTHOR)
+    return result
+
+
+def materialize_sync(root, cfg, cmp_json, sha, read_at, out_dir):
+    """Write ours, base and theirs of each conflicted file of this sync under out_dir; returns the conflicted paths."""
+    managed = list(cfg.get("managed", []))
+    _, overridden = ta.plan(changed_files(cmp_json, managed), cfg.get("overrides", []))
+    return ta.materialize(root, overridden, lambda p: read_at(cfg["synced_sha"], p), lambda p: read_at(sha, p),
+                          managed, out_dir)
+
+
+def template_reader(template):
+    """read_at(ref, path) through the contents API; None when the file is absent at that ref."""
+    def read_at(ref, path):
+        try:
+            return read_template_file(template, path, ref)
+        except subprocess.CalledProcessError:
+            return None
+    return read_at
+
+
+def _fail(msg):
+    print(f"template-sync: {msg}", file=sys.stderr)
+    return 1
+
+
+def cmd_apply(argv):
+    ap = argparse.ArgumentParser(prog="template_sync.py apply")
+    ap.add_argument("--root", default=".", help="checkout to write into (work/ in the workflow)")
+    ap.add_argument("--sha", required=True, help="template main SHA to apply")
+    ap.add_argument("--body-file", required=True, help="where the PR body is written")
+    ap.add_argument("--issue", type=int, help="sync issue: Closes when no conflicts, Refs otherwise")
+    args = ap.parse_args(argv)
+    try:
+        cfg = parse_config(pathlib.Path(args.root, CONFIG).read_text())
+        if not cfg.get("synced_sha"):
+            return _fail("synced_sha is empty, nothing to apply")
+        read_at = template_reader(cfg["template"])
+        version = read_version(read_at(args.sha, "VERSION") or "")
+        cmp_json = json.loads(gh("api", f"repos/{cfg['template']}/compare/{cfg['synced_sha']}...{args.sha}"))
+        result = apply_sync(args.root, cfg, cmp_json, args.sha, version, read_at, args.issue)
+    except (ConfigError, ApplyError, ta.PathRefused, TruncatedCompare, OSError, ValueError,
+            subprocess.CalledProcessError) as exc:
+        return _fail(f"apply: {exc}")
+    if result is None:
+        print("template-sync: no managed changes")
+        return 0
+    if result["commit"] is None:  # nothing staged (e.g. only a conflict left alone): no PR, no body
+        print("template-sync: nothing to commit, no PR")
+        return 0
+    pathlib.Path(args.body_file).write_text(result["body"])
+    print(result["title"])
+    return 0
+
+
+def _exclude_out_dir(root, name):
+    """Keep the materialized files out of git (design 0014, 3 H): add the directory to .git/info/exclude once."""
+    info = pathlib.Path(root, ".git", "info")
+    if not info.is_dir():
+        return
+    exclude = info / "exclude"
+    text = exclude.read_text() if exclude.exists() else ""
+    if f"/{name}/" not in text.splitlines():
+        exclude.write_text(text + ("" if not text or text.endswith("\n") else "\n") + f"/{name}/\n")
+
+
+def cmd_materialize(argv):
+    ap = argparse.ArgumentParser(prog="template_sync.py materialize")
+    ap.add_argument("sha", help="template SHA of the sync (the Template-Sync line of the issue)")
+    ap.add_argument("--root", default=".")
+    ap.add_argument("--out", default=".template")
+    args = ap.parse_args(argv)
+    try:
+        cfg = parse_config(pathlib.Path(args.root, CONFIG).read_text())
+        read_at = template_reader(cfg["template"])
+        cmp_json = json.loads(gh("api", f"repos/{cfg['template']}/compare/{cfg['synced_sha']}...{args.sha}"))
+        conflicted = materialize_sync(args.root, cfg, cmp_json, args.sha, read_at, pathlib.Path(args.root, args.out))
+    except (ConfigError, ta.PathRefused, TruncatedCompare, OSError, ValueError,
+            subprocess.CalledProcessError) as exc:
+        return _fail(f"materialize: {exc}")
+    _exclude_out_dir(args.root, args.out)
+    print("\n".join(conflicted) or "no conflicts")
+    return 0
 
 
 def gh(*args):
@@ -246,4 +423,8 @@ def main(force=False, mode="version") -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["apply"]:
+        sys.exit(cmd_apply(sys.argv[2:]))
+    if sys.argv[1:2] == ["materialize"]:
+        sys.exit(cmd_materialize(sys.argv[2:]))
     sys.exit(main())

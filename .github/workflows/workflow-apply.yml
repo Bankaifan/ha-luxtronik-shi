@@ -1,0 +1,75 @@
+name: workflow-apply
+run-name: workflow-apply
+# Agent runs cannot push .github/workflows/ (their model token has no `workflows` scope). agent-dev/agent-fix carry
+# such changes as .agents/workflow-patches/<issue>.patch; once the security reviewer approved that head (status
+# `security-review` success), this script-only job applies the patch, drops the file and pushes. The new head runs CI
+# and both reviews again. Owner paths (CODEOWNERS) and paths outside .github/workflows/ are refused (tools/workflow_patch.py).
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] no PR code runs: main's script only applies a reviewed text patch with git
+    workflows: [agent-security-review]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apply:
+    # The review run is itself a workflow_run, so its head_branch is the default branch: look the PRs up instead.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    concurrency:
+      group: workflow-apply
+      cancel-in-progress: false
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    env:
+      AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Fail if a required repo variable is unset
+        env:
+          AUTHOR_CLIENT_ID: ${{ vars.AUTHOR_CLIENT_ID }}
+        run: |
+          for n in AUTHOR_CLIENT_ID AUTHOR_BOT; do
+            [ -n "${!n}" ] || { echo "::error::Repo variable $n is not set (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          done
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-contents: write
+          permission-workflows: write
+          permission-pull-requests: write
+      # main only; the PR branches are fetched as data and never run.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes the applied patch with the app token persisted by checkout
+        with:
+          token: ${{ steps.app.outputs.token }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Apply the workflow patches of security-approved agent PRs
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "Daniel"
+          git config user.email "476059+Bankaifan@users.noreply.github.com"
+          prs=$(gh api "repos/$GH_REPO/pulls?state=open&per_page=100" \
+            --jq '.[] | select(.head.repo.full_name == .base.repo.full_name and (.head.ref | startswith("agent/"))) | [.number, .head.ref, .head.sha, .user.login, ([.labels[].name] | join(","))] | @tsv')
+          while IFS=$'\t' read -r num branch sha login labels; do
+            [ -n "$num" ] || continue
+            python3 tools/agent_guard.py agent-pr "$login" ",$labels," || continue
+            files=$(gh api --paginate "repos/$GH_REPO/pulls/$num/files" --jq '.[].filename')
+            grep -q '^\.agents/workflow-patches/' <<<"$files" || continue
+            state=$(gh api "repos/$GH_REPO/commits/$sha/statuses" --jq '[.[] | select(.context == "security-review")][0].state // "none"')
+            if [ "$state" != "success" ]; then echo "#$num: security-review is $state"; continue; fi
+            rc=0
+            out=$(python3 tools/workflow_patch.py apply "$branch" "$sha") || rc=$?
+            echo "#$num: $out"
+            if [ "$rc" = 3 ]; then
+              gh pr comment "$num" --body "workflow-apply refused the workflow patch (see the run log): Daniel applies it by hand. Run: $RUN_URL"
+              gh pr edit "$num" --add-label needs-human
+            elif [ "$rc" != 0 ]; then
+              exit "$rc"
+            fi
+          done <<<"$prs"

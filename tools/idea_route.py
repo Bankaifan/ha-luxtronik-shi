@@ -7,6 +7,8 @@ Anything else, or a missing/invalid template.json, stays in the project.
   python3 tools/idea_route.py repo                      # print the template repo (for the workflow)
   python3 tools/idea_route.py create --title T --body B --files a,b [--context C] [--label L ...]
   python3 tools/idea_route.py flush                     # later step, no model: open queued template ideas
+  python3 tools/idea_route.py issue --number N          # script step: move a managed-only issue to the template
+  python3 tools/idea_route.py check --number N          # exit 3 if agent:dev must not be set (managed/mixed/routed)
 
 The model step runs `create` with the project GH_TOKEN only: project ideas are opened at once,
 template ideas are queued as JSON under /tmp/idea-queue. TEMPLATE_GH_TOKEN exists only in the
@@ -66,7 +68,94 @@ def route(files, cfg, project=""):
     clean = [f.strip() for f in files if f.strip()]
     if not clean or any(f.startswith("/") or ".." in f.split("/") for f in clean):
         return "project"
-    return "template" if all(is_managed(f, managed) for f in clean) else "project"
+    own = {o["path"] for o in cfg.get("overrides", []) if isinstance(o, dict) and isinstance(o.get("path"), str)}
+    return "template" if all(is_managed(f, managed) and f not in own for f in clean) else "project"
+
+
+def slip_route(files, cfg, project=""):
+    """'template' (all files managed), 'project' (none, or no config), 'mixed' (managed and project files)."""
+    clean = [f for f in files if f.strip()]
+    if route(clean, cfg, project) == "template":
+        return "template"
+    if len(clean) > 1 and any(route([f], cfg, project) == "template" for f in clean):
+        return "mixed"
+    return "project"
+
+
+def guard_workflow(title):
+    """Workflow file path a guard issue title is about, '' if the title is no guard issue or names none."""
+    for prefix, sep in (("Failing workflow: ", " / "), ("Denied command in ", ":")):
+        if title.startswith(prefix):
+            name = title[len(prefix):].split(sep)[0].strip()
+            return f".github/workflows/{name}.yml" if re.fullmatch(r"[A-Za-z0-9_.-]+", name) else ""
+    if title.startswith("Overdue scheduled run: "):
+        label = title[len("Overdue scheduled run: "):].strip()
+        try:
+            import liveness
+            return next((f".github/workflows/{wf}" for wf, (lb, _) in liveness.SCHEDULED.items() if lb == label), "")
+        except ImportError:
+            return ""
+    return ""
+
+
+ROUTED = re.compile(r"<!-- routed: ([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#\d+) -->")
+ASKED = "<!-- routed: mixed -->"
+
+
+def is_routed(comments):
+    """Marker of a comment that says the issue was moved to the template: 'owner/repo#N' or ''."""
+    for c in comments:
+        m = ROUTED.search(c)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def classify_issue(title, body, cfg, project=""):
+    """'template' | 'project' | 'mixed' for a project issue: guard issues by workflow, others by their Files: line."""
+    from overlap import parse_files
+    wf = guard_workflow(title)
+    files = [wf] if wf else parse_files(body)
+    return slip_route(files, cfg, project)
+
+
+def start_allowed(title, body, comments, cfg, project=""):
+    """False for an issue that is routed, belongs to the template, or mixes both: no agent:dev locally."""
+    if is_routed(comments):
+        return False
+    return classify_issue(title, body, cfg, project) == "project"
+
+
+def route_issue(number, cfg, project, token):
+    """Script step: move a managed-only project issue to the template, comment back; ask on a mixed one."""
+    data = json.loads(gh("issue", "view", str(number), "--json", "title,body,comments"))
+    comments = [c.get("body", "") for c in data.get("comments", [])]
+    if is_routed(comments):
+        print(f"idea-route: #{number} already routed")
+        return 0
+    kind = classify_issue(data["title"], data.get("body", ""), cfg, project)
+    if kind == "project":
+        print(f"idea-route: #{number} stays in the project")
+        return 0
+    if kind == "mixed":
+        if ASKED not in comments:
+            gh("issue", "comment", str(number), "--body",
+               f"{ASKED}\nThis slip mixes template-managed files and project files. Please split it: "
+               "one issue for the managed files (filed in the template) and one for the rest.")
+        print(f"idea-route: #{number} is mixed, asked to split")
+        return 0
+    if not token:
+        print(f"idea-route: no TEMPLATE_GH_TOKEN, routing of #{number} skipped")
+        return 0
+    repo = cfg["template"]
+    body = f"{sanitize(data.get('body', '')).rstrip()}\n\nFound in: {project}#{number}"
+    url = gh("issue", "create", "-R", repo, "--title", sanitize(data["title"]), "--body", body, token=token).strip()
+    ref = f"{repo}#{url.rsplit('/', 1)[-1]}"
+    gh("issue", "comment", str(number), "--body",
+       f"<!-- routed: {ref} -->\nRouted to the template: {url}. Waiting until a template version "
+       "with the fix is synced; this issue is not started here.")
+    print(f"idea-route: #{number} routed to {ref}")
+    return 0
 
 
 def sanitize(text):
@@ -161,7 +250,20 @@ def main(argv=None):
     c.add_argument("--files", required=True)
     c.add_argument("--context", default="scout")
     c.add_argument("--label", action="append", default=[])
+    for name in ("issue", "check"):
+        sub.add_parser(name).add_argument("--number", type=int, required=True)
     args = p.parse_args(argv)
+    if args.cmd in ("issue", "check"):
+        project, cfg = os.environ.get("GH_REPO", ""), load_config()
+        if not (cfg and same_owner(cfg["template"], project)) or project.lower() == cfg["template"].lower():
+            return 0
+        if args.cmd == "issue":
+            return route_issue(args.number, cfg, project, os.environ.get("TEMPLATE_GH_TOKEN", ""))
+        d = json.loads(gh("issue", "view", str(args.number), "--json", "title,body,comments"))
+        ok = start_allowed(d["title"], d.get("body", ""), [c.get("body", "") for c in d.get("comments", [])],
+                           cfg, project)
+        print("start" if ok else "no-start")
+        return 0 if ok else 3
     if args.cmd == "repo":
         cfg = load_config()
         project = os.environ.get("GH_REPO", "")

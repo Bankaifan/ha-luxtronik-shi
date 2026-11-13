@@ -68,6 +68,11 @@ def test_no_untrusted_event_text_in_run_scripts():
         assert not re.search(r"\.(title|body|head\.ref|head_ref|name)\b", ref) or "label.name" in ref, ref
 
 
+def test_model_step_allows_both_bots():
+    """The approver app labels PRs too, so its label event starts this run; the action refuses unlisted bots (#457)."""
+    assert "allowed_bots: ${{ vars.AUTHOR_BOT }},${{ vars.APPROVER_BOT }}" in _model_step()
+
+
 def test_write_token_comes_after_model_and_validation():
     assert TEXT.index("id: claude") < TEXT.index("id: writer")
     assert TEXT.index("id: verdict") < TEXT.index("id: writer") < TEXT.index("id: apply")

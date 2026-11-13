@@ -38,6 +38,15 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      # An agent PR carries its workflow changes as .agents/workflow-patches/*.patch until workflow-apply applies them
+      # after the security review; check the tree as it will be after that (working tree only, nothing is pushed).
+      - name: Apply pending workflow patches for the checks
+        run: |
+          for p in .agents/workflow-patches/*.patch; do
+            [ -e "$p" ] || continue
+            git apply "$p" || { echo "::error::$p does not apply"; exit 1; }
+            echo "applied $p for the checks"
+          done
       - name: Checks (ruff, pytest, actionlint, zizmor, repo checks)
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}

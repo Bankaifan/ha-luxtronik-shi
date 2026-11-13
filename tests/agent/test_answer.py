@@ -105,6 +105,13 @@ def test_validate_refusals(verdict, marker, why):
         check(verdict, marker, "ja, mach das @x")
 
 
+def test_multiline_evidence_matches_crlf_owner_text():
+    text = "ja, mach das\r\nund dann\r\n  weiter"
+    assert check(v(evidence="mach das\nund dann weiter"), text=text)["evidence"]
+    with pytest.raises(ValueError, match="quote"):
+        check(v(evidence="Mach das"), text=text)
+
+
 SECRET = "ghp_" + "a" * 36
 
 
@@ -218,12 +225,33 @@ def test_unclear_followup_also_blocks_a_rerun_for_the_same_comment():
     assert run_apply(Fake([NOTE, cm(2), followup]), v()).startswith("0 (already")
 
 
-def test_old_note_without_marker_can_only_drop_the_block():
+def test_question_without_marker_hands_the_answer_to_the_orchestrator():
     fake = Fake([cm(1, BOT, "Soll es weiter?", "NONE", "Bot"), cm(2)], pr=False)
-    assert run_apply(fake, v()) == "done"
+    assert run_apply(fake, v()) == "handed over"
+    assert fake.has("issue", "edit", "5", "--add-label", "owner-answer")
     assert fake.has("issue", "edit", "5", "--remove-label", "needs-human") and not fake.has("issue", "close")
-    with pytest.raises(ValueError):
-        run_apply(Fake([cm(1, BOT, "Soll es weiter?", "NONE", "Bot"), cm(2)]), v(intent="no"))
+    assert fake.bodies()[0].startswith("<!-- answer-receiver comment=2 owner-answer -->")
+    assert "https://x/2" in fake.bodies()[0] and fake.has("workflow", "run", "orchestrator.yml")
+
+
+def test_question_without_marker_and_precise_answer_is_handed_over_once():  # #451 sequence
+    question = cm(1, BOT, "Soll PR 5 contents: write und pull-requests: write bekommen?", "NONE", "Bot")
+    answer = cm(2, body="Ja zu contents: write und pull-requests: write. Nein zu workflows: write.")
+    fake = Fake([question, answer])
+    assert run_apply(fake, v(evidence="Ja zu contents: write und pull-requests: write")) == "handed over"
+    assert fake.has("pr", "edit", "5", "--add-label", "owner-answer")
+    assert fake.has("pr", "edit", "5", "--remove-label", "needs-human")
+    assert not fake.has("pr", "close") and not fake.has("workflow", "run", "agent-fix.yml")
+    again = Fake([question, answer, cm(3, BOT, fake.bodies()[0], "NONE", "Bot")])
+    assert run_apply(again, v(evidence="Ja zu contents")).startswith("0 (already")
+    assert not again.has("workflow", "run", "orchestrator.yml")
+
+
+def test_yes_on_a_marker_drop_block_removes_needs_human_by_script():  # #416 req. 9: design PR answered with yes
+    note = cm(1, BOT, "Owner decision? <!-- decision: yes=drop-block no=close-pr -->", "NONE", "Bot")
+    fake = Fake([note, cm(2)])
+    assert run_apply(fake, v()) == "done"
+    assert fake.has("pr", "edit", "5", "--remove-label", "needs-human")
 
 
 def test_apply_refuses_on_live_gate_and_invalid_verdict_without_changes():

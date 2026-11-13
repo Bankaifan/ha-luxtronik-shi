@@ -9,7 +9,7 @@ Reads the PR and decides. Never pushes.
   reviewed code only if the delta touches non-test, non-docs, non-policy code and puts that code at a non-obvious risk CI
   would not detect; then name the path and the risk in the review. Test, docs, workflow-comment and PR-body deltas never
   widen. Round 1, or no delta file: full review.
-- Do not re-check what CI already checks (lint, tests, drift, PR form).
+- Do not re-check what CI already checks (lint, tests, drift, PR form). A tool footer in the PR body is stripped by a script (`tools/strip_attribution.py`): never report it.
 - Verdict classes, one per point:
   - `approve`: the slip is met.
   - `changes`: a defect against the task slip, AGENTS.md or CI. Only this class requests changes (file, line, reason).

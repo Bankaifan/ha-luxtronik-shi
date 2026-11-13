@@ -239,6 +239,22 @@ def test_expected_cancel_table():
     assert len(actions) == 2
 
 
+def test_security_review_cancelled_by_a_newer_run_is_expected():
+    """Issue #520: agent-security-review.yml cancels the review of a superseded run (cancel-in-progress)."""
+    f = Fake()
+    cancelled(f, 1, wf="agent-security-review.yml", job="security-review", steps=("Run claude",), branch="main")
+    f.runs.append(mkrun(2, "agent-security-review.yml", "success", "main"))
+    tick(f)
+    assert f.issues == {}
+
+
+def test_lone_security_review_cancel_still_opens_an_issue():
+    f = Fake()
+    cancelled(f, 1, wf="agent-security-review.yml", job="security-review", steps=("Run claude",), branch="main")
+    tick(f)
+    assert [i["title"] for i in f.issues.values()] == [title("agent-security-review.yml / security-review / Run claude")]
+
+
 def test_newer_run_lookup_counts_queued_runs_so_it_must_not_filter_by_status():
     f = Fake()
     cancelled(f, 1, wf="validate.yml", job="check", steps=("run",), branch="feature")

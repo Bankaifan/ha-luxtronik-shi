@@ -13,7 +13,9 @@ import re
 import subprocess
 import sys
 
-FILES_RE = re.compile(r"^[\s>*_-]*Files(?:\s+touched)?\**\s*:\**\s*(.*)$", re.IGNORECASE | re.MULTILINE)
+# A slip line may also be one prose line ("Slip. Goal: ... Files: a.py. Model: haiku."): `Files:` after a sentence end.
+FILES_RE = re.compile(r"(?:^[\s>*_-]*|[.;]\s+)Files(?:\s+touched)?\**\s*:\**\s*(.*)$", re.IGNORECASE | re.MULTILINE)
+SLIP_FIELD = re.compile(r"\b(?:Acceptance|Model|Goal)\b\**\s*:", re.IGNORECASE)
 BRANCH_RE = re.compile(r"agent/(\d+)-")
 DEFAULT_TRUSTED = frozenset({
     "Bankaifan", "app/github-actions", "github-actions",
@@ -31,10 +33,12 @@ def clean_path(tok):
 
 
 def parse_files(text):
-    """Paths from the 'Files:' / 'Files touched:' line(s) of a slip; parentheses and text after 'Acceptance' are dropped."""
+    """Paths from the 'Files:' / 'Files touched:' line(s) of a slip; parentheses and the text from the next slip field
+    ('Acceptance', 'Model:', 'Goal:') on are dropped."""
     out = []
     for m in FILES_RE.finditer(text or ""):
         line = re.split(r"\bAcceptance\b", m.group(1), maxsplit=1, flags=re.IGNORECASE)[0]
+        line = SLIP_FIELD.split(line, maxsplit=1)[0]
         line = re.sub(r"\([^)]*\)", " ", line)
         for tok in re.split(r"[,\s]+", line):
             p = clean_path(tok)

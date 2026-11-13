@@ -14,8 +14,9 @@ BOT = {"login": "bankaifan-agent-author"}
 class FakeGh:
     """Records every call; ISSUES maps number -> issue JSON, PRS maps number -> PR JSON."""
 
-    def __init__(self, issues=None, prs=None, fail_label=()):
+    def __init__(self, issues=None, prs=None, fail_label=(), merged=()):
         self.issues, self.prs, self.fail_label, self.calls = issues or {}, prs or {}, set(fail_label), []
+        self.merged = list(merged)  # answer of `gh pr list --state merged`
 
     def __call__(self, *args):
         self.calls.append(args)
@@ -23,6 +24,8 @@ class FakeGh:
             return json.dumps(self.issues[int(args[2])])
         if args[:2] == ("pr", "view"):
             return json.dumps(self.prs[int(args[2])])
+        if args[:2] == ("pr", "list"):
+            return json.dumps(self.merged)
         if args[:2] == ("label", "create") and args[2] in self.fail_label:
             raise subprocess.CalledProcessError(1, "gh")
         return ""
@@ -96,6 +99,32 @@ def test_failing_label_create_does_not_stop_the_others():
                 fail_label={"model:sonnet"})
     assert dispatch.start(state([1, 2]), gh, ok) == [2]
     assert not any(c[2] == "1" for c in gh.edits())
+
+
+def multi_step_issue():
+    slip = {"body": "Slip step 2. Files: tools/a.py", "author": BOT, "createdAt": "2026-11-13T10:00:00Z"}
+    return {"body": "Sync", "author": BOT, "createdAt": "2026-11-13T09:00:00Z", "comments": [slip], "labels": []}
+
+
+def merged_pr(at, branch="agent/7-x", body="Refs #7"):
+    return {"body": body, "headRefName": branch, "isCrossRepository": False, "mergedAt": at}
+
+
+def test_step_merged_after_the_newest_slip_is_not_restarted():
+    gh = FakeGh({7: multi_step_issue()}, merged=[merged_pr("2026-11-13T11:00:00Z")])
+    assert dispatch.start(state([7]), gh, ok) == [] and gh.edits() == []
+
+
+def test_new_slip_after_the_merge_starts_and_foreign_merges_do_not_block():
+    issue = multi_step_issue()
+    issue["comments"].append({"body": "Slip step 3. Files: tools/b.py", "author": BOT,
+                              "createdAt": "2026-11-13T12:00:00Z"})
+    gh = FakeGh({7: issue}, merged=[merged_pr("2026-11-13T11:00:00Z")])
+    assert dispatch.start(state([7]), gh, ok) == [7]
+    later = "2026-11-13T13:00:00Z"
+    for pr in (merged_pr(later, branch="feature/x"), merged_pr(later, body="Refs #8")):
+        gh = FakeGh({7: multi_step_issue()}, merged=[pr])
+        assert dispatch.start(state([7]), gh, ok) == [7]
 
 
 def test_after_merge_removes_agent_dev_of_referenced_issues():

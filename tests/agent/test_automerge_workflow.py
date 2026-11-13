@@ -44,7 +44,10 @@ def _merge_step_script() -> str:
 def test_runs_are_serialised_per_pr_without_cancelling():
     text = _text()
     assert "concurrency:" in text
-    assert "group: automerge-${{ github.event.pull_request.number || github.event.sha }}" in text
+    assert (
+        "group: automerge-${{ github.event.pull_request.number || github.event.sha"
+        " || github.event.workflow_run.head_sha }}" in text
+    )
     assert "cancel-in-progress: false" in text
 
 
@@ -171,6 +174,22 @@ def test_status_runs_are_skipped_by_the_job_filter_and_documented():
     assert "GitHub cannot filter `status` by context" in text
     # The filter keeps the exact context and state; other statuses never reach a runner.
     assert "github.event_name == 'status' && github.event.context == 'security-review'" in text
+
+
+def test_workflow_run_trigger_reruns_after_a_late_security_review_success():
+    text = _text()
+    assert "workflow_run:" in text
+    assert "workflows: [agent-security-review]" in text
+    assert "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'" in text
+    assert "github.event.workflow_run.head_sha" in text
+
+
+def test_workflow_run_resolves_prs_by_scanning_open_agent_prs():
+    text = _text()
+    assert '[ "$EVENT" = "workflow_run" ]' in text
+    assert 'repos/$GH_REPO/pulls?state=open' in text
+    assert 'tools/approval.py check "$num"' in text
+    assert '[ "$st" = "success" ] || continue' in text
 
 
 def test_merge_step_is_skipped_while_waiting_and_status_event_reruns():

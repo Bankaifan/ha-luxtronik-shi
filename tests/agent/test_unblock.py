@@ -305,3 +305,71 @@ def test_fetch_issue_has_no_diff(tmp_path):
 
 def test_apply_cli_rejects_unknown_kind():
     assert u.main(["unblock.py", "apply", "repo", "5", "f.json"]) == 2
+
+
+BOT_SLIP = "bankaifan-agent-author"  # trusted: the orchestrator writes slips as the author app
+SLIP_TEXT = ("Goal: step 2b-6 of the split.\n\nFiles: tools/a.py, tests/test_a.py\n"
+             "Acceptance: tests pass.\nModel: haiku")
+SLIP_AT = {"body": SLIP_TEXT, "createdAt": "2026-01-02T00:00:00Z", "author": {"login": BOT_SLIP}}
+ISSUE_AT = "2026-01-01T00:00:00Z"
+LANDED = {"number": 162, "headRefName": "agent/658-step-2b-5", "mergedAt": "2026-01-03T00:00:00Z",
+          "body": "Step 2b-5\n\nRefs #658", "isCrossRepository": False}
+
+
+def landed_run(labels=("agent:dev",), comments=(SLIP_AT,), prs=(LANDED,), state="OPEN", body="", author=OWNER):
+    def run(*a):
+        if a[:2] == ("issue", "view"):
+            return json.dumps({"state": state, "labels": [{"name": n} for n in labels], "comments": list(comments),
+                               "body": body, "author": {"login": author}, "createdAt": ISSUE_AT})
+        if a[:2] == ("pr", "list"):
+            return json.dumps(list(prs))
+        raise AssertionError(a)
+    return run
+
+
+def test_landed_merged_pr_newer_than_slip_is_class_1():
+    v = u.landed_verdict("658", run=landed_run())
+    assert v["class"] == 1 and "PR #162" in v["comment"]
+    assert u.validate(v)["class"] == 1  # the same checks as a model verdict
+
+
+@pytest.mark.parametrize("kw", [
+    {"prs": [{**LANDED, "mergedAt": "2026-01-01T00:00:00Z"}]},  # merged before the newest slip
+    {"prs": ()},  # no merged PR at all
+    {"labels": ("agent:dev", "unblock:1")},  # one self-restart already used: unchanged
+    {"prs": [{**LANDED, "headRefName": "fix/658"}]},  # not an agent branch
+    {"prs": [{**LANDED, "isCrossRepository": True}]},  # fork, not same-repo
+    {"prs": [{**LANDED, "body": "Refs #6580"}]},  # other issue number
+    {"comments": ()},  # no slip at all (no body slip, no comment slip): nothing to be newer than
+    {"comments": (), "body": "Restart 1/1: PR #5 is stuck.", "author": BOT_SLIP},  # no Files: line, not a slip
+    {"comments": (), "body": SLIP_TEXT, "author": "stranger"},  # a stranger's issue body is no slip
+    {"comments": ({**SLIP_AT, "author": {"login": "stranger"}},)},  # a stranger's comment is no slip
+    {"labels": ("needs-human",)},  # not an agent:dev task
+    {"state": "CLOSED"},
+])
+def test_landed_refusals_keep_the_model_path(kw):
+    assert u.landed_verdict("658", run=landed_run(**kw)) is None
+
+
+def test_landed_only_the_newest_slip_counts():
+    later_slip = {"body": "Goal: next step\n\nFiles: tools/b.py", "createdAt": "2026-01-05T00:00:00Z",
+                  "author": {"login": BOT_SLIP}}
+    assert u.landed_verdict("658", run=landed_run(comments=(SLIP_AT, later_slip))) is None
+
+
+def test_landed_stranger_slip_newer_than_merge_does_not_move_the_slip():
+    stranger = {"body": SLIP_TEXT, "createdAt": "2026-01-04T00:00:00Z", "author": {"login": "stranger"}}
+    assert u.landed_verdict("658", run=landed_run(comments=(SLIP_AT, stranger)))["class"] == 1
+
+
+def test_landed_slip_in_issue_body_counts_with_issue_creation_time():
+    v = u.landed_verdict("658", run=landed_run(comments=(), body=SLIP_TEXT))
+    assert v["class"] == 1 and "PR #162" in v["comment"]
+    assert u.landed_verdict("658", run=landed_run(comments=(), body=SLIP_TEXT, prs=[{**LANDED, "mergedAt": "2025-12-31T00:00:00Z"}])) is None
+
+
+def test_slip_time_takes_the_newest_trusted_slip():
+    info = {"body": "", "author": {"login": OWNER}, "createdAt": ISSUE_AT,
+            "comments": [SLIP_AT, {"body": "Files: x.py", "createdAt": "2026-01-09T00:00:00Z",
+                                   "author": {"login": "stranger"}}]}
+    assert u.slip_time(info) == SLIP_AT["createdAt"]

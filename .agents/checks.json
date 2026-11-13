@@ -1,0 +1,3 @@
+{
+  "required": ["hassfest", "hacs", "version", "tests", "tests-min-ha", "tests-latest-ha", "workflow-lint"]
+}

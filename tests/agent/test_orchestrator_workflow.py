@@ -15,8 +15,8 @@ def test_tools_are_installed_before_the_claude_run():
 
 
 def test_prompt_forbids_git_dash_c_and_cd_prefix():
-    assert "plain `git commit -m" in TEXT
-    assert "never `git -c ...` and never a `cd` prefix" in TEXT
+    assert "`git -c ...`" in TEXT
+    assert "never a `cd` prefix" in TEXT
 
 
 def _step(name_part: str) -> str:
@@ -50,6 +50,15 @@ def test_events_switch_guards_the_new_events():
     assert cond.count("vars.ORCHESTRATOR_EVENTS == 'on'") == 2
     assert "pull_request_review" in cond and "issue_comment" in cond
     assert "ORCHESTRATOR_EVENTS: ${{ vars.ORCHESTRATOR_EVENTS }}" in _step("name: Gate")
+
+
+def test_author_app_comments_and_edits_do_not_start_a_run():
+    """Issue #440: a run per author-app comment displaced the pending run in the group (cancelled, no steps)."""
+    cond = TEXT[TEXT.index("    if: >-"):TEXT.index("    # Job level on purpose")]
+    assert "github.event_name == 'issue_comment' &&" in cond
+    assert "github.event.action == 'edited' &&" in cond
+    assert cond.count("github.event.sender.login") == 2
+    assert "cancel-in-progress: false" in TEXT
 
 
 def test_order_sleep_gate_prefilter_model():
@@ -88,6 +97,6 @@ def test_no_untrusted_text_in_run_blocks():
 
 def test_allowed_tools_not_widened():
     line = next(x for x in TEXT.splitlines() if "--allowedTools" in x)
-    assert "Bash(git commit:*)" in line
+    assert "Bash(git" not in line  # the script commits and pushes; the model has no git form (test_orchestrator_tools)
     assert "Bash(bash" not in line
     assert "Bash(git -c" not in line

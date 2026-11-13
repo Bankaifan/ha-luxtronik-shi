@@ -112,6 +112,7 @@ def test_non_required_reds_are_listed_not_blocking():
     assert "red but not required" not in st.pr_line(pr(7, statusCheckRollup=green), "Bankaifan")
 
 
+@pytest.mark.template_only  # checks the template's own files, not a downstream project
 def test_required_contexts_reads_ruleset(tmp_path):
     path = tmp_path / "main.json"
     rules = [{"type": "deletion"},
@@ -121,6 +122,7 @@ def test_required_contexts_reads_ruleset(tmp_path):
     assert st.required_contexts(str(path)) == {"validate", "risk"}
 
 
+@pytest.mark.template_only  # checks the template's own files, not a downstream project
 def test_required_contexts_null_cases(tmp_path):
     assert st.required_contexts(str(tmp_path / "missing.json")) is None
     broken = tmp_path / "broken.json"
@@ -196,14 +198,15 @@ def test_fix_round_mirrors_agent_fix():
     assert st.fix_round({"review:3"}) == (None, True)
 
 
-def test_conflict_dispatches_fix_then_escalates():
+def test_conflict_dispatches_one_fix_per_head_and_counts_no_round():
     run = Recorder()
-    assert st.handle_conflict(pr(9, mergeStateStatus="DIRTY"), "Bankaifan", run) == "fix dispatched"
+    dirty = pr(9, labels=["review:2"], mergeStateStatus="DIRTY")
+    assert st.handle_conflict(dirty, "Bankaifan", run) == "fix dispatched"
     assert ("workflow", "run", "agent-fix.yml", "-f", "pr=9") in run.calls
-    assert ("pr", "edit", "9", "--add-label", "review:1") in run.calls
-    run = Recorder()
-    assert st.handle_conflict(pr(9, labels=["review:2"]), "Bankaifan", run) == "escalated"
-    assert not any(c[:2] == ("workflow", "run") for c in run.calls)
+    assert ("pr", "edit", "9", "--add-label", "conflict:sha9") in run.calls
+    assert not any("review:3" in c or "needs-human" in c for c in run.calls)
+    again = pr(9, labels=["conflict:sha9"], mergeStateStatus="DIRTY")
+    assert st.conflict_prs([again]) == []
 
 
 def test_limit_prs_picks_only_unhandled_review3():
@@ -465,8 +468,15 @@ def empty(*args):
 
 
 def test_watch_runs_after_overdue_and_writes_since_line(monkeypatch):
-    order, bodies = wire(monkeypatch, lambda since, now, late, key, run: (["opened failure issue #9"], ago_dt(10)))
+    seen = []
+
+    def fake_watch(since, now, late, key, run, self_wf):
+        seen.append(self_wf)
+        return ["opened failure issue #9"], ago_dt(10)
+
+    order, bodies = wire(monkeypatch, fake_watch)
     assert st.run_status({"GH_REPO": "o/r"}, NOW, empty) == 0
+    assert seen == ["status.yml"]
     assert order == ["overdue", "watch"]
     assert "- opened failure issue #9" in bodies[0]
     assert "Failure watch since: 2026-11-09T11:50:00Z" in bodies[0]
@@ -533,6 +543,120 @@ def test_update_issue_ignores_foreign_status_issue():
         return "https://github.com/o/r/issues/12\n"
 
     assert st.update_issue("b", run, "bot") == "12"
+
+
+GREEN = [{"name": "validate", "conclusion": "SUCCESS"}]
+CODEOWNERS = "/.github/CODEOWNERS @Bankaifan\n/tools/trusted_issues.py @Bankaifan\n"
+
+
+PARKED = {"author": {"login": "approver"}, "body": "Review limit reached (3 reviews, 2 fix rounds)."}
+
+
+def settled_pr(number=456, labels=("needs-human", "review:2"), **kw):
+    base = {"statusCheckRollup": GREEN, "reviewDecision": "APPROVED", "comments": [PARKED]}
+    base.update(kw)
+    return pr(number, labels=labels, **base)
+
+
+def _files(*paths):
+    return lambda p: list(paths)
+
+
+def test_green_approved_needs_human_pr_is_released_and_not_parked_again():
+    # #456 / #464: round labels from a version clash and a rebase, then green and approved: label is stale
+    for n in (456, 464):
+        p = settled_pr(n)
+        assert st.parked_but_settled([p], "app/approver", None, CODEOWNERS, "Bankaifan", _files("tools/x.py")) == [p]
+    # the same PR without the label is not touched, and it still has no review:3 for the limit step
+    assert st.limit_prs([settled_pr(456, labels=("review:2",))], [], NOW) == []
+
+
+def test_needs_human_stays_when_not_settled():
+    args = ("app/approver", None, CODEOWNERS, "Bankaifan", _files("tools/x.py"))
+    assert st.parked_but_settled([settled_pr(reviewDecision="REVIEW_REQUIRED")], *args) == []
+    assert st.parked_but_settled([settled_pr(statusCheckRollup=[{"name": "validate", "conclusion": "FAILURE"}])],
+                                 *args) == []
+    assert st.parked_but_settled([settled_pr(statusCheckRollup=[])], *args) == []
+    assert st.parked_but_settled([settled_pr()], "app/approver", None, CODEOWNERS, "Bankaifan",
+                                 _files("tools/x.py", ".github/CODEOWNERS")) == []
+    sec = settled_pr(labels=("needs-human", "risk:security"))
+    assert st.parked_but_settled([sec], *args) == []  # no security approve yet
+    sec["headRefOid"] = "abcdef1234567"
+    sec["comments"] = [PARKED, {"author": {"login": "approver"}, "body": "security-review: approve abcdef1234567"}]
+    assert st.parked_but_settled([sec], *args) == [sec]
+
+    def broken(p):
+        raise subprocess.CalledProcessError(1, "gh")
+    assert st.parked_but_settled([settled_pr()], "app/approver", None, CODEOWNERS, "Bankaifan", broken) == []
+
+
+def test_needs_human_not_set_by_the_script_or_commented_on_stays():
+    args = ("app/approver", None, CODEOWNERS, "Bankaifan", _files("tools/x.py"))
+    silent = {"author": {"login": "approver"}, "body": "Fix: no fix was produced (no new commit)."}
+    owner = {"author": {"login": "Bankaifan"}, "body": "hold on"}
+    other = {"author": {"login": "approver"}, "body": "Some other escalation."}
+    assert st.parked_but_settled([settled_pr(comments=[silent])], *args) != []
+    assert st.parked_but_settled([settled_pr(comments=[])], *args) == []  # no script comment: unknown origin
+    assert st.parked_but_settled([settled_pr(comments=[other])], *args) == []
+    assert st.parked_but_settled([settled_pr(comments=[PARKED, owner])], *args) == []  # a human spoke afterwards
+    assert st.parked_but_settled([settled_pr(comments=[owner, PARKED])], *args) != []
+
+
+def test_needs_human_relabelled_by_a_person_stays(monkeypatch):
+    monkeypatch.setattr(st, "required_contexts", lambda: None)
+    monkeypatch.setattr(st.risk, "read_text", lambda path: CODEOWNERS)
+    monkeypatch.setenv("GH_REPO", "o/r")
+    calls = []
+
+    def run(*a):
+        calls.append(a)
+        if a[-1].endswith("/events"):
+            ev = [{"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "Bot"}},
+                  {"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "User"}}]
+            return json.dumps([ev])
+        return json.dumps([[{"filename": "tools/x.py"}]])
+
+    assert st.release_settled([settled_pr(464)], "app/approver", "Bankaifan", run) == []
+    assert not any(a[:2] == ("pr", "edit") for a in calls)
+
+
+def test_release_settled_removes_the_label(monkeypatch):
+    monkeypatch.setattr(st, "required_contexts", lambda: None)
+    monkeypatch.setattr(st.risk, "read_text", lambda path: CODEOWNERS)
+    calls = []
+
+    monkeypatch.setenv("GH_REPO", "o/r")
+
+    def run(*a):
+        calls.append(a)
+        if a[-1].endswith("/events"):
+            return json.dumps([[{"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "Bot"}}]])
+        return json.dumps([[{"filename": "tools/x.py"}]])
+
+    out = st.release_settled([settled_pr(464)], "app/approver", "Bankaifan", run)
+    assert out == ["needs-human removed from PR #464: green and approved at its head"]
+    assert ("pr", "edit", "464", "--remove-label", "needs-human") in calls
+
+
+@pytest.mark.parametrize("pages", [
+    [[{"filename": "tools/moved.py", "previous_filename": "tools/trusted_issues.py"}]],  # renamed out of an owned path
+    [[{"filename": f"f{i}.py"} for i in range(100)]] * 30,  # 3000 files: the list may be cut off
+])
+def test_release_settled_keeps_the_label_for_renames_and_cut_lists(monkeypatch, pages):
+    monkeypatch.setattr(st, "required_contexts", lambda: None)
+    monkeypatch.setattr(st.risk, "read_text", lambda path: CODEOWNERS)
+    monkeypatch.setenv("GH_REPO", "o/r")
+    calls = []
+
+    def run(*a):
+        calls.append(a)
+        if a[-1].endswith("/events"):
+            return json.dumps([[{"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "Bot"}}]])
+        return json.dumps(pages)
+
+    assert st.release_settled([settled_pr(464)], "app/approver", "Bankaifan", run) == []
+    assert not any(a[:2] == ("pr", "edit") for a in calls)
+    assert ("api", "--paginate", "--slurp", "repos/o/r/pulls/464/files") in calls
 
 
 def test_status_workflow_passes_failure_watch_switch_in_script_step():

@@ -94,6 +94,16 @@ jobs:
             --setting-sources user
             --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(make check),Bash(date:*),Bash(wc:*),Bash(ls:*)"
+      # git runs here, without the guard key: the agent may have planted hooks or config in the checkout.
+      - name: Fetch guard tools (no key)
+        if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # The agent may edit the checkout: run the helpers as they are on the default branch.
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          mkdir -p "$RUNNER_TEMP/guard"
+          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
       - name: Run report (script, no model)
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
         env:
@@ -105,9 +115,4 @@ jobs:
           MODEL: ${{ env.MODEL }}
           WORKFLOW_FILE: .github/workflows/rule-keeper.yml
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
-        run: |
-          # The agent may edit the checkout: run the helper as it is on the default branch.
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          mkdir -p "$RUNNER_TEMP/guard"
-          git archive FETCH_HEAD tools | tar -x -C "$RUNNER_TEMP/guard"
-          python3 "$RUNNER_TEMP/guard/tools/run_report.py" rule-keeper
+        run: python3 "$RUNNER_TEMP/guard/tools/run_report.py" rule-keeper
