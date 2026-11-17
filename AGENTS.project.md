@@ -2,6 +2,10 @@
 
 Project rules for `luxtronik_shi`; the Limits in AGENTS.md win over anything in this file.
 
+Project: Home Assistant integration `luxtronik_shi` for alpha innotec / Luxtronik heat pumps via the Smart Home
+Interface (SHI, Modbus/TCP); it **writes to a heating system in production** and is driven by the Heat Pump Optimizer (HPO).
+Contributors: CONTRIBUTING.md.
+
 ## Safety
 - Read-only checks against the real installation and the real Home Assistant are allowed. Anything that writes to the
   real heat pump or to Home Assistant needs Daniel's OK. Tests use the simulator (`tests/fake_shi.py`).

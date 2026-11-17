@@ -74,6 +74,18 @@ def test_all_children_done_closes_parent_and_drops_labels(tmp_path):
     assert ("issue", "edit", "5", "--remove-label", "approved") not in run.calls  # other labels stay
 
 
+def test_template_design_never_closes_a_downstream_issue(tmp_path):
+    # issue #674: the template's `Issue: #5` names a template issue; in a downstream project #5 is unrelated
+    d = design_dir(tmp_path)
+    (tmp_path / ".agents").mkdir()
+    (tmp_path / ".agents" / "template.json").write_text(
+        json.dumps({"template": "Bankaifan/agent-template", "synced_sha": ""}), encoding="utf-8")
+    assert dp.parent_designs(d) == {}
+    run = Gh([parent(), child(11), child(12, prs=(8,))], merged=(7, 8))
+    assert dp.close_done_parents(run, OWNER, BOT, d) == []
+    assert close_calls(run) == [] and run.comments == []
+
+
 def test_one_open_child_keeps_parent_open(tmp_path):
     run = Gh([parent(), child(11), child(12, state="OPEN", reason="")])
     assert dp.close_done_parents(run, OWNER, BOT, design_dir(tmp_path)) == []

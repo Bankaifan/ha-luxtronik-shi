@@ -119,8 +119,7 @@ def test_readonly_guard_rejects_writes():
 
 def test_main_needs_key_and_numeric_run_id(monkeypatch):
     monkeypatch.delenv("GUARD_KEY", raising=False)
-    with pytest.raises(SystemExit):
-        aw.main({"RUN_ID": "1"}, Gh())
+    assert "watcher skipped" in aw.main({"RUN_ID": "1"}, Gh())[0]
     monkeypatch.setenv("GUARD_KEY", KEY)
     with pytest.raises(SystemExit):
         aw.main({"RUN_ID": "1; rm -rf /"}, Gh())

@@ -208,6 +208,11 @@ def test_acceptance_3_fresh_downstream_passes_make_check_and_needs_the_marker(tm
         tar.extractall(dst)
     (dst / "VERSION").unlink()
     (dst / ".agents" / "managed.json").unlink()
+    # project-owned extension points (design 0016): a downstream project.mk runs its own recipes (e.g. Luau checks that
+    # need its tests/), so the scratch copy is the template's files only
+    (dst / "project.mk").unlink(missing_ok=True)
+    (dst / ".agents" / "checks.json").unlink(missing_ok=True)
+    (dst / ".agents" / "tool-pins.env").unlink(missing_ok=True)
     shutil.rmtree(dst / "tests")  # the full suite would recurse into this test: keep the template-only tests only
     (dst / "tests" / "agent").mkdir(parents=True)
     for name in TEMPLATE_ONLY_TESTS:

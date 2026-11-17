@@ -21,6 +21,17 @@ def test_agents_md_names_the_project_file():
     assert "AGENTS.project.md" in (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
 
+def test_agents_md_ships_without_a_project_placeholder():
+    text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "<one sentence>" not in text
+    assert not any(line.startswith("Project:") for line in text.splitlines())
+
+
+def test_project_sentence_lives_in_the_project_file():
+    lines = (ROOT / "AGENTS.project.md").read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("Project: ") and "<" not in line for line in lines)
+
+
 def test_agents_md_is_within_its_size_cap():
     budgets = json.loads((ROOT / "docs" / "budgets.json").read_text(encoding="utf-8"))
     assert (ROOT / "AGENTS.md").stat().st_size <= budgets["files"]["AGENTS.md"]

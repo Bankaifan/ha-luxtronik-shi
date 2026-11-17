@@ -1,7 +1,5 @@
 # Working rules
-Project: Home Assistant integration `luxtronik_shi` for alpha innotec / Luxtronik heat pumps via the Smart Home
-Interface (SHI, Modbus/TCP); it **writes to a heating system in production** and is driven by the Heat Pump Optimizer (HPO).
-Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/. Contributors: CONTRIBUTING.md.
+Current state: HANDOVER.md. Decisions: docs/decisions/. Roles: .agents/roles/.
 Project rules: `AGENTS.project.md` (optional, not managed); the Limits below win.
 
 ## Limits (not negotiable)

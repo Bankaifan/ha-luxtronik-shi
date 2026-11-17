@@ -4,6 +4,7 @@ import design_split
 import pytest
 
 DESIGN = "docs/design/0016-example.md"
+TEMPLATE_DESIGN = "docs/design/0016-extension-points.md"  # listed in tools/design_origin.py (issue #674)
 
 GOOD = """# Example
 
@@ -224,3 +225,46 @@ def test_run_reports_a_malformed_design(tmp_path, monkeypatch, capsys):
                           lambda *a: DESIGN if a[0] == "diff" else "abc123")
     assert rc == 1 and gh.issues == []
     assert "no '### Step" in capsys.readouterr().err
+
+
+def _project(tmp_path, downstream):
+    agents = tmp_path / ".agents"
+    agents.mkdir(exist_ok=True)
+    if downstream:
+        (agents / "template.json").write_text(json.dumps({"template": "Bankaifan/agent-template", "synced_sha": ""}),
+                                              encoding="utf-8")
+
+
+def _run_one(tmp_path, monkeypatch, design):
+    monkeypatch.setenv("GH_REPO", "o/r")
+    gh = FakeGh()
+    base = gh.__call__
+
+    def fake_gh(*args):
+        if args[0] == "api":
+            return json.dumps([{"body": "Design.\nRefs #417"}])
+        return base(*args)
+
+    rc = design_split.run("b", "a", tmp_path, fake_gh, lambda *a: design if a[0] == "diff" else "abc123")
+    return rc, gh
+
+
+def test_template_design_creates_no_issue_in_a_downstream_project(tmp_path, monkeypatch):
+    _tree(tmp_path, "0016-extension-points.md", GOOD)
+    _project(tmp_path, downstream=True)
+    rc, gh = _run_one(tmp_path, monkeypatch, TEMPLATE_DESIGN)
+    assert rc == 0 and gh.issues == []
+
+
+def test_downstream_design_still_splits(tmp_path, monkeypatch):
+    _tree(tmp_path, "0018-downstream.md", GOOD)
+    _project(tmp_path, downstream=True)
+    rc, gh = _run_one(tmp_path, monkeypatch, "docs/design/0018-downstream.md")
+    assert rc == 0 and len(gh.issues) == 3
+
+
+def test_template_repo_still_splits_its_own_design(tmp_path, monkeypatch):
+    _tree(tmp_path, "0016-extension-points.md", GOOD)
+    _project(tmp_path, downstream=False)
+    rc, gh = _run_one(tmp_path, monkeypatch, TEMPLATE_DESIGN)
+    assert rc == 0 and len(gh.issues) == 3
