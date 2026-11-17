@@ -1,0 +1,30 @@
+diff --git a/.github/workflows/rule-keeper.yml b/.github/workflows/rule-keeper.yml
+index b2dabe8..630e8e3 100644
+--- a/.github/workflows/rule-keeper.yml
++++ b/.github/workflows/rule-keeper.yml
+@@ -57,6 +57,14 @@ jobs:
+           branch="agent/rule-keeper-$(date +%F)"
+           git checkout -b "$branch"
+           echo "branch=$branch" >> "$GITHUB_OUTPUT"
++      # `make check` needs ruff, pytest, actionlint and zizmor; the allow list only has the exact command `make check`.
++      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
++        with:
++          python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
++      - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
++        env:
++          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
++        run: bash tools/ci/install_tools.sh
+       - id: claude
+         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+         env:
+@@ -84,8 +92,8 @@ jobs:
+             not edited here; name them in the PR body.
+             If nothing is worth changing, do nothing. Otherwise first run `gh pr list --state open --search "head:agent/rule-keeper-"`
+             and stop if one is open. The workflow already created the branch `${{ steps.branch.outputs.branch }}` from main and
+-            checked it out: make the edits on it (do not create, switch or check out branches yourself), run `make check`,
+-            commit, run `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
++            checked it out: make the edits on it (do not create, switch or check out branches yourself), run plain `make check`
++            (the tools are already installed: never `pip install`, no `&&`, `;` or redirects), commit, run `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
+             Never edit main directly, never merge. Daniel merges.
+             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
+           claude_args: >-
