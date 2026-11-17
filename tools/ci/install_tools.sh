@@ -20,6 +20,15 @@ fi
 # Project-specific extra command: only from the environment (repo variable vars.EXTRA_INSTALL), never from a file in the
 # checkout, because a PR branch must not be able to change what runs here.
 if [ -n "${EXTRA_INSTALL:-}" ]; then bash -c "$EXTRA_INSTALL"; fi
+# Optional project install hook: the unmanaged `.agents/install.sh`, run once with bash, only in the version on the base
+# branch (`origin/main`, or INSTALL_BASE_REF), never the checked-out PR version. Absent on base (or no such ref): no-op.
+base_ref="${INSTALL_BASE_REF:-origin/main}"
+if git cat-file -e "$base_ref:.agents/install.sh" 2>/dev/null; then
+  hook="$(mktemp)"
+  git show "$base_ref:.agents/install.sh" > "$hook"
+  bash "$hook"
+  rm -f "$hook"
+fi
 dir="${RUNNER_TEMP:-/tmp}/actionlint"
 mkdir -p "$dir"
 tarball="$dir/actionlint.tar.gz"

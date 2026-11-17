@@ -293,7 +293,9 @@ def main(env=None, run=liveness.gh, now=None):
         return [reason]
     key = guard_mark.key_from_env()
     if not key:
-        raise SystemExit("GUARD_KEY is not set: nothing can be signed")
+        # Nothing can be signed, so no issue would be trusted: skip with a warning instead of a red run that the
+        # liveness guard then reports as an overdue watcher (issue 676).
+        return ["::warning::GUARD_KEY is not set: nothing can be signed, watcher skipped"]
     dry = env.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes", "on")
     run = readonly(run) if dry else run
     run_id = (env.get("RUN_ID") or "").strip()

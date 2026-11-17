@@ -17,6 +17,7 @@ import subprocess
 
 import liveness
 from agent_guard import same_login
+from design_origin import template_internal
 
 DESIGN_DIR = pathlib.Path(__file__).resolve().parent.parent / "docs" / "design"
 ISSUE_LIMIT = 500
@@ -36,9 +37,13 @@ def jlist(run, *args):
 
 
 def parent_designs(design_dir=DESIGN_DIR):
-    """{parent issue number: [docs/design/NNNN-slug.md, ...]} from the `Issue: #N` header line of each design doc."""
+    """{parent issue number: [docs/design/NNNN-slug.md, ...]} from the `Issue: #N` header line of each design doc.
+    The template's own designs are left out in a downstream project: their `Issue: #N` names a template issue (#674)."""
     out = {}
+    internal = template_internal(design_dir.parent.parent)
     for f in sorted(design_dir.glob("[0-9][0-9][0-9][0-9]-*.md")):
+        if f"docs/design/{f.name}" in internal:
+            continue
         for line in f.read_text(encoding="utf-8").splitlines()[:5]:
             m = _HEADER.match(line)
             if m:

@@ -26,6 +26,7 @@ def test_every_workflow_variable_has_a_row():
     assert workflow_variables() <= table_names(), sorted(workflow_variables() - table_names())
 
 
+@pytest.mark.template_only  # the template's own README; a project replaces it and keeps no such link
 def test_readmes_link_the_table():
     for name in ("README.md", "README.de.md"):
         assert "[docs/variables.md](docs/variables.md)" in (ROOT / name).read_text(encoding="utf-8"), name

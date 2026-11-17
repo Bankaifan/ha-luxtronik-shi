@@ -16,6 +16,7 @@ names with `Refs #N`), which also loses `agent:dev` and `needs-human`. The sourc
 with the final steps (no other step depends on them), so the dispatcher does not start it again (#544); an existing
 `Depends on:` line is replaced. Idempotent: a step whose title already exists in an issue with the same `Design:` line is
 reused, not created again. Text is untrusted: only these lines are parsed. Needs gh (GH_TOKEN, GH_REPO) and git.
+In a downstream project the template's own designs (`TEMPLATE_DESIGNS` in tools/design_origin.py, issue #674) are not split.
 """
 import json
 import os
@@ -24,6 +25,7 @@ import re
 import sys
 
 import prefilter
+from design_origin import template_internal
 
 FIRST_PARSED = 16  # older designs use a table in section 8 and are not split by script
 _DESIGN_PATH = re.compile(r"^docs/design/(\d{4})-[a-z0-9-]+\.md$")
@@ -180,10 +182,11 @@ def source_issue(design, before, after, gh=prefilter.gh, git=prefilter.git):
 def run(before, after, root, gh=prefilter.gh, git=prefilter.git):
     """Split every design file added in BEFORE..AFTER; returns 1 when one of them does not parse."""
     names = git("diff", "--diff-filter=A", "--name-only", before, after, "--", "docs/design/").splitlines()
+    skip = template_internal(root)
     rc = 0
     for design in names:
         m = _DESIGN_PATH.match(design)
-        if not m or int(m.group(1)) < FIRST_PARSED:
+        if not m or int(m.group(1)) < FIRST_PARSED or design in skip:
             continue
         try:
             text = (root / design).read_text(encoding="utf-8")

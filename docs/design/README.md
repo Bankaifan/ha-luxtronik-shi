@@ -23,6 +23,8 @@ After the merge `tools/design_split.py` (workflow `design-split`, no model) crea
 line `Design: docs/design/NNNN-<slug>.md` and, for a step that depends on earlier ones, a line `Depends on: #<n>[, #<m>]`
 (`tools/deps.py`). The label is the prio of the issue the design PR names with `Refs #N`; that issue loses `agent:dev` and
 `needs-human`. A second run creates nothing (title and `Design:` line are searched).
+The template's own studies are listed in `TEMPLATE_DESIGNS` of `tools/design_origin.py`; a downstream project (one with
+`.agents/template.json`) splits none of them, and `make check` requires every design of the template to be listed.
 
 ## Section 8 format (designs from 0016 on)
 
