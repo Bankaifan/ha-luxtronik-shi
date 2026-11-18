@@ -117,6 +117,10 @@
     {
       "path": ".agents/roles/developer.md",
       "why": "a blocked run ends with an issue comment (#187); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/agent/test_install_tools_cwd.py",
+      "why": "covers the project's own tools/ci/install_tools.sh reading the requirements files from the script root (#193); not a template test"
     }
   ]
 }
