@@ -11,6 +11,13 @@ versioning follows [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+## [1.1.1] – 2026-11-18
+
+### Changed
+
+* Releases now ship the integration as a `luxtronik_shi.zip` asset, so HACS installs from it and counts downloads
+  (#173).
+
 ## [1.1.0] – 2026-11-12
 
 ### Action required
@@ -914,7 +921,8 @@ Documented retroactively (there were no tags so far).
 ### Added
 - First version of the integration with config flow, options flow and reconfigure flow.
 
-[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v1.0.0...v1.1.0
 [0.18.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Bankaifan/ha-luxtronik-shi/compare/v0.16.1...v0.17.0
