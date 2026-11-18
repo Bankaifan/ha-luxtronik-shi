@@ -61,4 +61,5 @@ jobs:
           if [ "$(python tools/check_version.py --prerelease)" = "true" ]; then
             flags+=(--prerelease)
           fi
-          gh release create "v$VERSION" --target "$TARGET_SHA" --title "v$VERSION" --notes-file notes.md "${flags[@]}"
+          (cd custom_components/luxtronik_shi && zip -r -q "$GITHUB_WORKSPACE/luxtronik_shi.zip" . -x "*/__pycache__/*" "*.pyc")
+          gh release create "v$VERSION" --target "$TARGET_SHA" --title "v$VERSION" --notes-file notes.md "${flags[@]}" luxtronik_shi.zip

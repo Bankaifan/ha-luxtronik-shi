@@ -109,6 +109,10 @@
     {
       "path": "tests/agent/test_install_tools.py",
       "why": "skipped (template_only): the project keeps its own tools/ci/install_tools.sh (requirements-lint.txt pins, actionlint SHA-256), covered by test_install_tools_env.py"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "why": "project-only release workflow (not in the template): tags and publishes the integration from the CHANGELOG section"
     }
   ]
 }
