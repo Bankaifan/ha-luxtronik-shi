@@ -113,6 +113,10 @@
     {
       "path": ".github/workflows/release.yml",
       "why": "project-only release workflow (not in the template): tags and publishes the integration from the CHANGELOG section"
+    },
+    {
+      "path": ".agents/roles/developer.md",
+      "why": "a blocked run ends with an issue comment (#187); to be proposed upstream in agent-template"
     }
   ]
 }
