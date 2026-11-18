@@ -44,7 +44,8 @@ jobs:
         run: |
           for p in .agents/workflow-patches/*.patch; do
             [ -e "$p" ] || continue
-            git apply "$p" || { echo "::error::$p does not apply"; exit 1; }
+            # --index stages the result, so check_drift (unstaged diff only) does not count the patch as generator drift.
+            git apply --index "$p" || { echo "::error::$p does not apply"; exit 1; }
             echo "applied $p for the checks"
           done
       - name: Checks (ruff, pytest, actionlint, zizmor, repo checks)
