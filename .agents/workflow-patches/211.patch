@@ -1,0 +1,23 @@
+diff --git a/.github/workflows/agent-fix.yml b/.github/workflows/agent-fix.yml
+index 7ad46fa..3ee15d6 100644
+--- a/.github/workflows/agent-fix.yml
++++ b/.github/workflows/agent-fix.yml
+@@ -266,6 +266,18 @@ jobs:
+           GH_TOKEN: ${{ steps.ci-app.outputs.token }}
+         run: |
+           gh run view "$RUN_ID" --log-failed | tail -n 400 > ci-failure.log || echo "log not available" > ci-failure.log
++      - name: Wait out an exhausted API rate limit
++        id: rate
++        if: steps.open.outputs.open == 'true'
++        env:
++          GH_TOKEN: ${{ steps.app.outputs.token }}
++        run: |
++          for _ in 1 2 3 4 5 6 7 8; do
++            left=$(gh api rate_limit --jq .resources.core.remaining || echo 0)
++            if [ "$left" -gt 100 ]; then exit 0; fi
++            echo "API rate limit low ($left left), waiting"
++            sleep 60
++          done
+       - id: claude
+         if: steps.open.outputs.open == 'true'
+         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269

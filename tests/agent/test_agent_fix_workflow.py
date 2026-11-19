@@ -43,5 +43,13 @@ def test_fix_job_steps_after_open_are_all_gated():
     assert any("anthropics/claude-code-action@" in s for s in after)
 
 
+def test_agent_run_waits_for_the_api_rate_limit_first():
+    steps = _fix_steps()
+    wait = next(i for i, s in enumerate(steps) if s.startswith("name: Wait out an exhausted API rate limit"))
+    agent = next(i for i, s in enumerate(steps) if "anthropics/claude-code-action@" in s)
+    assert wait < agent
+    assert "gh api rate_limit" in steps[wait] and "sleep 60" in steps[wait]
+
+
 def test_a_failed_hand_over_parks_with_the_marker_comment_so_the_cool_down_grows():
     assert 'guard park pr "$pr"' in TEXT and "label pr \"$pr\" parked" not in TEXT
