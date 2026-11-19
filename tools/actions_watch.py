@@ -220,13 +220,18 @@ def main(env=None, run=liveness.gh, now=None):
     dry = env.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes", "on")
     run = readonly(run) if dry else run
     run_id = (env.get("RUN_ID") or "").strip()
-    if not run_id:
-        now = now or datetime.datetime.now(datetime.UTC)
-        return sweep(now, key, dry, run) + heal(now, key, env, dry, run)
-    if not run_id.isdigit():
+    if run_id and not run_id.isdigit():
         raise SystemExit("RUN_ID must be a number")
-    r = fw._api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}", run)
-    return [handle(r, key, dry, run)]
+    try:
+        if not run_id:
+            now = now or datetime.datetime.now(datetime.UTC)
+            return sweep(now, key, dry, run) + heal(now, key, env, dry, run)
+        r = fw._api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}", run)
+        return [handle(r, key, dry, run)]
+    except ghcall.GhError as e:
+        if not ghcall.rate_limited(e.stderr):
+            raise
+        return ["::warning::GitHub API rate limit exceeded: watcher skipped, the next sweep catches the run"]
 
 
 if __name__ == "__main__":

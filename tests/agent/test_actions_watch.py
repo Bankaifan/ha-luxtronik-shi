@@ -126,6 +126,22 @@ def test_main_needs_key_and_numeric_run_id(monkeypatch):
     assert aw.main({"FAILURE_WATCH": "off"}, Gh()) == ["failure watch is off"]
 
 
+def test_main_skips_on_rate_limit(monkeypatch):
+    import ghcall
+
+    monkeypatch.setenv("GUARD_KEY", KEY)
+
+    def limited(*a):
+        raise ghcall.GhError(1, ["gh"], stderr="API rate limit exceeded (HTTP 403)")
+
+    def broken(*a):
+        raise ghcall.GhError(1, ["gh"], stderr="HTTP 500")
+
+    assert "rate limit" in aw.main({"RUN_ID": "5"}, limited)[0]
+    with pytest.raises(ghcall.GhError):
+        aw.main({"RUN_ID": "5"}, broken)
+
+
 def test_sweep_handles_missed_runs_with_flood_cap():
     f = Gh()
     for n in range(1, 9):
