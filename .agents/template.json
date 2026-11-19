@@ -105,6 +105,14 @@
     {
       "path": ".github/workflows/template-sync.yml",
       "why": "sets up Python (PYTHON_VERSION or 3.13) before installing the pinned tools, as the project's install_tools.sh needs it (#193); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tools/unblock.py",
+      "why": "fetch reports a gh rate limit as one error line instead of a traceback (#212); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/agent/test_unblock.py",
+      "why": "covers the rate limit error line of tools/unblock.py fetch (#212)"
     }
   ]
 }
