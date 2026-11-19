@@ -105,6 +105,10 @@
     {
       "path": ".github/workflows/template-sync.yml",
       "why": "sets up Python (PYTHON_VERSION or 3.13) before installing the pinned tools, as the project's install_tools.sh needs it (#193); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/agent/test_agent_fix_workflow.py",
+      "why": "also checks that the API rate limit wait step runs before the agent step (#211); to be proposed upstream in agent-template"
     }
   ]
 }
