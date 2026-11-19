@@ -59,10 +59,6 @@
       "why": "the temporary test repo gets a pytest.ini with asyncio_mode = auto: the Home Assistant pytest plugin (latest) errors on sync tests without it"
     },
     {
-      "path": ".github/workflows/agent-fix.yml",
-      "why": "the fix agent keeps no `gh pr edit` and `gh pr comment` rights (the security reviewer: it could strip risk:security from a PR); the PR body is applied by the fixed step after it"
-    },
-    {
       "path": "tools/run_stats.py",
       "why": "weekly failure classes name the missing repo variable instead of the echoed script line and label agent-tool internal errors (#125); to be proposed upstream in agent-template"
     },
@@ -75,16 +71,8 @@
       "why": "make check also runs the project checks (tools/check_version.py); it does not run the template-only tools/check/check_version_bump.py (no VERSION and no .agents/managed.json here, design 0011 4.1)"
     },
     {
-      "path": "tests/agent/test_check_version_bump.py",
-      "why": "skipped at module level: it checks the template's own VERSION bump rule (root VERSION, .agents/managed.json), which this project does not have (design 0011 4.1)"
-    },
-    {
       "path": "tests/agent/test_managed_guard.py",
       "why": "only test_repo_managed_file_lists_tools_and_makefile is skipped when .agents/managed.json is missing: that file exists only in the template (design 0011 4.1c); every other test runs"
-    },
-    {
-      "path": "tools/scope_tests.py",
-      "why": "looks in tests/ and tests/agent/ (the project's own tests stay in tests/, the template tests live in tests/agent/); to be proposed upstream in agent-template"
     },
     {
       "path": "tools/entity_docs_entries.py",
