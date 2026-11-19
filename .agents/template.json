@@ -51,10 +51,6 @@
       "why": "NO_TEST_TOOLS lists the project's generator tools (no same-name test, full run)"
     },
     {
-      "path": "tests/agent/test_answer.py",
-      "why": "lambda assignments replaced by def (ruff E731 in this project)"
-    },
-    {
       "path": "tests/agent/test_variables_doc.py",
       "why": "skipped at module level: it checks the template's docs/variables.md and README links, which this project does not have"
     },
