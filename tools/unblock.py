@@ -318,7 +318,12 @@ def main(argv):
             print(f"invalid verdict: {exc}")
             return 1
     if len(args) == 4 and args[0] == "fetch" and args[2].isdigit() and args[1] in ("pr", "issue"):
-        print("\n".join(fetch(args[1], args[2], args[3])))
+        try:
+            print("\n".join(fetch(args[1], args[2], args[3])))
+        except ghcall.GhError as exc:
+            why = "GitHub API rate limit exceeded, the item stays parked" if ghcall.rate_limited(exc.stderr) else str(exc)
+            print(f"::error::fetch failed: {why}")
+            return 1
         return 0
     if len(args) == 3 and args[0] == "gate" and args[2].isdigit() and args[1] in ("pr", "issue"):
         ok, why = live_gate(args[1], args[2], owner)
