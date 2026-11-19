@@ -146,7 +146,10 @@ def names(item):
 
 
 def is_agent_pr(pr):
-    return pr.get("headRefName", "").startswith("agent/") and not pr.get("isCrossRepository")
+    """Same-repo agent/* PR that agents work on. The train's batch (agent/batch, decision 0018 rule 6) is a script
+    product and is not one: no re-trigger, no round limit, no conflict fix, no rebase, no park and no fresh start."""
+    head = pr.get("headRefName", "")
+    return head.startswith("agent/") and head != restart.BATCH_BRANCH and not pr.get("isCrossRepository")
 
 
 FAILED_STATES = ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE")
@@ -258,7 +261,8 @@ def orphan_prs(prs, validate_runs, now):
 def held_run_ids(held, prs, author_bot):
     ids = []
     for r in held:
-        if any(is_agent_pr(p) and same_login(p["author"]["login"], author_bot)
+        if any(p.get("headRefName", "").startswith("agent/") and not p.get("isCrossRepository")  # the batch too
+               and same_login(p["author"]["login"], author_bot)
                and p["headRefOid"] == r.get("headSha") for p in prs):
             ids.append(r["databaseId"])
     return ids

@@ -19,5 +19,5 @@ def test_versioned_names_and_commit_subjects():
     good = ["V1.101-HPO-FLOW: shorten summary template", "V0.12-HPO-FLOW: x"]
     assert task_ids.commit_errors("V1-HPO-FLOW: summary", good) == []
     bad = ["fix typo", "V1-HPO-FLOW: no version", "V1.101-OTHER: wrong name", "V1.101-HPO-FLOW:"]
-    assert len(task_ids.commit_errors("V1-HPO-FLOW: summary", bad)) == 4
+    assert len(task_ids.commit_errors("V1-HPO-FLOW: summary", bad)) == 5  # four subjects and one repair hint
     assert task_ids.commit_errors("NAMES: old form", bad) == [] and task_ids.commit_errors("Release 1.102", bad) == []

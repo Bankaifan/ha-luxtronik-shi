@@ -126,6 +126,11 @@ def test_superseded_ignores_non_agent_and_cross_repo_prs():
     assert r.superseded(prs) == []
 
 
+def test_the_batch_pr_replaces_none_of_its_members():
+    prs = [pr(7, "Closes #2", "agent/2-x"), pr(9, "Batch: #7@abcdef0 #8@abcdef1\nCloses #2", "agent/batch")]
+    assert r.superseded(prs) == []
+
+
 def test_sibling_prs_sharing_only_a_parent_ref_do_not_replace_each_other():
     prs = [pr(360, "Closes #357. Refs #352"), pr(361, "Closes #358. Refs #352"), pr(362, "Closes #355. Refs #352")]
     assert r.superseded(prs) == []

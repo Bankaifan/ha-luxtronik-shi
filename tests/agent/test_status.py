@@ -191,6 +191,16 @@ def test_held_runs_only_author_app_head():
     assert st.held_run_ids(held, prs, "author[bot]") == [10]
 
 
+def test_nobody_fixes_the_batch_pr_but_its_held_runs_are_approved():
+    b = pr(9, branch="agent/batch", labels=["review:3", "parked"], mergeStateStatus="DIRTY",
+           commits=[{"committedDate": ago(600)}])
+    assert st.orphan_prs([dict(b, mergeStateStatus="BLOCKED", labels=[])], lambda sha: 0, NOW) == []
+    assert st.conflict_prs([dict(b, labels=[])]) == []
+    assert st.limit_prs([dict(b, labels=[{"name": "review:3"}])], [], NOW) == []
+    assert not st.is_agent_pr(b)  # un_park: labels cleared only, nothing closed, no issue restarted
+    assert st.held_run_ids([{"databaseId": 10, "headSha": "sha9"}], [b], "author[bot]") == [10]
+
+
 def test_fix_round_mirrors_agent_fix():
     assert st.fix_round(set()) == ("review:1", False)
     assert st.fix_round({"review:1"}) == ("review:2", False)

@@ -9,7 +9,8 @@ strip-attribution.yml first (tools/strip_attribution.py), so the body rule only 
 An optional `## Friction` section (see tools/friction.py) is accepted, never required.
 Also fails a PR whose linked issue (agent branch, `Closes #N`, `Refs #N`) has a task ID in its title (tools/task_ids.py)
 unless the PR title starts with the same `<ID>: `. Unreadable issues are not checked. A PR titled `V<major>-<NAME>: `
-must have only commits `V<version>-<NAME>: <change>` (tools/task_ids.py).
+must have only commits `V<version>-<NAME>: <change>` (tools/task_ids.py). The train's batch PR (`agent/batch`,
+decision 0018) is titled `Batch: #a, #b` and names the issues of all its members: the task ID rule skips it.
 Skipped for local runs and pushes to main. Whether the title is really English cannot be verified.
 """
 import json
@@ -31,6 +32,7 @@ CLOSING = re.compile(
 )
 AGENT_BRANCH = re.compile(r"^agent/(\d+)-")
 ORCHESTRATOR_BRANCH = "agent/orchestrator-handover"
+BATCH_BRANCH = "agent/batch"  # the one branch of the train's batch PR (tools/train.py, decision 0018)
 REFS = re.compile(r"\bRefs\s+#(\d+)\b", re.IGNORECASE)
 BARE_NUMBER = re.compile(r"(?<![\w./-])#(\d+)\b")  # `#N` of this repo only, not `owner/repo#N`
 
@@ -129,8 +131,9 @@ def main() -> int:
     if not body.strip():
         errors.append("body is empty (what and why, link the issue)")
     errors += form_errors(body, head_ref, files, commits)
-    issue_titles = [t for t in map(gh_issue_title, linked_issues(body, head_ref)) if t is not None]
-    errors += id_errors(title, issue_titles)
+    if head_ref != BATCH_BRANCH:
+        issue_titles = [t for t in map(gh_issue_title, linked_issues(body, head_ref)) if t is not None]
+        errors += id_errors(title, issue_titles)
     errors += task_ids.commit_errors(title, subjects)
     for e in errors:
         print(f"check_pr_form: {e}")

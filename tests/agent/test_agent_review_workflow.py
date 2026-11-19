@@ -19,6 +19,18 @@ def test_model_step_is_skipped_after_a_script_approval():
     assert "steps.reapprove.outputs.approved != 'true'" in claude.split("env:")[0]
 
 
+def test_a_refused_batch_is_never_reviewed_by_the_model():
+    after = TEXT[step_index("id: reapprove"):step_index("Request the code owner's review")]
+    assert after.count("&& env.BRANCH != 'agent/batch'\n") == after.count("\n        if: ") - 1 == 3
+
+
+def test_the_batch_pr_counts_no_review_round_and_is_never_parked():
+    block = TEXT[step_index("id: round"):step_index("id: reapprove")]
+    gate = block.index('if [ "$BRANCH" = agent/batch ] && guard same "$author" "$AUTHOR_BOT"; then')
+    assert gate < block.index("else", gate) < block.index("guard round") < block.index("guard park") < block.index("\n          fi\n", gate)
+    assert block.count("guard round") == block.count("guard park") == 1
+
+
 def test_reapprove_never_fails_the_job_and_gets_sha_from_env():
     block = TEXT[step_index("id: reapprove"):step_index("id: claude")]
     assert 'if python3 tools/reapprove.py "$PR" "$SHA"; then' in block
@@ -40,7 +52,7 @@ def test_checkout_is_the_default_branch_and_never_the_pr_head():
 
 def test_approver_token_scope_is_unchanged():
     assert "permission-pull-requests: write" in TEXT
-    assert TEXT.count("permission-") == 1
+    assert len(re.findall(r"(?m)^\s+permission-[a-z-]+:", TEXT)) == 1  # token scopes, not --permission-mode
     assert "permissions:\n  contents: read\n  pull-requests: read\n" in TEXT
 
 

@@ -126,6 +126,8 @@ jobs:
               | jq -r --arg s "$RUN_SHA" '[.[] | select(.headRefOid == $s)] | first | .number // empty')
             if [ -z "$pr" ]; then echo "No open PR with head $RUN_SHA"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           fi
+          # The train's batch PR (decision 0018) is a script product: nobody fixes it, the train closes it.
+          if [ "$branch" = agent/batch ]; then echo "Batch PR: no fix round"; echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "pr=$pr" >> "$GITHUB_OUTPUT"; echo "branch=$branch" >> "$GITHUB_OUTPUT"
           # Model of the original task: sonnet if the PR or an issue it closes has model:sonnet.
           labels=",$(gh pr view "$pr" --json labels --jq '[.labels[].name] | join(",")'),"
@@ -268,7 +270,7 @@ jobs:
           gh run view "$RUN_ID" --log-failed | tail -n 400 > ci-failure.log || echo "log not available" > ci-failure.log
       - id: claude
         if: steps.open.outputs.open == 'true'
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -277,6 +279,9 @@ jobs:
           bot_id: "476059"
           bot_name: "Bankaifan"
           allowed_bots: ${{ vars.AUTHOR_BOT }},${{ vars.APPROVER_BOT }}
+          # The PR is the author app's own agent/* branch of this repo (job `prepare`): its author is a bot, which the
+          # action >= 1.0.273 counts as untrusted and would deny make, pytest and python3 on review events.
+          restrict_untrusted_prs: "false"
           prompt: |
             Act as the developer described in .agents/roles/developer.md and follow AGENTS.md.
             PR #${{ env.PR }} in ${{ github.repository }} (branch ${{ env.BRANCH }}, already checked out) needs a fix.
@@ -288,7 +293,8 @@ jobs:
               (read it with Read; never commit it). CI tests the PR merged with current main: rebase onto
               origin/main first, then reproduce with `make check`.
             Fix exactly what is raised in new small commits (subject `V<VERSION>-<NAME>: <change>` like the others on the
-            branch; never squash), run `make check` and the tests, and `git push --force-with-lease`. If the same finding
+            branch; never squash), run `make check` and the tests, run `python3 tools/commit_names.py <NAME>` once (it sets the
+            subject prefix on every commit, also on wrong older ones) and `git push --force-with-lease`. If the same finding
             came back, try a different approach than the last commit. A denied tool call is no reason to stop.
             No tool or AI attribution in commits, PR bodies or comments (no "Generated with", session link, Co-Authored-By, Claude-Session).
             The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
@@ -309,6 +315,7 @@ jobs:
             --max-turns 60
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Edit,Write,Glob,Grep,${{ vars.DEV_SHELL == 'free' && 'Bash' || 'Bash(git:*),Bash(cp:*),Bash(mkdir:*),Bash(diff:*),Bash(cmp:*),Bash(wc:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(sort:*),Bash(jq:*),Bash(ls:*),Bash(make:*),Bash(bash tools/check/check_drift.sh),Bash(python3:*),Bash(pytest:*),Bash(ruff:*),Bash(actionlint:*),Bash(zizmor:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh run view:*),Bash(gh release view:*),Bash(gh release list:*)' }}"
       # Deterministic, fixed flags: the agent only writes the file, it never runs `gh pr edit`.
       # Only after a successful agent run. The file must be a regular file (no symlink) and pass the checks below.
@@ -348,6 +355,9 @@ jobs:
       - name: Fetch guard tools (no key)
         if: ${{ always() && steps.open.outputs.open == 'true' }}
         env:
+          # claude-code-action >= 1.0.273 leaves origin on a credential helper that answers only with GH_TOKEN
+          # (no token in .git/config when bots are allowed): the read-only job token is enough for this fetch.
+          GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           # The agent may edit the checkout: run the helpers as they are on the default branch.

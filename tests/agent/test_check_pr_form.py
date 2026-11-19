@@ -165,3 +165,8 @@ def test_issue_without_task_id_keeps_the_old_title_rule(monkeypatch):
 def test_cross_repo_reference_is_not_a_linked_issue(monkeypatch):
     assert check(monkeypatch, "Closes other/repo#501", ["tools/a.py"], title="Fix x",
                  issue_title="NAMES: x") == 0
+
+
+def test_batch_pr_is_not_held_to_the_task_id_of_its_members_issues(monkeypatch):
+    assert check(monkeypatch, "Batch: #7@abcdef0 #8@abcdef1\nCloses #501", ["tools/a.py"], head="agent/batch",
+                 title="Batch: #7, #8", issue_title="NAMES: x") == 0

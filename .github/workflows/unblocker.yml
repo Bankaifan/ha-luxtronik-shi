@@ -73,7 +73,7 @@ jobs:
       # No app token, no GH_TOKEN, no Bash, no Edit. github_token is the job token (contents: read), which the action
       # requires instead of its OIDC exchange; nothing here can write to GitHub.
       - id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         if: steps.gate.outputs.ok == 'true' && steps.landed.outputs.landed != 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -90,6 +90,7 @@ jobs:
             --max-turns 10
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Edit(verdict.json)"
       # Path rules only work as Edit(...), which also covers Write; Write(verdict.json) denied every write (#226).
       # The model step may have written anywhere in the checkout: keep only the verdict, restore everything else.

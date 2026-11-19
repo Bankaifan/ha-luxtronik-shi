@@ -96,8 +96,11 @@ def orchestrator_work(candidates, stale, needs_slip=None):
 
 def event_reason(event, action, f):
     """(work, reason) for one event, per design 0007 section 4.3; None for events without a row (schedule, dispatch,
-    validate on main): those keep the count rule. F is a dict of facts, see `event_facts`. No row fits -> (False, "no-match")."""
+    validate on main): those keep the count rule. F is a dict of facts, see `event_facts`. No row fits -> (False, "no-match").
+    The train's batch (decision 0018) is script work: its PR until it merges, and a member closed as landed, wake nobody."""
     row = (event, action)
+    if f.get("batched") and not f["merged"]:
+        return False, "batch"
     if event == "issues" and action in ("opened", "edited", "labeled"):
         if f["startable"]:
             return True, "startable-issue"
@@ -138,7 +141,8 @@ def event_facts(event, number, free_prs, trusted_numbers, owner, approver, start
     if not number:
         return f
     if event.startswith("pull_request"):
-        pr = json.loads(gh("pr", "view", str(number), "--json", "labels,body,title,headRefName"))
+        pr = json.loads(gh("pr", "view", str(number), "--json", "labels,body,title,headRefName,comments,state,isCrossRepository"))
+        f["batched"] = (pr["headRefName"] == train.BATCH_BRANCH and not pr.get("isCrossRepository")) or landed_in_batch(pr)
         names = {lab["name"] for lab in pr["labels"]}
         f["agent_pr"] = pr["headRefName"].startswith("agent/")
         f["design_pr"] = "design" in names or pr["title"].lower().startswith("design")
@@ -191,6 +195,25 @@ def waiting_blocker(comments, authors=overlap.DEFAULT_TRUSTED):
     return int(m.group(1)) if m else None
 
 
+def batched(comments, authors=overlap.DEFAULT_TRUSTED):
+    """N when the last comment by a trusted author is the train's `Merged with #N.` (tools/train.py, decision 0018),
+    else None. The developer model posts as the same app, so the text alone proves nothing: see `landed_in_batch`."""
+    mine = [c for c in comments or [] if (c.get("author") or {}).get("login") in authors]
+    m = re.fullmatch(r"Merged with #(\d+)\.", (mine[-1].get("body") or "").strip()) if mine else None
+    return int(m.group(1)) if m else None
+
+
+def landed_in_batch(pr, gh=gh):
+    """True when PR (state, comments) was closed because its change landed in a batch: it is closed, its last trusted
+    comment is `Merged with #N.` and #N really is a merged same-repo PR from the batch branch."""
+    n = batched(pr.get("comments")) if pr.get("state") == "CLOSED" else None
+    if not n:
+        return False
+    batch = json.loads(gh("pr", "view", str(n), "--json", "state,headRefName,isCrossRepository"))
+    return (batch.get("state") == "MERGED" and batch.get("headRefName") == train.BATCH_BRANCH
+            and not batch.get("isCrossRepository"))
+
+
 def parked_waiting(dev, gh=gh):
     """(parked, ready) for the open agent:dev issues in DEV (number, labels, comments) that wait for a blocker.
     PARKED: numbers whose blocker is still open, they hold no slot. READY: {number: blocker} with the blocker closed,
@@ -209,7 +232,7 @@ def parked_waiting(dev, gh=gh):
 
 def waiting_for_owner(owner, approver):
     """(issue numbers, PR count) of PRs waiting only for the owner; see train.waiting_for_owner."""
-    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "20", "--json", train.LIST_FIELDS + ",body"))
+    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "20", "--json", train.LIST_FIELDS))
     repo = os.environ["GH_REPO"]
     issues, n = set(), 0
     for p in prs:
@@ -253,6 +276,15 @@ def handover_done_today():
     return bool(prs)
 
 
+def first_failure(issue):
+    """A `Failing workflow:` issue after ONE failed run (tools/failure_watch.py writes `Failures: 1`): often a blip such
+    as the API rate limit. It starts no developer; a second failure does, a green run closes it. `prio:1` is exempt:
+    a red main or a rarely scheduled workflow may never get its second run."""
+    labels = {lab.get("name") for lab in issue.get("labels") or []}
+    return ((issue.get("title") or "").startswith("Failing workflow: ") and "prio:1" not in labels
+            and bool(re.search(r"^Failures: 1$", issue.get("body") or "", re.MULTILINE)))
+
+
 def start_state():
     """Slots and start list, read live (one definition for prefilter and dispatch): a dict with dev, stuck, waiting_prs,
     free_dev, free_prs, trusted (JSON of trusted_issues.py), blocked, restart ({issue: closed blocker} of parked
@@ -266,9 +298,10 @@ def start_state():
                                     count("pr", "list", "--state", "open"), w_prs)
     trusted = json.loads(os.environ.get("TRUSTED") or subprocess.run(
         [sys.executable, "tools/trusted_issues.py"], check=True, capture_output=True, text=True).stdout)
-    issues = json.loads(gh("issue", "list", "--state", "open", "--limit", "200", "--json", "number,body"))
+    issues = json.loads(gh("issue", "list", "--state", "open", "--limit", "200", "--json", "number,body,title,labels"))
     open_numbers = {i["number"] for i in issues}
     blocked = {i["number"] for i in issues if deps.blocked(i["number"], i.get("body"), open_numbers)}
+    blocked |= {i["number"] for i in issues if first_failure(i)}
     return {"dev": dev, "stuck": stuck, "restart": restart, "waiting_prs": w_prs, "free_dev": free_dev, "free_prs": free_prs,
             "trusted": trusted, "blocked": blocked,
             "start": start_candidates(trusted, free_dev, free_prs, w_prs, blocked),

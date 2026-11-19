@@ -61,3 +61,21 @@ def test_judging_step_has_no_write_tools(name):
     names = {t.split("(")[0] for t in allowed.split(",")}
     assert not names & {"Edit", "Write", "MultiEdit"}
     assert "Bash" not in allowed.replace("Bash(", "")
+
+
+def _action_steps(name: str) -> list[str]:
+    """The text of every step in a workflow that runs claude-code-action."""
+    text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+    return [s for s in re.split(r"(?m)^ {6}- ", text) if re.search(r"uses: anthropics/claude-code-action@", s)]
+
+
+@pytest.mark.parametrize("name", JUDGING + ACTING)
+def test_allowed_tools_stay_a_strict_list(name):
+    """claude-code-action 1.0.273 starts sessions in auto mode, where a safety review may pass tool calls that no
+    allow rule covers. `--permission-mode default` keeps --allowedTools a hard boundary: the rest is denied."""
+    steps = _action_steps(name)
+    assert steps, name
+    for step in steps:
+        block = re.search(r"claude_args: >-\n((?: {12}\S.*\n)+)", step)
+        assert block, f"{name}: claude-code-action step without claude_args"
+        assert re.findall(r"--permission-mode[=\s]+(\S+)", block.group(1)) == ["default"], name

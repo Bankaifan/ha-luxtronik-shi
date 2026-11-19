@@ -24,4 +24,6 @@ def commit_errors(title, subjects):
     if not m:
         return []
     form = re.compile(rf"^V\d+(?:\.\d+)+-{re.escape(m.group(1))}: \S")
-    return [f"commit subject must be `V<version>-{m.group(1)}: <change>`: {s}" for s in subjects if not form.match(s)]
+    bad = [f"commit subject must be `V<version>-{m.group(1)}: <change>`: {s}" for s in subjects if not form.match(s)]
+    fix = f"repair all subjects with `python3 tools/commit_names.py {m.group(1)}` and `git push --force-with-lease`"
+    return [*bad, fix] if bad else []

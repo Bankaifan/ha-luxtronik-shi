@@ -18,6 +18,7 @@ import sys
 
 import budget
 import failure_watch as fw
+import ghcall
 import guard_mark
 import liveness
 import stalled_dev
@@ -136,6 +137,8 @@ def fallback(trusted, issues, closed, unhealthy, cap, dry, run):
         labels = stalled_dev.names(i)
         if not i["title"].startswith(fw.TITLE_PREFIX) or labels & {"agent:dev", "parked"} or i["number"] in closed:
             continue
+        if "prio:1" not in labels and re.search(r"^Failures: 1$", i.get("body") or "", re.MULTILINE):
+            continue  # one failed run is often a blip (prefilter.first_failure): wait for the second
         if dev >= cap:
             out.append(f"fallback: MAX_DEV {cap} reached, #{i['number']} waits")
             break
@@ -227,6 +230,12 @@ def main(env=None, run=liveness.gh, now=None):
 
 
 if __name__ == "__main__":
-    for line in main():
-        print(line)
+    try:
+        for line in main():
+            print(line)
+    except ghcall.GhError as e:
+        if not ghcall.rate_limited(e.stderr):
+            raise
+        # The budget comes back within the hour and the sweep catches up: a red watcher would only report itself.
+        print("::warning::GitHub API rate limit reached: watcher skipped, the next sweep catches up")
     sys.exit(0)

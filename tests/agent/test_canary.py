@@ -132,6 +132,15 @@ def test_check_pass_when_pr_merged_and_issue_closed():
     assert not gh.created
 
 
+def test_check_pass_when_the_canary_landed_in_a_merged_batch():
+    batch = {"number": 8, "createdAt": ago(20), "mergedAt": ago(1), "headRefName": "agent/batch", "labels": [],
+             "reviews": [], "body": "Batch: #7@abcdef0 #6@abcdef1\nCloses #50\nCloses #49"}
+    gh = FakeGh(issues=[canary_issue(50, state="CLOSED")], prs=[pr(), batch])  # its own PR was closed unmerged
+    assert canary.check(NOW, "o/r", KEY, gh) == ("pass", None)
+    gh = FakeGh(issues=[canary_issue(50, state="CLOSED")], prs=[pr(), {**batch, "mergedAt": None}], events=[])
+    assert canary.check(NOW, "o/r", KEY, gh)[0] == "fail"
+
+
 def check_stage(prs=(), events=(), runs=(), state="OPEN", issues_extra=()):
     gh = FakeGh(issues=[canary_issue(50, state=state), *issues_extra], prs=prs, events=events, runs=runs)
     status, stage = canary.check(NOW, "o/r", KEY, gh)

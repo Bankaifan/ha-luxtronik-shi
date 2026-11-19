@@ -163,7 +163,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -173,6 +173,9 @@ jobs:
           bot_id: "476059"
           bot_name: "Bankaifan"
           allowed_bots: ${{ vars.AUTHOR_BOT }}
+          # The checkout is the default branch, never PR code: the action >= 1.0.273 would otherwise deny the two
+          # python3 tools below on events of PRs whose author is a bot or has no write access.
+          restrict_untrusted_prs: "false"
           prompt: |
             Act as the orchestrator described in .agents/roles/orchestrator.md and follow AGENTS.md.
             Repository: ${{ github.repository }}. Trigger: ${{ env.EVENT }}. You write no production code.
@@ -245,6 +248,7 @@ jobs:
             --max-turns 40
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Edit(.agent-out/**),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh label create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh run list:*),Bash(python3 tools/overlap.py:*),Bash(python3 tools/agent_guard.py park:*)"
       # git runs here, without the guard key: the agent may have planted hooks or config in the checkout.
       - name: Fetch guard tools (no key)
