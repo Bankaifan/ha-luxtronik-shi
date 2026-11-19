@@ -6,15 +6,15 @@ Exit 0: approved SHA. Exit 1: refused or any error; the model review then runs a
 Runs from the default branch (agent-review.yml, workflow_run); PR data is read through `gh` and treated as data.
 
 Approve only if ALL hold, else refuse:
-1. The PR is open, same repo, `agent/*`, SHA is its head, one commit, fewer than 100 files (the file list is complete),
-   no `needs-human`, not a design PR, no changed path owned by the owner in CODEOWNERS, and the risk classifier
-   (tools/ci/risk.py) rates the commit patch `none` or `security` (infra refuses). A `security` patch or a
+1. The PR is open, same repo, `agent/*`, SHA is its head, fewer than 100 files (the file list is complete),
+   not `parked`, not a design PR, no changed path owned by the owner in CODEOWNERS, and the risk classifier
+   (tools/ci/risk.py) rates the PR diff `none` or `security` (infra refuses). A `security` patch or a
    `risk:security` label also needs a `security-review: approve <sha>` comment of the approver app for the new head.
 2. No reviewer's latest decisive review is CHANGES_REQUESTED. The newest approver review for another head OLD is an
    APPROVED one, or a DISMISSED one whose dismissal event says: previous state `approved`, no message (a manual
    dismissal always has one), actor = the author app (the pusher). Anything unreadable refuses.
    Its `body-hash:` line must equal the current PR body hash.
-3. `git patch-id --verbatim` of the commit patch of OLD equals that of SHA. Refused on binary markers, mode changes,
+3. `git patch-id --verbatim` of the diff of OLD against its merge base equals that of SHA. Refused on binary markers, mode changes,
    a patch over MAX_PATCH characters, or a `diff --git` count that differs from the PR's file count (truncation).
 4. The head is re-read just before posting, and the review is submitted through the API with `commit_id=SHA`.
 """
@@ -32,7 +32,7 @@ import risk
 MAX_FILES = 100
 MAX_PATCH = 300_000
 SHA_RE = re.compile(r"[0-9a-f]{40}")
-PATCH_ACCEPT = "Accept: application/vnd.github.patch"
+PATCH_ACCEPT = "Accept: application/vnd.github.diff"  # one diff per file, whatever the number of commits
 MODE_LINE = re.compile(r"^(old|new) mode ", re.MULTILINE)
 
 
@@ -56,10 +56,8 @@ def check_pr(pr, repo, sha):
         raise Refuse("PR is not open at this head")
     if (head.get("repo") or {}).get("full_name") != repo or not str(head.get("ref", "")).startswith("agent/"):
         raise Refuse("not a same-repo agent/* branch")
-    if pr.get("commits") != 1:
-        raise Refuse("PR has not exactly one commit")
-    if "needs-human" in labels:
-        raise Refuse("PR is labelled needs-human")
+    if "parked" in labels:
+        raise Refuse("PR is parked")
 
 
 def check_files(files, pr, codeowners, owner):
@@ -139,7 +137,8 @@ def run_reapprove(pr_no, sha, env, run=gh, ident=patch_id):
         raise Refuse("a reviewer has requested changes")
     bhash = agent_guard.body_hash(pr.get("body"))
     old = previous_head(reviews, paged(run, f"repos/{repo}/issues/{pr_no}/timeline"), approver, author_bot, sha, bhash)
-    new_patch, old_patch = (run("api", f"repos/{repo}/commits/{c}", "-H", PATCH_ACCEPT) for c in (sha, old))
+    base = (pr.get("base") or {}).get("ref", "")  # three dots: each head against its own merge base, any number of commits
+    new_patch, old_patch = (run("api", f"repos/{repo}/compare/{base}...{c}", "-H", PATCH_ACCEPT) for c in (sha, old))
     for p in (new_patch, old_patch):
         check_patch(p, len(files))
     level = risk.classify(new_patch, risk.read_text("AGENTS.md"))

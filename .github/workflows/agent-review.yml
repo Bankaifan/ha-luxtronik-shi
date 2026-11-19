@@ -28,6 +28,7 @@ jobs:
       AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
       GH_REPO: ${{ github.repository }}
       APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+      OWNER: ${{ vars.OWNER || github.repository_owner }}
     steps:
       - name: Fail if a required repo variable is unset
         env:
@@ -65,25 +66,19 @@ jobs:
           num=$(jq -r .number <<<"$pr")
           labels=",$(jq -r '[.labels[].name] | join(",")' <<<"$pr"),"
           author=$(jq -r .user.login <<<"$pr")
-          # PRs by the author app or by the owner's account (own agent/* branch) and PRs labelled agent:review.
+          # PRs by the author app or by the owner's account (own agent/* branch); no label opts another PR in.
           if ! guard agent-pr "$author" "$labels"; then echo "Not an agent PR"; skip; fi
           # Key: SHA + PR body hash. validate also runs on `edited`, so a body edit gets a new review on the same SHA;
           # a second green run with nothing changed does not.
           bhash=$(guard body-hash "$num")
           if guard reviewed "$num" "$SHA" "$bhash"; then echo "Already reviewed $SHA / body $bhash"; skip; fi
           case "$labels" in
-            *,needs-human,*) skip ;;
+            *,parked,*) skip ;;
           esac
           # One round per head SHA (marker label round:<sha7>), shared with the security reviewer.
           case "$(guard round "$num" "$SHA")" in
             limit)
-              guard label pr "$num" needs-human
-              # A label alone is not in Daniel's inbox; skip if he is the author.
-              guard same "$(jq -r .user.login <<<"$pr")" Bankaifan || \
-                gh pr edit "$num" --add-reviewer Bankaifan || echo "review request failed"
-              gh pr comment "$num" --body "Review limit reached (3 reviews, 2 fix rounds). Needs the orchestrator or Daniel.
-
-              Hallo Daniel, dieser PR haengt fest: Entwickler und Pruefer sind nach drei Runden nicht einig. Schlimmster Fall: nichts passiert, der PR wird nur nicht gemergt. Die Pruefer empfehlen, den Auftrag neu zuzuschneiden. Frage: Soll der Orchestrator den Auftrag neu schneiden (ja) oder der PR geschlossen werden (nein)?"
+              guard park pr "$num" "review limit reached (3 reviews, 2 fix rounds)"
               skip ;;
           esac
           echo "pr=$num" >> "$GITHUB_OUTPUT"; echo "bhash=$bhash" >> "$GITHUB_OUTPUT"
@@ -137,7 +132,6 @@ jobs:
           prompt: |
             Act as the reviewer described in .agents/roles/reviewer.md and follow AGENTS.md. If the PR changes
             only files under docs/design/, act as the design reviewer in .agents/roles/design-reviewer.md instead.
-            Design owner mode: ${{ (vars.DESIGN_AUTOMERGE || (github.repository == 'Bankaifan/agent-template' && 'on' || 'off')) == 'on' && 'auto (you decide Owner decisions)' || 'Daniel' }}.
             Review PR #${{ steps.round.outputs.pr }} in ${{ github.repository }} (CI is green on ${{ env.SHA }}).
             The checkout is main, not the PR: never run or import code from the PR. The change is staged as files:
             `.review/pr.diff` (full diff), `.review/files.txt` (changed paths) and `.review/files/<path>` (each changed
@@ -160,8 +154,8 @@ jobs:
             --setting-sources user
             --settings .github/claude-judge-settings.json
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr review:*),Bash(gh issue view:*)"
-      # Approved but waiting for Daniel (security class or code-owner path): label needs-human and the German note.
-      - name: Mark an approved PR that waits for Daniel
+      # Approved and on a CODEOWNERS path of the owner: GitHub needs his approval, so his review is requested (no label, no note).
+      - name: Request the code owner's review for an approved PR on a CODEOWNERS path
         if: ${{ steps.claude.conclusion == 'success' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}

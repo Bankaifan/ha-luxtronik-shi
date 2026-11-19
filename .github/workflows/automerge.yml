@@ -79,12 +79,10 @@ jobs:
           if [ -z "$n" ]; then echo "No open agent PR with head $SHA"; exit 0; fi
           if [ "$(python3 tools/approval.py check "$n")" != "approved" ]; then echo "PR #$n is not approved yet"; exit 0; fi
           echo "number=$n" >> "$GITHUB_OUTPUT"
-      # Design PRs (docs/design/) never auto-merge: the design reviewer approves; Daniel merges
-      # (or the orchestrator when Owner decisions is empty). Repo variable DESIGN_AUTOMERGE=on (default on in the template repo itself) lifts this
-      # (the design reviewer then decides Owner decisions itself; used in the template repo).
+      # Design PRs (docs/design/) merge like any PR once the design reviewer approved. DESIGN_AUTOMERGE=off holds them for a person.
       - name: Refuse design PRs
         id: design
-        if: steps.pr.outputs.number != '' && (vars.DESIGN_AUTOMERGE || (github.repository == 'Bankaifan/agent-template' && 'on' || 'off')) != 'on'
+        if: steps.pr.outputs.number != '' && (vars.DESIGN_AUTOMERGE || 'on') != 'on'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}

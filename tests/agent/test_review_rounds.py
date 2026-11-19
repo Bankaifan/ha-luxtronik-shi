@@ -59,7 +59,7 @@ def test_approved_heads_cost_no_round_even_after_rebases():
     assert pr.rounds() == [] and not any(n.startswith("round:") for n in pr.labels)
     assert review_head(pr, B, "APPROVED") == ("counted", "refunded")
     assert review_head(pr, C, "APPROVED") == ("counted", "refunded")
-    assert pr.rounds() == [] and "needs-human" not in pr.labels
+    assert pr.rounds() == [] and "parked" not in pr.labels
 
 
 def test_two_real_findings_still_stop_after_two_rounds():

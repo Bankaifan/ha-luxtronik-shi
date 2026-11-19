@@ -12,7 +12,7 @@ Section 8 of a design is a fixed format, one block per step (see docs/design/REA
 
 `run` creates one issue per step: body `Design: <path>`, `Depends on: #<n>[, #<m>]` (step numbers mapped to the issue
 numbers), then the slip (`Files:` and `Acceptance:`). The label is the prio of the source issue (the issue the design PR
-names with `Refs #N`), which also loses `agent:dev` and `needs-human`. The source issue body gets one `Depends on:` line
+names with `Refs #N`), which also loses `agent:dev` and `parked`. The source issue body gets one `Depends on:` line
 with the final steps (no other step depends on them), so the dispatcher does not start it again (#544); an existing
 `Depends on:` line is replaced. Idempotent: a step whose title already exists in an issue with the same `Design:` line is
 reused, not created again. Text is untrusted: only these lines are parsed. Needs gh (GH_TOKEN, GH_REPO) and git.
@@ -162,7 +162,7 @@ def split(design, text, source, gh=prefilter.gh):
         new = _with_depends(body, line)
         if new != body.rstrip("\n"):
             gh("issue", "edit", str(source), "--body", new)
-        gh("issue", "edit", str(source), "--remove-label", "agent:dev", "--remove-label", "needs-human")
+        gh("issue", "edit", str(source), "--remove-label", "agent:dev", "--remove-label", "parked")
     return numbers
 
 

@@ -4,10 +4,10 @@ run-name: "${{ github.event_name == 'issues' && format('dispatch: {0}', github.e
 # tools/dispatch.py starts the trusted, unblocked issues that already carry a slip (overlap check, model label, then
 # agent:dev) and, after a merged agent PR, removes agent:dev from the issues it names. No model, no PR code: the checkout
 # is the default branch. Labels are the only writes. Runs are idempotent and read live state, so a replaced pending run
-# in the group loses nothing. orchestrator.yml keeps the model work (slips, needs-human, HANDOVER.md).
+# in the group loses nothing. orchestrator.yml keeps the model work (slips, HANDOVER.md).
 on:
   issues:
-    types: [opened, edited, closed, labeled]
+    types: [opened, edited, closed]
   issue_comment:
     types: [created]
   pull_request_target:  # zizmor: ignore[dangerous-triggers] the checkout is the default branch, PR code is never checked out or run; the script reads only the PR number
@@ -24,9 +24,6 @@ jobs:
   dispatch:
     if: >-
       vars.DISPATCH == 'on' &&
-      (github.event_name != 'issues' ||
-       github.event.action != 'labeled' ||
-       contains(fromJSON('["approved","auto-ok"]'), github.event.label.name)) &&
       (github.event_name != 'issues' || github.event.action != 'edited' ||
        !contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login)) &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.merged == true) &&
@@ -67,7 +64,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          OWNER: Bankaifan
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
         run: echo "list=$(python3 tools/trusted_issues.py)" >> "$GITHUB_OUTPUT"
@@ -76,7 +73,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           TRUSTED: ${{ steps.cand.outputs.list }}
-          OWNER: Bankaifan
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
           MAX_DEV: ${{ vars.MAX_DEV || '4' }}
           MAX_PRS: ${{ vars.MAX_PRS || '5' }}

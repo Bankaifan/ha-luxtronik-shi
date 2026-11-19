@@ -55,7 +55,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          OWNER: Bankaifan
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}  # reads the security verdict comment for the head
           FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}  # "off" skips the failure watch

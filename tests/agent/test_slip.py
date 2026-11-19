@@ -20,7 +20,7 @@ def test_slip_in_body_of_author_app_issue():
     assert slip.has_slip(issue("Files: tools/a.py, tests/test_a.py"))
 
 
-def test_stranger_body_is_no_slip_even_when_approved():
+def test_stranger_body_is_no_slip_whatever_its_labels():
     i = issue("Files: tools/a.py", author=STRANGER, labels=["approved"])
     assert not slip.has_slip(i)
 

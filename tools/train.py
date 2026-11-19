@@ -1,7 +1,7 @@
 """Merge train core (docs/design/0003-merge-train.md, sections 4.3 and 5): lets approved agent PRs land one after another.
 
 Model-free. The workflow (a later PR) runs it on push to main, on a schedule and on dispatch. One run:
-1. Candidates: open same-repo agent PRs (status.is_agent_pr), not needs-human, not design PRs (only docs/design/ files),
+1. Candidates: open same-repo agent PRs (status.is_agent_pr), not parked, not design PRs (only docs/design/ files),
    with an APPROVED review of the approver app on their current head (agent_guard.has_review).
    Oldest PR number first. A CHANGES_REQUESTED or dismissed review does not count.
 2. One in flight: if a candidate is CLEAN, UNSTABLE or HAS_HOOKS, or BLOCKED with a required check running, it is about
@@ -10,9 +10,12 @@ Model-free. The workflow (a later PR) runs it on push to main, on a schedule and
 3. The oldest BEHIND candidate with auto-merge enabled is rebased (PUT pulls/N/update-branch, update_method=rebase).
 4. The oldest DIRTY candidate gets status.handle_conflict at once, unless an agent-fix run is queued or running.
    PRs no longer edit VERSION or CHANGELOG.md, so those never conflict (issue #468).
-0. Before all of that, `release_main` is the one writer of VERSION and CHANGELOG.md: changelog fragments on main
-   (changelog.d/<issue>.md) get the next versions through tools/release_fragments.py, one commit force-pushed to
-   `release/next` and released through one PR `Release <versions>` (never a push to main; nothing to release closes it).
+0. Before all of that, `release_main` is the one writer of VERSION and CHANGELOG.md: the changelog fragments on main
+   (changelog.d/<issue>.md) become ONE next version through tools/release_fragments.py, one commit force-pushed to
+   `release/next` and released through one PR `Release <version>` (never a push to main; nothing to release closes it).
+   That PR is the owner's only task: it carries a review request to OWNER, and its body is the fragments' user-facing
+   lines (safe_note: no mention, no closing keyword, no HTML comment) plus one line naming the open `parked` issues
+   and PRs (what the agents could not solve yet). A release that fails ends the run with exit 1 after the train steps.
 5. A PR waiting only for the owner (waiting_for_owner) is skipped: it never counts as in flight, so the next ready PR
    lands. When main moves it is still rebased (BEHIND, even without auto-merge) or sent to agent-fix (DIRTY), so the
    owner approves the current head; the push re-runs the agent reviews. After his approval it is a normal candidate.
@@ -32,6 +35,9 @@ from pathlib import Path
 
 import agent_guard
 import status
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "check"))
+import check_pr_form
 
 RELEASE = Path(__file__).resolve().parent / "release_fragments.py"  # always main's copy
 RELEASE_PATHS = {"VERSION", "CHANGELOG.md"}  # plus changelog.d/: the only paths of the release commit
@@ -64,8 +70,8 @@ MAX_WAITING = 5  # waiting-for-owner PRs at once; beyond that new security slips
 
 def waiting_for_owner(pr, reviews, approver, owner, required=None):
     """Agent PR with every agent review approved at its head, green CI (security-review included) and only the
-    owner's approval missing: risk:security, a review request to the owner, no needs-human, not a design PR."""
-    return (status.is_agent_pr(pr) and "risk:security" in status.names(pr) and "needs-human" not in status.names(pr)
+    owner's approval missing: risk:security, a review request to the owner, not parked, not a design PR."""
+    return (status.is_agent_pr(pr) and "risk:security" in status.names(pr) and "parked" not in status.names(pr)
             and not is_design_pr(pr) and status.ci_state(pr.get("statusCheckRollup"), required) == "green"
             and any(status.same_login(r.get("login"), owner) for r in pr.get("reviewRequests") or [])
             and approved_on_head(pr, reviews, approver))
@@ -75,7 +81,7 @@ def candidates(prs, reviews_of, approver):
     """Approved agent PRs, oldest first. reviews_of(number) is called only for PRs that pass the cheap filters."""
     out = []
     for p in prs:
-        if not status.is_agent_pr(p) or "needs-human" in status.names(p) or is_design_pr(p):
+        if not status.is_agent_pr(p) or "parked" in status.names(p) or is_design_pr(p):
             continue
         if approved_on_head(p, reviews_of(p["number"]), approver):
             out.append(p)
@@ -111,12 +117,12 @@ def git_env(token=""):
     return env
 
 
-def release_main(remote, token="", base="main", fragments=None):
+def release_main(remote, token="", base="main", notes=None):
     """The one writer of VERSION and CHANGELOG.md (issue #468, #570): folds the changelog fragments on `base` into
-    CHANGELOG.md, assigns the versions (tools/release_fragments.py, main's copy) and force-pushes one commit to
+    CHANGELOG.md, assigns the version (tools/release_fragments.py, main's copy) and force-pushes one commit to
     RELEASE_BRANCH, never to `base`. A run whose result equals the branch already there pushes nothing.
-    Returns the released versions ([] when there is nothing to release); None when it failed (git error, malformed
-    fragment, push refused). `fragments`, if a list, receives the folded fragment file names."""
+    Returns the new version ("" when there is nothing to release); None when it failed (git error, malformed
+    fragment, push refused). `notes`, if a list, receives the user-facing changelog lines."""
     env = git_env(token)
 
     def git(tmp, *args):
@@ -127,19 +133,20 @@ def release_main(remote, token="", base="main", fragments=None):
             git(tmp, "init", "-q")
             git(tmp, "fetch", "-q", remote, f"+refs/heads/{base}:refs/remotes/origin/{base}")
             git(tmp, "checkout", "-q", "--detach", f"origin/{base}")
-            names = sorted(p.name for p in Path(tmp, "changelog.d").glob("[0-9]*.md"))
-            if not names:
-                return []
+            if not list(Path(tmp, "changelog.d").glob("[0-9]*.md")):
+                return ""
+            old = Path(tmp, "VERSION").read_text(encoding="utf-8").strip()
             done = subprocess.run([sys.executable, "-I", str(RELEASE), tmp], check=False, env=env,
                                   capture_output=True, text=True)
             if done.returncode != 0:
                 return None
-            versions = [line.split(" -> ")[-1] for line in done.stdout.splitlines() if " -> " in line]
+            lines = done.stdout.splitlines()
+            version = next(line.split(" -> ")[-1] for line in lines if " -> " in line)
             git(tmp, "add", "-A")
             staged = git(tmp, "diff", "--cached", "--name-only").stdout.split()
             if not staged or not all(p in RELEASE_PATHS or p.startswith("changelog.d/") for p in staged):
                 return None  # the release commit may only touch these paths, whatever the script did
-            git(tmp, "commit", "-q", "-m", f"Release {', '.join(versions)} from changelog fragments")
+            git(tmp, "commit", "-q", "-m", f"V{old}-RELEASE: version {version}")
             tree = git(tmp, "rev-parse", "HEAD^{tree}").stdout.strip()
             main_sha = git(tmp, "rev-parse", f"origin/{base}").stdout.strip()
             have = subprocess.run(["git", "fetch", "-q", remote, f"+refs/heads/{RELEASE_BRANCH}:refs/remotes/origin/{RELEASE_BRANCH}"],
@@ -150,52 +157,68 @@ def release_main(remote, token="", base="main", fragments=None):
                         and git(tmp, "rev-parse", f"origin/{RELEASE_BRANCH}^").stdout.strip() == main_sha)
             if not same:
                 git(tmp, "push", "-q", "--force", remote, f"HEAD:refs/heads/{RELEASE_BRANCH}")
-            if fragments is not None:
-                fragments.extend(names)
-            return versions
-    except (subprocess.CalledProcessError, OSError):
+            if notes is not None:
+                notes.extend(line.removeprefix("note: ") for line in lines if line.startswith("note: "))
+            return version
+    except (subprocess.CalledProcessError, OSError, StopIteration):
         return None
 
 
-def release_pr(run, versions, fragments):
-    """One open release PR at most: open or update it for `versions`, or close it when there is nothing to release.
+# Fixed words of the release PR body per OWNER_LANG (the notes themselves are written in that language by the developers).
+WORDS = {"German": ("Nur interne Änderungen.", "Noch ungelöst"), "English": ("Internal changes only.", "Not solved yet")}
+
+
+def safe_note(line):
+    """A changelog line as plain text for the PR the owner merges: it mentions nobody, closes no issue and hides
+    nothing (fragments are written by developer models, also for intake work)."""
+    line = line.replace("@", "")
+    while check_pr_form.CLOSING.search(line):
+        line = check_pr_form.CLOSING.sub(lambda m: m.group(0).split()[0], line)  # the keyword stays, its target goes
+    return line.replace("<!--", "&lt;!--")
+
+
+def release_pr(run, version, notes, owner, lang="German"):
+    """One open release PR at most: open or update it for `version`, or close it when there is nothing to release.
     Returns a short report line."""
     open_prs = jlist(run, "pr", "list", "--state", "open", "--head", RELEASE_BRANCH, "--json", "number,headRefName")
     number = next((p["number"] for p in open_prs if p.get("headRefName") == RELEASE_BRANCH), None)
-    if not versions:
+    if not version:
         if number is None:
             return ""
-        run("pr", "close", str(number), "--comment", "Nothing left to release.")
+        run("pr", "close", str(number))
         return f"closed release PR #{number}: nothing to release"
-    title = f"Release {', '.join(versions)}"
-    if len(title) > 100:  # check_pr_form caps titles at 100 characters
-        title = f"Release {versions[0]} to {versions[-1]} ({len(versions)} versions)"
-    body = f"Versions: {', '.join(versions)}\nFragments: {', '.join(fragments) or 'none'}"
+    internal, unsolved = WORDS.get(lang, WORDS["English"])
+    parked = sorted({i["number"] for kind in ("issue", "pr")
+                     for i in jlist(run, kind, "list", "--state", "open", "--label", status.PARKED, "--json", "number")})
+    body = "\n".join(map(safe_note, notes)) or internal
+    if parked:
+        body += f"\n\n{unsolved}: " + ", ".join(f"#{n}" for n in parked)
+    title = f"Release {version}"
     if number is None:
-        run("pr", "create", "--base", "main", "--head", RELEASE_BRANCH, "--title", title, "--body", body)
+        run("pr", "create", "--base", "main", "--head", RELEASE_BRANCH, "--title", title, "--body", body, "--reviewer", owner)
         return f"opened release PR {title}"
-    run("pr", "edit", str(number), "--title", title, "--body", body)
+    run("pr", "edit", str(number), "--title", title, "--body", body, "--add-reviewer", owner)
     return f"updated release PR #{number}: {title}"
 
 
 def run_train(env, run=status.gh, releaser=None):
     repo = env["GH_REPO"]
-    folded = []
+    notes = []
+    owner = env.get("OWNER", status.OWNER_DEFAULT)
     if releaser is None:
         def releaser():
-            return release_main(f"https://github.com/{repo}.git", env.get("GH_TOKEN", ""), fragments=folded)
+            return release_main(f"https://github.com/{repo}.git", env.get("GH_TOKEN", ""), notes=notes)
     released = releaser()
     if released is None:
         print("release: failed (see the fragment and the branch push); the next run retries")
     else:
         try:
-            line = release_pr(run, released, folded)
+            line = release_pr(run, released, notes, owner, env.get("OWNER_LANG") or "German")
         except subprocess.CalledProcessError as e:
             print(f"release: PR step failed, a gh call exited {e.returncode}; the next run retries")
         else:
             if line:
                 print(line)
-    owner = env.get("OWNER", status.OWNER_DEFAULT)
     approver = env.get("APPROVER_BOT", "")
     required = status.required_contexts()  # None: every check counts
     try:
@@ -213,7 +236,7 @@ def run_train(env, run=status.gh, releaser=None):
         busy, rebase, conflict = plan(cands, fix_busy, waiting, required)
         if busy:
             print(f"waiting: PR #{busy['number']} is about to merge; the train runs again after its push")
-            return 0
+            return int(released is None)
         if rebase:
             run("api", "-X", "PUT", f"repos/{repo}/pulls/{rebase['number']}/update-branch", "-f", "update_method=rebase")
             print(f"rebased PR #{rebase['number']} onto main")
@@ -224,7 +247,7 @@ def run_train(env, run=status.gh, releaser=None):
     except subprocess.CalledProcessError as e:
         print(f"train stopped: a gh call exited {e.returncode}; this run changed no labels")
         return 1
-    return 0
+    return int(released is None)  # a release that failed is a red run, but only after the train did its work
 
 
 def main(argv):

@@ -8,12 +8,12 @@ mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mod)
 
 
-def item(number, labels=(), approved=False, auto_ok=False):
-    return {"number": number, "labels": list(labels), "approved": approved, "auto_ok": auto_ok}
+def item(number, labels=()):
+    return {"number": number, "labels": list(labels)}
 
 
-def test_startable_skips_started_and_unapproved_ideas():
-    trusted = [item(1), item(2, ["agent:dev"]), item(3, ["idea"]), item(4, ["idea"], approved=True)]
+def test_startable_skips_started_issues_and_ideas():
+    trusted = [item(1), item(2, ["agent:dev"]), item(3, ["idea"]), item(4)]
     assert mod.startable(trusted, 4) == [1, 4]
 
 
@@ -36,10 +36,9 @@ def test_handover_stale():
 
 
 def test_orchestrator_work():
-    assert not mod.orchestrator_work([], 0, False)
-    assert mod.orchestrator_work([1], 0, False)
-    assert mod.orchestrator_work([], 1, False)
-    assert mod.orchestrator_work([], 0, True)
+    assert not mod.orchestrator_work([], False)
+    assert mod.orchestrator_work([1], False)
+    assert mod.orchestrator_work([], True)
 
 
 def test_scout_work():
@@ -154,7 +153,7 @@ def run_main(monkeypatch, tmp_path, dev, bodies, trusted, merged=(), waiting=(),
 
 
 def test_main_parked_and_done_issues_free_slots_for_prio3(monkeypatch, tmp_path):
-    dev = {10: ["agent:dev", "needs-human"], 11: ["agent:dev"], 12: ["agent:dev"]}
+    dev = {10: ["agent:dev", "parked"], 11: ["agent:dev"], 12: ["agent:dev"]}
     trusted = [dict(item(20, ["prio:3"]), prio=3), dict(item(21, ["prio:3"]), prio=3)]
     bodies = dict.fromkeys((10, 11, 12, 20, 21), "")
     out = run_main(monkeypatch, tmp_path, dev, bodies, trusted, merged={11})
@@ -182,8 +181,8 @@ def test_main_holds_back_an_issue_until_its_dependency_closes(monkeypatch, tmp_p
 
 
 def facts(**over):
-    base = {"startable": False, "needs_human": False, "agent_dev": False, "linked_open_pr": False, "trusted": False,
-            "receiver_marker": False, "agent_pr": False, "design_pr": False, "closing": set(),
+    base = {"startable": False, "agent_dev": False, "linked_open_pr": False, "trusted": False,
+            "agent_pr": False, "design_pr": False, "closing": set(),
             "closing_agent_dev": False, "merged": False, "free_prs": 2, "review_state": "", "sender_is_owner": False,
             "reviewer_ok": False}
     return dict(base, **over)
@@ -201,8 +200,7 @@ def test_event_without_row_keeps_count_rule():
 def test_event_issue_opened_edited_labeled():
     for act in ("opened", "edited", "labeled"):
         assert reason("issues", act, startable=True) == (True, "startable-issue")
-        assert reason("issues", act, needs_human=True, sender_is_owner=True) == (True, "owner-reply")
-        assert reason("issues", act, needs_human=True) == (False, "no-match")
+        assert reason("issues", act, sender_is_owner=True) == (False, "no-match")
 
 
 def test_event_issue_closed():
@@ -212,11 +210,9 @@ def test_event_issue_closed():
 
 
 def test_event_comment_created():
-    assert reason("issue_comment", "created", sender_is_owner=True, needs_human=True) == (True, "owner-answer")
     assert reason("issue_comment", "created", sender_is_owner=True, trusted=True) == (True, "owner-comment-trusted")
-    assert reason("issue_comment", "created", sender_is_owner=True, needs_human=True,
-                  receiver_marker=True) == (False, "no-match")
-    assert reason("issue_comment", "created", needs_human=True, trusted=True) == (False, "no-match")
+    assert reason("issue_comment", "created", sender_is_owner=True) == (False, "no-match")
+    assert reason("issue_comment", "created", trusted=True) == (False, "no-match")
 
 
 def test_event_pr_opened():
@@ -253,12 +249,11 @@ def test_only_agent_prs_mark_an_issue_done(monkeypatch):
     assert mod.stuck_slots([{"number": 7, "labels": []}]) == {7}
 
 
-def test_dispatch_model_work_is_only_slipless_issues_needs_human_or_handover():
-    assert mod.orchestrator_work([1, 2], 0, False)  # dispatcher off: any candidate is model work
-    assert not mod.orchestrator_work([1, 2], 0, False, needs_slip=[])
-    assert mod.orchestrator_work([1, 2], 0, False, needs_slip=[2])
-    assert mod.orchestrator_work([1], 1, False, needs_slip=[])
-    assert mod.orchestrator_work([1], 0, True, needs_slip=[])
+def test_dispatch_model_work_is_only_slipless_issues_or_handover():
+    assert mod.orchestrator_work([1, 2], False)  # dispatcher off: any candidate is model work
+    assert not mod.orchestrator_work([1, 2], False, needs_slip=[])
+    assert mod.orchestrator_work([1, 2], False, needs_slip=[2])
+    assert mod.orchestrator_work([1], True, needs_slip=[])
 
 
 def test_dispatch_merged_pr_event_does_not_wake_the_model_except_designs():

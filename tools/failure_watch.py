@@ -1,7 +1,7 @@
 """Failure watch (design 0008, sections 4.1-4.5): one signed guard issue per failing workflow signature.
 
 collect failed runs -> signature (workflow / job / step names) -> dedup by title -> flood cap -> priority ->
-auto-close when green again (also stale `Overdue scheduled run` issues) -> reopen with a counter -> needs-human at
+auto-close when green again (also stale `Overdue scheduled run` issues) -> reopen with a counter -> parked at
 Reopened: 3. The issue is the state: counters live in its signed body. Bodies are fixed script text, never log text.
 Not called by anything yet (wiring is a later PR). Needs the gh CLI (GH_TOKEN, GH_REPO) and GUARD_KEY.
 """
@@ -10,11 +10,10 @@ import json
 import re
 from urllib.parse import quote
 
-import decision
 import ghcall
 import guard_mark
 import liveness
-from agent_guard import add_labels
+from agent_guard import add_labels, park
 
 TITLE_PREFIX = "Failing workflow: "
 MAX_NEW = 5
@@ -230,17 +229,11 @@ def _fix_pr(number, run):
 
 
 def escalate(issue, run):
-    """needs-human once, with the German yes/no note of AGENTS.md (last comment, hidden decision marker)."""
-    if any(lb["name"] == "needs-human" for lb in issue.get("labels") or []):
+    """Park the issue once (label and one comment); status.py un-parks it after the cool-down."""
+    if any(lb["name"] == "parked" for lb in issue.get("labels") or []):
         return
-    add_labels("issue", issue["number"], ["needs-human"], run)
-    issue["labels"] = [*(issue.get("labels") or []), {"name": "needs-human"}]
-    note = ("Dieser Fehler im Workflow ist nach zwei Reparaturen zum dritten Mal wieder aufgetreten. "
-            "Schlimmster Fall: der Workflow bleibt kaputt und blockiert Aenderungen. "
-            "Frage: Soll der Agent es noch einmal versuchen? "
-            "Ja = Aufgabe wird neu gestartet, Nein = Issue wird geschlossen.\n"
-            + decision.build(yes="restart-issue", no="close-issue"))
-    liveness.post_comment("issue", issue["number"], note, run)
+    park("issue", issue["number"], "the workflow failed again after two repairs (Reopened: 3)", run)
+    issue["labels"] = [*(issue.get("labels") or []), {"name": "parked"}]
 
 
 # --- the three outcomes of a failing run -----------------------------------------------------------

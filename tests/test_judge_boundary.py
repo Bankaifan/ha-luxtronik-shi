@@ -1,6 +1,6 @@
 """Judging model steps stay read-only (design 0017, step 4).
 
-A reviewer, security reviewer, scout, unblocker or answer-receiver model step must not gain Edit, Write, a write-scope
+A reviewer, security reviewer, scout, unblocker or intake model step must not gain Edit, Write, a write-scope
 token beyond the ones named here, or a Bash form outside its pinned list. Their read confinement is pinned in
 tests/agent/test_untrusted_boundary.py (design 0004).
 """
@@ -28,7 +28,7 @@ ALLOWED = {
         "Bash(gh api repos/${{ github.repository }}/code-scanning/alerts?state=open)",
     ],
     "unblocker.yml": READ + [VERDICT_EDIT],
-    "answer-receiver.yml": READ + [VERDICT_EDIT],
+    "intake.yml": READ + [VERDICT_EDIT],
 }
 # Write scopes a judging model step may reach, by name (design 0017, section 6): `pull-requests` for `gh pr review`,
 # `issues` for `idea_route.py create`. Any other write scope fails the test.
@@ -37,7 +37,7 @@ NAMED_WRITE = {
     "agent-security-review.yml": {"pull-requests"},
     "scout.yml": {"issues"},
     "unblocker.yml": set(),
-    "answer-receiver.yml": set(),
+    "intake.yml": set(),
 }
 JUDGING = sorted(ALLOWED)
 

@@ -14,15 +14,16 @@ Sections, in this order:
 7. Rollback
 8. Split into PR-sized implementation issues, in the fixed format below. Cut the split so that as many steps as
    possible are independent with disjoint files: independent steps run in parallel.
-9. **Owner decisions**: only what Daniel must decide (user-facing breaking changes, publishing outside the repo
-   such as a first PyPI release, costs). Write `none` if there is nothing.
+9. **Owner decisions**: only choices with a user-facing effect (breaking changes, publishing outside the repo
+   such as a first PyPI release, costs). The design reviewer decides each one and the design records the choice.
+   Write `none` if there is nothing.
 
-Flow: developer writes it, the design reviewer approves it (see `.agents/roles/design-reviewer.md`). With `none` it
-merges without Daniel. Otherwise the PR gets `needs-human`, a review request to Daniel and a German summary.
+Flow: developer writes it, the design reviewer approves it and decides section 9 (see
+`.agents/roles/design-reviewer.md`). Nothing is parked with the owner.
 After the merge `tools/design_split.py` (workflow `design-split`, no model) creates the implementation issues, each with a
 line `Design: docs/design/NNNN-<slug>.md` and, for a step that depends on earlier ones, a line `Depends on: #<n>[, #<m>]`
 (`tools/deps.py`). The label is the prio of the issue the design PR names with `Refs #N`; that issue loses `agent:dev` and
-`needs-human`. A second run creates nothing (title and `Design:` line are searched).
+`parked`. A second run creates nothing (title and `Design:` line are searched).
 The template's own studies are listed in `TEMPLATE_DESIGNS` of `tools/design_origin.py`; a downstream project (one with
 `.agents/template.json`) splits none of them, and `make check` requires every design of the template to be listed.
 
@@ -38,6 +39,5 @@ Depends on: 1
 ```
 
 `Files:` and `Acceptance:` are required, each on one line. `Depends on:` is optional: earlier step numbers, comma
-separated; leave it out for an independent step. Step titles are unique. The issue title of a step is
-`<ID>-<n>: <step title>` (the ID of the design's source issue, the one the design PR names with `Refs #N`; `n` is the step
-number), see `.agents/roles/orchestrator.md`.
+separated; leave it out for an independent step. Step titles are unique. A step keeps the NAME of its design: its issue
+title is `V<major>-<NAME>: <step title>`, see `.agents/roles/orchestrator.md`.

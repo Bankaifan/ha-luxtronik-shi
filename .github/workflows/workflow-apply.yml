@@ -23,6 +23,7 @@ jobs:
     env:
       AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
       GH_REPO: ${{ github.repository }}
+      OWNER: ${{ vars.OWNER || github.repository_owner }}
     steps:
       - name: Fail if a required repo variable is unset
         env:
@@ -67,8 +68,7 @@ jobs:
             out=$(python3 tools/workflow_patch.py apply "$branch" "$sha") || rc=$?
             echo "#$num: $out"
             if [ "$rc" = 3 ]; then
-              gh pr comment "$num" --body "workflow-apply refused the workflow patch (see the run log): Daniel applies it by hand. Run: $RUN_URL"
-              gh pr edit "$num" --add-label needs-human
+              python3 tools/agent_guard.py park pr "$num" "workflow-apply refused the workflow patch (see the run log). Run: $RUN_URL"
             elif [ "$rc" != 0 ]; then
               exit "$rc"
             fi

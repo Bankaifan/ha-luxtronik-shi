@@ -23,8 +23,8 @@ def _model_step() -> str:
 
 
 def test_trigger_and_gate():
-    assert re.search(r"github\.event\.label\.name == 'needs-human'", TEXT)
-    assert not re.search(r"label\.name == '(?!needs-human)", TEXT)
+    assert re.search(r"github\.event\.label\.name == 'parked'", TEXT)
+    assert not re.search(r"label\.name == '(?!parked)", TEXT)
     assert "(vars.UNBLOCKER || 'on') != 'off'" in TEXT
     assert "concurrency:" in TEXT and "cancel-in-progress: false" in TEXT
 
@@ -93,10 +93,10 @@ def test_clean_step_removes_everything_but_the_verdict():
 
 
 @pytest.mark.parametrize("verdict,rc", [
-    ({"class": 3, "reason": "x", "note": "Hallo Daniel, soll das Release raus? Frage: ja oder nein?"}, 0),
+    ({"class": 3, "reason": "x"}, 0),
     ({"class": 7}, 1),
     ({"class": 1, "comment": "token ghp_" + "a" * 36}, 1),
-    ({"class": 3, "note": "Hallo Daniel, Frage: ghp_" + "a" * 36}, 1),
+    ({"class": 3, "reason": "ghp_" + "a" * 36}, 1),
     ("not a dict", 1),
 ])
 def test_validate_subcommand(tmp_path, verdict, rc):
@@ -119,12 +119,12 @@ def test_validate_subcommand_missing_or_broken_file(tmp_path):
 
 def test_setup_creates_label_and_reports_variable():
     setup = (ROOT / ".github" / "workflows" / "setup.yml").read_text(encoding="utf-8")
-    assert " unblock:1 " in setup
+    assert " parked " in setup and "unblock:1" not in setup
     assert "UNBLOCKER: ${{ vars.UNBLOCKER }}" in setup
     assert 'row UNBLOCKER on "$UNBLOCKER"' in setup
 
 
-def test_orchestrator_step2_skips_unblocker_items():
+def test_orchestrator_step2_leaves_parked_items_alone():
     orch = (ROOT / ".github" / "workflows" / "orchestrator.yml").read_text(encoding="utf-8")
-    step2 = orch.split("2. For each other PR labeled needs-human", 1)[1].split("3. If HANDOVER", 1)[0]
-    assert "unblock:1" in step2 and "<!-- unblocker -->" in step2
+    step2 = orch.split("2. Leave every item labeled parked alone", 1)[1].split("3. HANDOVER", 1)[0]
+    assert "the unblocker and the status run own it" in step2 and "Never ask Daniel" in step2

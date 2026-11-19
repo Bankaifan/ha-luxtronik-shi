@@ -8,7 +8,8 @@ Also fails a commit message or body with a tool footer (patterns: tools/attribut
 strip-attribution.yml first (tools/strip_attribution.py), so the body rule only sees what the strip left or missed.
 An optional `## Friction` section (see tools/friction.py) is accepted, never required.
 Also fails a PR whose linked issue (agent branch, `Closes #N`, `Refs #N`) has a task ID in its title (tools/task_ids.py)
-unless the PR title starts with the same `<ID>: `. Unreadable issues are not checked.
+unless the PR title starts with the same `<ID>: `. Unreadable issues are not checked. A PR titled `V<major>-<NAME>: `
+must have only commits `V<version>-<NAME>: <change>` (tools/task_ids.py).
 Skipped for local runs and pushes to main. Whether the title is really English cannot be verified.
 """
 import json
@@ -44,7 +45,8 @@ def gh_pr(ref):
         return None
     files = [f.get("path", "") for f in pr.get("files") or []]
     commits = "\n".join(f"{c.get('messageHeadline') or ''}\n{c.get('messageBody') or ''}" for c in pr.get("commits") or [])
-    return pr.get("title") or "", pr.get("body") or "", pr.get("headRefName") or "", files, commits
+    subjects = [c.get("messageHeadline") or "" for c in pr.get("commits") or []]
+    return pr.get("title") or "", pr.get("body") or "", pr.get("headRefName") or "", files, commits, subjects
 
 
 def form_errors(body, head_ref, files, commits=""):
@@ -99,17 +101,17 @@ def main() -> int:
             print(f"check_pr_form: cannot read file: {e}", file=sys.stderr)
             return 2
     event = os.environ.get("GITHUB_EVENT_NAME", "pull_request")
-    head_ref, files, commits = "", [], ""
+    head_ref, files, commits, subjects = "", [], "", []
     if event == "workflow_dispatch":
         pr = gh_pr(os.environ.get("GITHUB_REF_NAME", ""))
-        title, body, head_ref, files, commits = pr if pr else (None, "", "", [], "")
+        title, body, head_ref, files, commits, subjects = pr if pr else (None, "", "", [], "", [])
     elif event == "pull_request":
         title, body = os.environ.get("PR_TITLE"), os.environ.get("PR_BODY") or ""
         head_ref = os.environ.get("PR_HEAD_REF", "")
         number = os.environ.get("PR_NUMBER")
         if title is not None and number:
             pr = gh_pr(number)
-            files, commits = (pr[3], pr[4]) if pr else ([], "")
+            files, commits, subjects = pr[3:] if pr else ([], "", [])
             if pr:
                 body = pr[1]  # live body: strip-attribution.yml may have cleaned it after the event was queued
     else:
@@ -129,6 +131,7 @@ def main() -> int:
     errors += form_errors(body, head_ref, files, commits)
     issue_titles = [t for t in map(gh_issue_title, linked_issues(body, head_ref)) if t is not None]
     errors += id_errors(title, issue_titles)
+    errors += task_ids.commit_errors(title, subjects)
     for e in errors:
         print(f"check_pr_form: {e}")
     if not errors:

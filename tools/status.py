@@ -4,18 +4,18 @@
    their age, last orchestrator run, open ideas.
 2. Orphans: an agent:dev issue with no running job and no open PR for more than 30 min, or an agent PR whose head
    has no validate run for more than 10 min. First time: re-trigger and label `status:retriggered`;
-   second time: needs-human, review request for OWNER, comment.
+   second time: parked (label and one comment).
 3. Held runs: runs in `action_required` are approved only if the head belongs to an open same-repo PR of the author app.
 4. Merge conflicts: an agent PR with mergeStateStatus DIRTY gets one fix run per head (marker conflict:<sha7>, then
-   agent-fix is dispatched with the PR number). A conflict is no review round. A needs-human PR that is green and
-   approved at its head and touches no CODEOWNERS path loses the label (owner decision 2026-11-12).
-5. Exhausted rounds: an open agent PR with `review:3`, not approved, no needs-human, no agent job running and an
+   agent-fix is dispatched with the PR number). A conflict is no review round. A parked PR that is green and
+   approved at its head and touches no CODEOWNERS path loses the label.
+5. Exhausted rounds: an open agent PR with `review:3`, not approved, not parked, no agent job running and an
    idle head for more than 30 min was never handed over (the limit step failed): restart.py limit hands it over
-   (issue restart once, else needs-human + review request). A failure is escalated with needs-human.
+   (issue restart once, else parked). A failure parks the PR.
 6. Red main: an own agent PR (one commit, author OWNER, behind main) whose last validate failed while main was red
    is rebased onto main via the update-branch API once main is green again, so CI runs again. Never merges.
 Read-only except: the status issue, re-triggers, run approvals, the fix dispatch and these labels:
-agent:dev (re-add), status:retriggered, review:N, needs-human, restart:1 (via restart.py), stalled:1 (via stalled_dev.py). Needs the gh CLI (GH_TOKEN, GH_REPO).
+agent:dev (re-add), status:retriggered, review:N, parked, restart:1 (via restart.py), stalled:1 (via stalled_dev.py). Needs the gh CLI (GH_TOKEN, GH_REPO).
 
 CLI: status.py gate   write run=true|false to $GITHUB_OUTPUT (schedule ticks honour STATUS_INTERVAL)
      status.py        do the run
@@ -24,7 +24,10 @@ CLI: status.py gate   write run=true|false to $GITHUB_OUTPUT (schedule ticks hon
 8. Design parents (tools/design_parents.py, issue #335): an open design parent whose split issues are all closed as
    completed by a merged PR is closed (prio:* and agent:dev removed, one comment). Nothing else is touched.
 9. Stalled agent:dev issues (tools/stalled_dev.py, issue #366): no open PR closes it, no agent-dev run covers it, label
-   older than 60 min: agent:dev set again once (stalled:1); a second stall goes to needs-human, OWNER as assignee.
+   older than 60 min: agent:dev set again once (stalled:1); a second stall is parked.
+10. Un-park: an open issue or agent PR whose `parked` label is older than its cool-down (24 h, doubled per park
+   comment, at most 7 days) gets a fresh start: `parked` and every counter label removed; an issue gets agent:dev
+   again, an agent PR is closed and its issue restarted from current main. Nobody is asked, ever.
 Environment: OWNER (default Bankaifan), AUTHOR_BOT, FAILURE_WATCH (off = skip the failure watch), STATUS_INTERVAL (minutes, default 30 public / 60 private repos;
 rounded up to a multiple of 30), EVENT, PRIVATE ("true" for a private repo).
 Prints numbers and titles, never tokens.
@@ -43,16 +46,25 @@ import failure_watch
 import flow
 import ghcall
 import liveness
-import owner_hold
+import restart
 import risk
 import ruleset
 import stalled_dev
-from agent_guard import add_labels, same_login, tail_text
+from agent_guard import (
+    PARK_MARK,
+    STATUS_TITLE,
+    add_labels,
+    park,
+    same_login,
+    status_issue,
+    tail_text,
+)
 from approval import effective_approval, security_verdict
 from restart import close_superseded, handle_limit, superseded
 
-TITLE = "Agent status"
+TITLE = STATUS_TITLE
 OWNER_DEFAULT = "Bankaifan"
+PARKED = "parked"  # set aside after failed approaches; retried later with fresh context, never handed to the owner
 ISSUE_ORPHAN_MIN = 30
 PR_ORPHAN_MIN = 10
 LIMIT_IDLE_MIN = 30
@@ -184,8 +196,8 @@ def non_required_reds(rollup, required):
 
 
 def waits_for(pr, owner, required=None):
-    if "needs-human" in names(pr):
-        return "needs-human"
+    if PARKED in names(pr):
+        return PARKED
     if any(same_login(r.get("login"), owner) for r in pr.get("reviewRequests", [])):
         return "waiting for Daniel"
     if pr.get("reviewDecision") == "REVIEW_REQUIRED" and ci_state(pr.get("statusCheckRollup"), required) == "green":
@@ -218,7 +230,7 @@ def orphan_issues(issues, prs, runs, labeled_at, now):
     """agent:dev issues without a running job and without an open agent/N-* PR for more than 30 min."""
     out = []
     for i in issues:
-        if "needs-human" in names(i) or run_for_issue(runs, i):
+        if PARKED in names(i) or run_for_issue(runs, i):
             continue
         if any(p.get("headRefName", "").startswith(f"agent/{i['number']}-") for p in prs):
             continue
@@ -236,7 +248,7 @@ def orphan_prs(prs, validate_runs, now):
     """Agent PRs (no conflict: pull_request runs do not start then) whose head has no validate run after 10 min."""
     out = []
     for p in prs:
-        if not is_agent_pr(p) or "needs-human" in names(p) or p.get("mergeStateStatus") == "DIRTY":
+        if not is_agent_pr(p) or PARKED in names(p) or p.get("mergeStateStatus") == "DIRTY":
             continue
         if minutes_since(head_date(p), now) > PR_ORPHAN_MIN and validate_runs(p["headRefOid"]) == 0:
             out.append(p)
@@ -261,22 +273,22 @@ def fix_round(labels):
     return ("review:2" if "review:1" in labels else "review:1"), False
 
 
-def limit_prs(prs, runs, now, approver="", is_held=None):
+def limit_prs(prs, runs, now, approver=""):
     """Agent PRs at review:3 that nobody took over: open, not effectively approved (a security `changes` verdict for
-    the head counts as not approved), no needs-human, no agent job, idle head, no OWNER label removal (`is_held`)."""
+    the head counts as not approved), not parked, no agent job, idle head."""
     if any(r["workflowName"] in ("agent-fix", "agent-review") for r in runs):
         return []
-    return [p for p in prs if is_agent_pr(p) and "review:3" in names(p) and "needs-human" not in names(p)
+    return [p for p in prs if is_agent_pr(p) and "review:3" in names(p) and PARKED not in names(p)
             and not effective_approval(p.get("reviewDecision"), names(p), p.get("comments"), p.get("headRefOid"), approver)
-            and minutes_since(head_date(p), now) > LIMIT_IDLE_MIN and not (is_held and is_held(p))]
+            and minutes_since(head_date(p), now) > LIMIT_IDLE_MIN]
 
 
-def handle_stuck_limit(pr, owner, run=gh):
-    """Hand the PR over like agent-fix does at the limit; if that fails too, needs-human (never silent)."""
+def handle_stuck_limit(pr, run=gh):
+    """Hand the PR over like agent-fix does at the limit; if that fails too, park it (never silent)."""
     try:
-        return f"handed over ({handle_limit(str(pr['number']), owner, run)})"
+        return f"handed over ({handle_limit(str(pr['number']), run)})"
     except (subprocess.CalledProcessError, KeyError, ValueError, OSError):
-        escalate("pr", pr["number"], "the PR is at review:3 and the hand-over failed.", owner, run)
+        escalate("pr", pr["number"], "the PR is at review:3 and the hand-over failed.", run)
         return "escalated"
 
 
@@ -286,46 +298,18 @@ def conflict_mark(pr):
 
 def conflict_prs(prs):
     """DIRTY agent PRs whose head has not had its conflict fix yet (marker conflict:<sha7>)."""
-    return [p for p in prs if is_agent_pr(p) and p.get("mergeStateStatus") == "DIRTY" and "needs-human" not in names(p)
+    return [p for p in prs if is_agent_pr(p) and p.get("mergeStateStatus") == "DIRTY" and PARKED not in names(p)
             and conflict_mark(p) not in names(p)]
 
 
-AUTO_PARK = ("Review limit reached", "no fix was produced")  # comments of the round-limit and silent-fix paths
-
-
-def parked_by_script(comments, approver):
-    """True if needs-human came from the round limit or a silent fix run: the newest approver comment that is no
-    security verdict or owner-hold note is one of those, and nobody else (the owner, a human) commented after it."""
-    last = None
-    for i, c in enumerate(comments or []):
-        body = c.get("body") or ""
-        if not same_login((c.get("author") or {}).get("login"), approver):
-            if last is not None:
-                last = None  # a human spoke after the script: the hold may be theirs
-            continue
-        if body.startswith(("security-review:", "Daniel removed")):
-            continue
-        last = i if any(m in body for m in AUTO_PARK) else None
-    return last is not None
-
-
-def parked_but_settled(prs, approver, required, codeowners, owner, files_of, set_by_bot=lambda p: True):
-    """Agent PRs with needs-human that the round limit or a silent fix run set, green and approved at their head (a
-    risk:security PR also needs the security `approve`), touching no CODEOWNERS path of OWNER: the label is stale.
-    A label set by a human, the guard or another path, or commented on by a human afterwards, stays. `set_by_bot(p)`
-    says whether a bot applied the newest needs-human label (a human re-label without a comment must stay)."""
+def parked_but_settled(prs, approver, required, codeowners, owner, files_of):
+    """Parked agent PRs that are green and approved at their head (a risk:security PR also needs the security
+    `approve`) and touch no CODEOWNERS path of OWNER: the label is stale."""
     out = []
     for p in prs:
-        if not is_agent_pr(p) or "needs-human" not in names(p) or ci_state(p.get("statusCheckRollup"), required) != "green":
+        if not is_agent_pr(p) or PARKED not in names(p) or ci_state(p.get("statusCheckRollup"), required) != "green":
             continue
         sha, comments = p.get("headRefOid"), p.get("comments")
-        if not parked_by_script(comments, approver):
-            continue
-        try:
-            if not set_by_bot(p):
-                continue
-        except (ValueError, KeyError, TypeError, subprocess.CalledProcessError, OSError):  # unknown: keep the label
-            continue
         if not effective_approval(p.get("reviewDecision"), names(p), comments, sha, approver):
             continue
         if "risk:security" in names(p) and security_verdict(comments, sha, approver) != "approve":
@@ -353,15 +337,15 @@ def main_is_green(main_runs):
 
 
 def rebase_candidates(prs, main_runs, pr_runs, owner):
-    """Own agent PRs, one commit by owner, not conflicting, whose newest validate failed while main was red."""
+    """Own agent PRs, every commit by owner, not conflicting, whose newest validate failed while main was red."""
     if not main_is_green(main_runs):
         return []
     out = []
     for p in prs:
         commits = p.get("commits") or []
-        if not is_agent_pr(p) or "needs-human" in names(p) or p.get("mergeStateStatus") not in ("BEHIND", "BLOCKED"):
+        if not is_agent_pr(p) or PARKED in names(p) or p.get("mergeStateStatus") not in ("BEHIND", "BLOCKED"):
             continue
-        if len(commits) != 1 or not all(same_login(a.get("login"), owner) for a in commits[0].get("authors", [])):
+        if not commits or not all(same_login(a.get("login"), owner) for c in commits for a in c.get("authors", [])):
             continue
         runs = [r for r in pr_runs(p["headRefOid"]) if r.get("conclusion")]
         if runs and runs[0]["conclusion"] == "failure" and main_was_red(main_runs, runs[0]["createdAt"]):
@@ -371,22 +355,15 @@ def rebase_candidates(prs, main_runs, pr_runs, owner):
 
 # --- actions ----------------------------------------------------------------------------------
 
-def escalate(kind, number, why, owner, run=gh):
-    thing = "pr" if kind == "pr" else "issue"
-    safe_labels(thing, number, ["needs-human"], run)
-    liveness.post_comment(thing, number, f"Status run: {why} Labelled needs-human; Daniel is asked to look at it.", run)
-    if kind == "pr":
-        author = safe(run, "pr", "view", str(number), "--json", "author")
-        if author and not same_login(json.loads(author)["author"]["login"], owner):  # nobody reviews their own PR
-            safe(run, "pr", "edit", str(number), "--add-reviewer", owner)
-    else:
-        safe(run, "issue", "edit", str(number), "--add-assignee", owner)
+def escalate(kind, number, why, run=gh):
+    """Park the item (label and one comment). Nobody is asked: un_park gives it a fresh start after the cool-down."""
+    safe(park, "pr" if kind == "pr" else "issue", number, f"status run: {why}", run)
 
 
-def handle_orphan(kind, item, owner, run=gh):
+def handle_orphan(kind, item, run=gh):
     thing = "pr" if kind == "pr" else "issue"
     if RETRIGGER in names(item):
-        escalate(kind, item["number"], "re-triggered once and still stuck.", owner, run)
+        escalate(kind, item["number"], "re-triggered once and still stuck.", run)
         return "escalated"
     if kind == "pr":
         safe(run, "workflow", "run", "validate.yml", "--ref", item["headRefName"])
@@ -404,7 +381,7 @@ def clear_retrigger(kind, item, run=gh):
 
 def handle_conflict(pr, owner, run=gh):
     """A conflict with main is no finding: no review round. One fix run per head (marker conflict:<sha7>); a run that
-    pushes nothing is escalated by agent-fix itself."""
+    pushes nothing is parked by agent-fix itself."""
     safe_labels("pr", pr["number"], [conflict_mark(pr)], run)
     safe(run, "workflow", "run", "agent-fix.yml", "-f", f"pr={pr['number']}")
     return "fix dispatched"
@@ -414,7 +391,7 @@ FILES_CAP = 3000  # GitHub's limit for pulls/N/files
 
 
 def release_settled(prs, approver, owner, run=gh):
-    """Remove needs-human from PRs that are green and approved at their head and touch no CODEOWNERS path."""
+    """Remove `parked` from PRs that are green and approved at their head and touch no CODEOWNERS path."""
     def files_of(p):
         """Paginated `pulls/N/files` with old names of renames (risk.pr_paths). GitHub lists at most 3000 files:
         a list that may be cut off raises, and the caller keeps the label."""
@@ -423,18 +400,89 @@ def release_settled(prs, approver, owner, run=gh):
             raise ValueError("file list may be incomplete")
         return risk.pr_paths(pages)
 
-    def set_by_bot(p):
-        """True if the newest `labeled` event of needs-human came from a bot (the script paths), not a person."""
-        pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{os.environ['GH_REPO']}/issues/{p['number']}/events"))
-        events = [e for page in pages for e in page
-                  if e.get("event") == "labeled" and (e.get("label") or {}).get("name") == "needs-human"]
-        return bool(events) and events[-1]["actor"]["type"] == "Bot"
-
     out = []
-    for p in parked_but_settled(prs, approver, required_contexts(), risk.read_text(".github/CODEOWNERS"), owner, files_of,
-                                set_by_bot):
-        if safe(run, "pr", "edit", str(p["number"]), "--remove-label", "needs-human") is not None:
-            out.append(f"needs-human removed from PR #{p['number']}: green and approved at its head")
+    for p in parked_but_settled(prs, approver, required_contexts(), risk.read_text(".github/CODEOWNERS"), owner, files_of):
+        if safe(run, "pr", "edit", str(p["number"]), "--remove-label", PARKED) is not None:
+            p["labels"] = [lab for lab in p["labels"] if lab["name"] != PARKED]  # the later steps of this run see it
+            out.append(f"parked removed from PR #{p['number']}: green and approved at its head")
+    return out
+
+
+# --- un-park ----------------------------------------------------------------------------------
+
+COOL_H, COOL_MAX_H = 24, 7 * 24
+COUNTER = re.compile(r"review:[123]|round:.*|formfix|conflict:.*|restart:1|stalled:1|status:retriggered")
+
+
+def cool_down_hours(n):
+    """Hours a parked item rests before its fresh start: 24 h, doubled per park (n = park comments), at most 7 days."""
+    return min(COOL_H * 2 ** (max(n, 1) - 1), COOL_MAX_H)
+
+
+def park_count(comments, bots):
+    """Comments with the hidden park marker written by one of BOTS (`gh ... --json comments`). Others' text is data."""
+    return sum(PARK_MARK in (c.get("body") or "") and any(same_login((c.get("author") or {}).get("login"), b) for b in bots)
+               for c in comments or [])
+
+
+def clear_labels(kind, item, run):
+    """Remove `parked` and every counter label the item carries, so the next try counts from zero."""
+    gone = sorted(n for n in names(item) if n == PARKED or COUNTER.fullmatch(n))
+    if gone:
+        run(kind, "edit", str(item["number"]), *[a for n in gone for a in ("--remove-label", n)])
+
+
+def fresh_start(kind, item, run=gh):
+    """Issue: labels cleared, agent:dev removed and set again (the label event starts a developer). Agent PR: its issue
+    gets one park comment (the issue keeps the count across PRs), the PR is closed and the issue restarts the same way
+    from current main. A PR that names no issue only loses the labels, so its review rounds start again."""
+    issue = item
+    if kind == "pr":
+        refs = restart.own_issues(item.get("body"))
+        clear_labels("pr", item, run)  # first: a later failure must not leave the PR parked and due again every tick
+        if not refs:
+            return
+        run("pr", "close", str(item["number"]))
+        liveness.post_comment("issue", refs[0], f"Fresh start: PR #{item['number']} was parked and is closed. Start on "
+                              f"a new branch from main with a different approach.\n{PARK_MARK}", run)
+        issue = {"number": refs[0], **jlist(run, "issue", "view", str(refs[0]), "--json", "labels")}
+    clear_labels("issue", issue, run)
+    if "agent:dev" in names(issue):
+        run("issue", "edit", str(issue["number"]), "--remove-label", "agent:dev")
+    add_labels("issue", issue["number"], ["agent:dev"], run)
+
+
+def un_park(prs, repo, bots, now, run=gh):
+    """Fresh start for every open issue and agent PR whose newest `parked` label event is older than its cool-down;
+    a parked PR of this repo on another branch (template-sync/x.y) only loses its labels, nothing is closed.
+    A PR also counts the park comments on its issue. Returns the actions; one failing item never stops the others."""
+    issues = jlist(run, "issue", "list", "--state", "open", "--label", PARKED, "--limit", "50", "--json",
+                   "number,labels,comments")
+    out, started = [], set()
+    parked = [("pr", p) for p in prs if PARKED in names(p) and not p.get("isCrossRepository")]
+    for kind, item in parked + [("issue", i) for i in issues]:
+        n = item["number"]
+        agent = kind == "issue" or is_agent_pr(item)  # any other PR (template-sync/x.y) only loses the labels
+        if kind == "issue" and n in started:  # its parked PR just restarted it
+            continue
+        try:
+            count = park_count(item.get("comments"), bots)
+            for ref in restart.own_issues(item.get("body"))[:1] if kind == "pr" else []:
+                count += park_count(jlist(run, "issue", "view", str(ref), "--json", "comments")["comments"], bots)
+            pages = jlist(run, "api", "--paginate", "--slurp", f"repos/{repo}/issues/{n}/events")
+            since = max(e["created_at"] for page in pages for e in page
+                        if e.get("event") == "labeled" and (e.get("label") or {}).get("name") == PARKED)
+            if minutes_since(since, now) < cool_down_hours(count) * 60:
+                continue
+            if not agent:
+                clear_labels("pr", item, run)
+                out.append(f"un-parked pr #{n}: labels cleared after {cool_down_hours(count)} h")
+                continue
+            fresh_start(kind, item, run)
+            started.update(restart.own_issues(item.get("body"))[:1] if kind == "pr" else ())
+            out.append(f"un-parked {kind} #{n}: fresh start after {cool_down_hours(count)} h")
+        except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError, liveness.ReadbackError) as e:
+            out.append(f"un-park of {kind} #{n} failed ({type(e).__name__})")
     return out
 
 
@@ -494,11 +542,8 @@ def build_body(runs, prs, issues, ages, orchestrator, ideas, actions, now, owner
 
 
 def update_issue(body, run=gh, bot=""):
-    found = json.loads(run("issue", "list", "--state", "open", "--search", f'"{TITLE}" in:title',
-                           "--json", "number,title,author"))
-    found = [i for i in found if i["title"] == TITLE and own_issue(i, bot)]
-    if found:
-        number = str(found[0]["number"])
+    number = status_issue(run, bot)
+    if number:
         run("issue", "edit", number, "--body", body)
     else:
         number = run("issue", "create", "--title", TITLE, "--body", body).strip().rsplit("/", 1)[-1]
@@ -639,24 +684,22 @@ def run_status(env, now, run=gh):
     stuck_p = orphan_prs(prs, validate_runs, now)
     for kind, items in (("issue", stuck_i), ("pr", stuck_p)):
         for it in items:
-            actions.append(f"orphan {kind} #{it['number']}: {handle_orphan(kind, it, owner, run)}")
+            actions.append(f"orphan {kind} #{it['number']}: {handle_orphan(kind, it, run)}")
     for i in issues:  # recovered items lose the mark, so a later stall starts at "re-trigger" again
         if i not in stuck_i:
             clear_retrigger("issue", i, run)
     for p in prs:
         if p not in stuck_p:
             clear_retrigger("pr", p, run)
-    def is_held(p):
-        return owner_hold.pr_held(p["number"], run, owner)
-
-    for p in limit_prs(prs, runs, now, env.get("APPROVER_BOT", ""), is_held):
-        actions.append(f"review:3 PR #{p['number']}: {handle_stuck_limit(p, owner, run)}")
+    for p in limit_prs(prs, runs, now, env.get("APPROVER_BOT", "")):
+        actions.append(f"review:3 PR #{p['number']}: {handle_stuck_limit(p, run)}")
     actions += release_settled(prs, env.get("APPROVER_BOT", ""), owner, run)
+    actions += safe(un_park, prs, repo, [b for b in (bot, env.get("APPROVER_BOT", "")) if b], now, run) or []
     if not any(r["workflowName"] == "agent-fix" for r in runs):  # one fix job at a time
-        for p in [c for c in conflict_prs(prs) if not is_held(c)][:1]:
+        for p in conflict_prs(prs)[:1]:
             actions.append(f"conflict PR #{p['number']}: {handle_conflict(p, owner, run)}")
     actions += safe(design_parents.close_done_parents, run, owner, bot) or []
-    actions += stalled_dev.check(issues, labeled_at, now, run, owner, {i["number"] for i in stuck_i})
+    actions += stalled_dev.check(issues, labeled_at, now, run, {i["number"] for i in stuck_i})
     ages = {i["number"]: age(labeled_at(i), now) for i in issues}
     successes = safe(liveness.last_successes, run)
     added = {}

@@ -104,20 +104,20 @@ def test_fetch_all_filters_by_date_and_reads_failed_log():
 def test_queue_numbers_counts_slots_waiting_and_human_age():
     issues = [
         {"number": 1, "labels": [{"name": "agent:dev"}]},
-        {"number": 2, "labels": [{"name": "approved"}]},
-        {"number": 3, "labels": [{"name": "approved"}, {"name": "agent:dev"}]},
-        {"number": 4, "labels": [{"name": "needs-human"}], "updatedAt": "2026-11-05T12:00:00Z"},
+        {"number": 2, "labels": [{"name": "prio:2"}]},
+        {"number": 3, "labels": [{"name": "prio:2"}, {"name": "agent:dev"}]},
+        {"number": 4, "labels": [{"name": "parked"}], "updatedAt": "2026-11-05T12:00:00Z"},
     ]
     prs = [
         {"number": 9, "headRefName": "agent/1-x", "labels": []},
-        {"number": 10, "headRefName": "agent/2-y", "labels": [{"name": "needs-human"}],
+        {"number": 10, "headRefName": "agent/2-y", "labels": [{"name": "parked"}],
          "updatedAt": "2026-11-05T12:00:00Z"},
         {"number": 11, "headRefName": "feature/z", "labels": []},
     ]
     q = mod.queue_numbers(issues, prs, max_dev=4, max_prs=5, now=NOW)
     assert q["waiting"] == 1
     assert (q["free_dev"], q["free_prs"]) == (2, 4)
-    assert q["needs_human"] == 2 and q["human_median_days"] == 4.0
+    assert q["parked"] == 2 and q["human_median_days"] == 4.0
 
 
 def test_limit_failure_opens_one_proposal(monkeypatch):
@@ -146,9 +146,9 @@ def test_no_limit_error_and_short_queue_opens_nothing(monkeypatch):
 def test_waiting_backlog_with_no_free_dev_slot_opens_proposal(monkeypatch):
     only_claude(monkeypatch, [])
     issues = [{"number": 4, "labels": [{"name": "agent:dev"}]}] + [
-        {"number": n, "labels": [{"name": "approved"}]} for n in (1, 2, 3)]
+        {"number": n, "labels": [{"name": "prio:3"}]} for n in (1, 2, 3)]
     reasons = mod.capacity_sections(TODAY, make_gh({}, {}, {}, issues, []), 1, 3, now=NOW)[2]
-    assert reasons == ["3 approved issues wait while no agent:dev slot is free"]
+    assert reasons == ["3 queued issues wait while no agent:dev slot is free"]
     two_waiting = issues[:3]
     assert mod.capacity_sections(TODAY, make_gh({}, {}, {}, two_waiting, []), 1, 3, now=NOW)[2] == []
 

@@ -2,9 +2,8 @@
 
 CLI (needs the gh CLI with GH_TOKEN and GH_REPO):
   restart.py limit PR        agent PR hit the round limit: first time restart the issue (label restart:1, slip comment,
-                             agent:dev re-added, PR closed), otherwise needs-human + review request + German note
+                             agent:dev re-added, PR closed), otherwise the PR is parked (label `parked`, one comment)
   restart.py supersede       close every open agent PR that a newer open agent PR for the same issue replaces
-Environment: OWNER (default Bankaifan).
 """
 import json
 import os
@@ -12,24 +11,13 @@ import re
 import subprocess
 import sys
 
-import decision
 import liveness
-import owner_hold
-from agent_guard import add_labels, same_login
+from agent_guard import add_labels, park
 
-OWNER_DEFAULT = "Bankaifan"
 RESTART = "restart:1"
 _REFS = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\s+#(\d+)", re.IGNORECASE)
 _CLOSING = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", re.IGNORECASE)
 _BLOCKING = 1500  # chars of review text per review in the slip
-
-NOTE_RESTARTED = (
-    "Hallo Daniel, dieser PR haengt fest, auch der automatische Neustart des Auftrags hat nicht gereicht "
-    "(ein Neustart ist schon gelaufen). Schlimmster Fall: nichts passiert, der PR wird nur nicht gemergt. "
-    "Frage: Soll der Orchestrator den Auftrag noch einmal anders schneiden (ja) oder der PR geschlossen werden (nein)?\n"
-    + decision.build(yes="restart-recut", no="close-pr")
-)
-
 
 def gh(*args):
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
@@ -116,29 +104,11 @@ def restart_issue(pr, issue, reviews, run=gh, why=None):
     run("pr", "close", str(pr), "--comment", f"Superseded: {why or 'round limit reached'}, task restarted, see #{issue}")
 
 
-def park_with_owner(pr, owner, restarted, run=gh):
-    """Today's path: needs-human, review request to the owner (unless author), limit comment with the German note."""
-    blocked = bool(owner_hold.held("pr", pr, ["needs-human"], run, owner))
-    add_labels("pr", pr, ["needs-human"], run)
-    author = json.loads(run("pr", "view", str(pr), "--json", "author"))["author"]["login"]
-    if not blocked and not same_login(author, owner):
-        try:
-            run("pr", "edit", str(pr), "--add-reviewer", owner)
-        except subprocess.CalledProcessError:
-            print("review request failed")
-    text = "Review limit of 2 fix rounds reached. Needs the orchestrator or Daniel."
-    if restarted:
-        text += "\n\nThe automatic restart (restart:1) already failed too.\n\n" + NOTE_RESTARTED
-    liveness.post_comment("pr", pr, text, run)
-
-
-def handle_limit(pr, owner, run=gh):
+def handle_limit(pr, run=gh):
     """Returns 'restarted' or 'parked'."""
     info = json.loads(run("pr", "view", str(pr), "--json", "body,state,labels"))
     if info.get("state") != "OPEN":
         return "closed"
-    if owner_hold.pr_held(pr, run, owner):  # Daniel removed a hold label for this head: no restart, no close
-        return "held"
     issues = own_issues(info.get("body"))
     issue = None
     restarted = False
@@ -149,7 +119,7 @@ def handle_limit(pr, owner, run=gh):
         elif issue is None:
             issue = n
     if issue is None or restarted:
-        park_with_owner(pr, owner, restarted, run)
+        park("pr", pr, "review limit of 2 fix rounds reached" + (", the restart (restart:1) failed too" if restarted else ""), run)
         return "parked"
     pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{_repo()}/pulls/{pr}/reviews"))
     restart_issue(pr, issue, [r for page in pages for r in page], run)
@@ -161,10 +131,9 @@ def _repo():
 
 
 def main(argv):
-    owner = os.environ.get("OWNER", OWNER_DEFAULT)
     args = argv[1:]
     if len(args) == 2 and args[0] == "limit" and args[1].isdigit():
-        print(handle_limit(args[1], owner))
+        print(handle_limit(args[1]))
         return 0
     if args == ["supersede"]:
         prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",

@@ -1,4 +1,4 @@
-"""#624: a silent dev/fix run retries once, then becomes one signed prio:1 issue for the agents; never needs-human."""
+"""#624: a silent dev/fix run retries once, then becomes one signed prio:1 issue for the agents; never parked first."""
 import json
 
 import agent_guard as ag

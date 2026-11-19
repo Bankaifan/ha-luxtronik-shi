@@ -89,23 +89,20 @@ def test_target_repo_routes_managed_workflows_to_template():
     assert r.target_repo("scout", "o/proj", {"template": "o/agent-template", "managed": ["docs/"]}) == "o/proj"
 
 
-def test_report_posts_comment_and_issue(monkeypatch, tmp_path):
+def test_report_goes_to_the_job_summary_not_to_a_comment(monkeypatch, tmp_path):
     f = tmp_path / "e.json"
     f.write_text(execfile(denials=[("Bash", "make check")]))
-    calls, comments = [], []
+    calls, summary = [], tmp_path / "summary.md"
 
     def run(*args):
         calls.append(args)
-        if args[:2] == ("issue", "comment"):
-            comments.append(args[args.index("--body") + 1])
-        if args[:2] == ("issue", "view"):
-            return json.dumps({"comments": [{"body": b} for b in comments]})
         return fake_run([], [])(*args)
 
     monkeypatch.setattr(r, "target_repo", lambda *a, **k: "o/r")
     monkeypatch.setenv("GUARD_KEY", KEY)
-    body, new = r.report("rule-keeper", {"EXEC_FILE": str(f), "GH_REPO": "o/r"}, run)
-    assert ("issue", "comment", "57", "--body", body) in calls and new == ["9"]
+    body, new = r.report("rule-keeper", {"EXEC_FILE": str(f), "GH_REPO": "o/r", "GITHUB_STEP_SUMMARY": str(summary)}, run)
+    assert summary.read_text() == body + "\n" and new == ["9"]
+    assert not [c for c in calls if c[:2] == ("issue", "comment")]
 
 
 def test_main_never_fails_the_job(monkeypatch):

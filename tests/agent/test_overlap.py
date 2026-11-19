@@ -82,7 +82,7 @@ def test_pr_waiting_for_owner_and_its_slip_do_not_defer():
     me = {"login": "Bankaifan"}
     lab = lambda *n: [{"name": x} for x in n]
     prs = [
-        {"number": 500, "headRefName": "agent/400-x", "author": me, "labels": lab("risk:security", "needs-human"),
+        {"number": 500, "headRefName": "agent/400-x", "author": me, "labels": lab("risk:security", "parked"),
          "files": [{"path": "tools/status.py"}]},
         {"number": 501, "headRefName": "agent/401-x", "author": me, "labels": lab("risk:security"),
          "headRefOid": "abc", "files": [{"path": "tools/a.py"}],
@@ -90,7 +90,7 @@ def test_pr_waiting_for_owner_and_its_slip_do_not_defer():
         {"number": 502, "headRefName": "agent/402-x", "author": me, "labels": lab("risk:security"),
          "headRefOid": "new", "files": [{"path": "tools/b.py"}],
          "reviews": [{"state": "APPROVED", "author": {"login": "app/bankaifan-agent-approver"}, "commit": {"oid": "old"}}]},
-        {"number": 503, "headRefName": "agent/403-x", "author": me, "labels": lab("needs-human"),
+        {"number": 503, "headRefName": "agent/403-x", "author": me, "labels": lab("parked"),
          "files": [{"path": "tools/c.py"}]},
         {"number": 504, "headRefName": "agent/404-x", "author": me, "files": [{"path": "tools/d.py"}]},
     ]

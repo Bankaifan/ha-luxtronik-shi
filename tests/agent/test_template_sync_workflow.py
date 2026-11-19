@@ -107,7 +107,7 @@ def test_no_model_and_only_the_author_secret():
 
 
 def test_gate_expression_and_default_mode():
-    assert "(vars.TEMPLATE_SYNC_MODE || 'all') == 'all'" in TEXT
+    assert "(vars.TEMPLATE_SYNC_MODE || 'version') == 'all'" in TEXT
     assert "!= 'all'" not in TEXT
 
 

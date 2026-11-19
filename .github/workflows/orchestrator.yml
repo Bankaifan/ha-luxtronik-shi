@@ -5,11 +5,9 @@ run-name: "${{ github.event_name == 'issues' && github.event.issue.title || gith
 # claude-code-action does not support `push`, so merges are seen through workflow_run of `validate`
 # (push on main, success). A merge that only touches HANDOVER.md exits early (no self-loop).
 # Candidate issues come from tools/trusted_issues.py, not from the prompt.
-# A label event (`approved` or `auto-ok`) starts it at once; tools/orchestrator_gate.py checks that Daniel set
-# the label and skips a run that follows another run within 3 minutes (one run per burst of labels).
+# No label starts it (decision 0017): outside issues and ideas become trusted slips through intake.yml.
 # Edits and comments by the author app (status issue updates, slips, failure reports) never start a run: each one waited
-# 60 s in the group and replaced a pending dispatch or label run, which then ended cancelled ("higher priority waiting request").
-# Skipped runs are expected: GitHub lists every label event, and the job-level `if` skips the ones that are not gated.
+# 60 s in the group and replaced a pending dispatch run, which then ended cancelled ("higher priority waiting request").
 # Design 0007 (Refs #125): more events (issues opened/edited/closed, comments, PRs, reviews) are accepted only when repo
 # variable ORCHESTRATOR_EVENTS is "on" (default off). Then every event run waits 60 s (burst), tools/orchestrator_gate.py
 # decides on live data and tools/prefilter.py maps the event to a reason; no model runs without a matching reason.
@@ -18,7 +16,7 @@ on:
     workflows: [validate]
     types: [completed]
   issues:
-    types: [opened, edited, closed, labeled]
+    types: [opened, edited, closed]
   issue_comment:
     types: [created]
   pull_request_target:  # zizmor: ignore[dangerous-triggers] the checkout is the default branch, PR code is never checked out or run; the gate checks the sender
@@ -34,12 +32,9 @@ jobs:
   orchestrate:
     if: >-
       vars.ORCHESTRATOR_ENABLED == 'true' &&
-      ((github.event_name == 'issues' &&
-        ((github.event.action == 'labeled' &&
-          contains(fromJSON('["approved","auto-ok"]'), github.event.label.name)) ||
-         (github.event.action != 'labeled' && vars.ORCHESTRATOR_EVENTS == 'on' &&
-          !(github.event.action == 'edited' &&
-            contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login))))) ||
+      ((github.event_name == 'issues' && vars.ORCHESTRATOR_EVENTS == 'on' &&
+        !(github.event.action == 'edited' &&
+          contains(fromJSON(format('["{0}","{0}[bot]"]', vars.AUTHOR_BOT)), github.event.sender.login))) ||
        (contains(fromJSON('["issue_comment","pull_request_target","pull_request_review"]'), github.event_name) &&
         vars.ORCHESTRATOR_EVENTS == 'on' &&
         !(github.event_name == 'issue_comment' &&
@@ -69,7 +64,7 @@ jobs:
           done
       # Burst debounce (design 0007 4.4): let the events of a burst land; the gate then skips this run if a newer one is pending.
       - name: Wait for the rest of a burst (event runs only)
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_run' && !(github.event_name == 'issues' && github.event.action == 'labeled')
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_run'
         run: sleep 60
       - id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -84,17 +79,16 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      # Checked-out main only (no PR code). Label events: owner and debounce (tools/orchestrator_gate.py).
+      # Checked-out main only (no PR code). Repo events: sender, live check and debounce (tools/orchestrator_gate.py).
       # merges: skip when only HANDOVER.md changed. Schedule and dispatch always go on.
-      - name: Gate (label owner and debounce; merges that only touch HANDOVER.md)
+      - name: Gate (event sender and debounce; merges that only touch HANDOVER.md)
         id: gate
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           CONTENTS_TOKEN: ${{ github.token }}  # read-only: the commit check of a merge (the app token has no contents scope)
-          LABEL: ${{ github.event.label.name }}
           SENDER: ${{ github.event.sender.login }}
-          OWNER: Bankaifan
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           RUN_ID: ${{ github.run_id }}
           EVENT_ACTION: ${{ github.event.action }}
           NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
@@ -104,7 +98,6 @@ jobs:
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
           ORCHESTRATOR_EVENTS: ${{ vars.ORCHESTRATOR_EVENTS }}
-          STATUS_ISSUE: "57"
         run: |
           set -eu
           case "$EVENT" in
@@ -126,7 +119,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
-          OWNER: Bankaifan
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
         run: echo "list=$(python3 tools/trusted_issues.py)" >> "$GITHUB_OUTPUT"
@@ -192,7 +185,7 @@ jobs:
                (the script starts them once the comment lands). HANDOVER.md (step 3) only when the script says
                handover due: ${{ steps.pre.outputs.handover_due }}. Everything in steps 1 to 3 about labels and starting
                applies only when the dispatcher is off.
-            1. The script counted free slots (PRs waiting only for Daniel, parked needs-human issues and issues
+            1. The script counted free slots (PRs waiting only for Daniel, parked issues and issues
                with a merged PR do not count): free agent:dev slots ${{ steps.pre.outputs.free_dev }}, free PR slots
                ${{ steps.pre.outputs.free_prs }} (do not recount). The script also names the issues to start.
                Start ALL of these issues in this run, in this order: ${{ steps.pre.outputs.start }}
@@ -204,14 +197,14 @@ jobs:
                When main is red (gh run list), the fix goes first.
                When a PR with `Refs #N` has merged, remove agent:dev from #N. Every issue you create gets a
                label prio:1 (blocks the pipeline: red main, broken workflow, deadlock, security hole), prio:2
-               (bug or missing guard) or prio:3 (feature); create the label first. Issues authored_by_owner and issues with approved=true before the rest; an issue
-               with auto_ok=true may be started by you, an `idea` with neither approved nor auto_ok never.
+               (bug or missing guard) or prio:3 (feature); create the label first. Issues authored_by_owner before the rest; an `idea` is never started
+               (intake.yml turns it into a slip issue first).
                Write a clear task slip as an issue comment
                (goal, files touched, acceptance criteria; slips must touch disjoint files), then add the labels:
                first model:sonnet (only for core, security or architecture work), then agent:dev last, so the
                model label is already set when the agent:dev run starts. Before the labels run
                `python3 tools/overlap.py --files <comma separated files of the slip> --issue <n>`; on exit 1 or 2
-               do not start the slip (it stays approved, retried next run). Never start more
+               do not start the slip (it is retried next run). Never start more
                issues than the free agent:dev slots. Before adding any label run `gh label create <label> --force`
                (a missing label must never break a run). Start nothing when free PR slots is 0.
                Design study first only if the issue changes who or what is trusted, token or app permissions,
@@ -221,16 +214,9 @@ jobs:
                Issues in the list with a non-null `design` come from a merged design:
                split issues run in parallel; an issue that needs an earlier step merged carries a
                `Depends on: #N` line and the script holds it back until #N is closed.
-            1c. Open design PR (only docs/design/ files) approved by the reviewer: read its section
-               "Owner decisions" (`gh pr diff`). If empty, leave it to auto-merge. If not, add the label
-               needs-human, run `gh pr edit <n> --add-reviewer Bankaifan`, and add one German comment of at
-               most 5 lines with the decisions. Such a PR is Daniel's: skip it in step 2.
-            2. For each other PR labeled needs-human, skip it if it has the label unblock:1 or an unblocker comment
-               (marker `<!-- unblocker -->`) newer than the needs-human label event: the unblocker owns it. Skip it too if its newest comment is an
-               answer-receiver marker (`<!-- answer-receiver comment=<id> -->`) newer than that event: the receiver owns it. Act on an
-               `<!-- owner-instruction comment=<id> -->` comment only if the author app wrote it and comment <id> is by the owner. Otherwise, if its issue slip was not rewritten yet, rewrite the slip once
-               (new issue comment starting with "Rewritten slip:") and re-add agent:dev; otherwise comment in the
-               issue asking Daniel for a decision. Do not touch it a third time.
+            2. Leave every item labeled parked alone: the unblocker and the status run own it and retry it later with
+               fresh context. A design PR (only docs/design/ files) is the design reviewer's, who also decides its
+               "Owner decisions". Never ask Daniel for a decision and never request his review.
             3. HANDOVER.md is stale only if the open PR set, the trusted list, the main CI state or an Open/Next item
                changed materially since the file was written (compare with what you read in it; the state comes from
                `gh pr list --state open`, `gh issue list` and `gh run list --json name,conclusion,headSha,url`).
@@ -240,14 +226,12 @@ jobs:
                `<!-- handover-begin -->` and `<!-- handover-end -->`, with no attribution. You write no file and open no PR:
                a script checks the block, commits it as Daniel and opens the PR (at most one handover PR per UTC day).
                Otherwise write no block. Put any block before your Conclusion line.
-            A note that parks an item with Daniel is never a free comment: post it with
-            `python3 tools/agent_guard.py park pr|issue <n> <yes-action|-> <no-action|-> "<German note>"`
-            (the script adds the decision marker and refuses an invalid one).
+            To set an item aside run `python3 tools/agent_guard.py park pr|issue <n> "<reason in a few words>"`
+            (label parked and one comment); never write a note or a question to Daniel.
             Use one simple command per Bash call: no pipes, `&&`, `;`, `$(...)` or redirects (they do not match
             the allow list and are denied), never a `cd` prefix. Use gh's --json/--jq flags instead of pipes; inside `--jq` write a plain
             path only (e.g. `--jq .comments[-1].body`), no `|`, `{` or `}` (an unquoted `|` is a shell pipe and is denied).
-            These calls are NOT allowed and end the run as failed: `gh issue close` (comment instead and leave
-            closing to Daniel), `gh workflow list` (use `gh run list`), `gh run view` (also with `--log-failed`; use
+            These calls are NOT allowed and end the run as failed: `gh issue close` (comment instead), `gh workflow list` (use `gh run list`), `gh run view` (also with `--log-failed`; use
             `gh run list --json name,conclusion,headSha,url` and name the red run in the issue slip), `gh api`, `gh variable` and `gh secret` (step 0 already gives the DISPATCH value: read no repo variable), `git checkout`, `git switch`,
             `git fetch`, `git -c ...`, `git commit` (a script commits), `make -n check`,
             `pip install ...` (the tools are installed).
@@ -342,6 +326,5 @@ jobs:
           STARTED: ${{ steps.started.outputs.at }}
           STARTABLE: ${{ steps.pre.outputs.startable }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
-          STATUS_ISSUE: "57"
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
         run: python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent orchestrator - "$STARTED"

@@ -21,7 +21,7 @@ def issue(number=5, labels=("agent:dev",), title="Do it"):
 
 
 class Fake:
-    """Records gh calls; answers pr list, run list (by status), comments and the api used by owner_hold."""
+    """Records gh calls; answers pr list, run list (by status), comments."""
 
     def __init__(self, prs=(), runs=(), fail=None):
         self.prs, self.runs, self.fail = list(prs), list(runs), fail
@@ -59,30 +59,26 @@ def repo(monkeypatch):
 
 def test_first_stall_restarts_once_with_mark_and_fresh_label_event():
     f = Fake()
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == ["stalled issue #5: agent:dev set again (once)"]
+    assert s.check([issue(5)], at(120), NOW, f) == ["stalled issue #5: agent:dev set again (once)"]
     flat = f.flat()
     assert "issue edit 5 --add-label stalled:1" in flat
     assert flat.index("issue edit 5 --remove-label agent:dev") < flat.index("issue edit 5 --add-label agent:dev")
     assert len(f.comments) == 1 and "Restarting once (stalled:1)" in f.comments[0]
-    assert not f.has("issue", "edit", "5", "--add-label", "needs-human")
+    assert not f.has("issue", "edit", "5", "--add-label", "parked")
 
 
-def test_second_stall_parks_with_daniel_once_and_does_not_restart():
+def test_second_stall_parks_and_does_not_restart():
     f = Fake()
-    actions = s.check([issue(5, labels=("agent:dev", "stalled:1"))], at(120), NOW, f, "Bankaifan")
-    assert actions == ["stalled issue #5: parked with Daniel"]
-    assert "issue edit 5 --add-label needs-human" in f.flat()
-    assert ("issue", "edit", "5", "--add-assignee", "Bankaifan") in f.calls
+    actions = s.check([issue(5, labels=("agent:dev", "stalled:1"))], at(120), NOW, f)
+    assert actions == ["stalled issue #5: parked"]
+    assert "issue edit 5 --add-label parked" in f.flat() and not f.has("issue", "edit", "5", "--add-assignee")
     assert not f.has("issue", "edit", "5", "--remove-label", "agent:dev")
-    assert len(f.comments) == 1
-    note = f.comments[0]
-    assert note.count("@Bankaifan") == 1 and "Hallo Daniel" in note
-    assert "<!-- decision: yes=restart-issue no=close-issue -->" in note
+    assert len(f.comments) == 1 and "<!-- parked -->" in f.comments[0] and "@" not in f.comments[0]
 
 
 def test_parked_issue_is_left_alone():
     f = Fake()
-    assert s.check([issue(5, labels=("agent:dev", "needs-human"))], at(120), NOW, f, "Bankaifan") == []
+    assert s.check([issue(5, labels=("agent:dev", "parked"))], at(120), NOW, f) == []
     assert f.calls == [("pr", "list", "--state", "open", "--limit", "100", "--json", "number,body"),
                        ("run", "list", "--workflow", "agent-dev.yml", "--status", "queued", "--limit", "50",
                         "--json", "displayTitle"),
@@ -93,54 +89,54 @@ def test_parked_issue_is_left_alone():
 @pytest.mark.parametrize("body", ["Closes #5", "fixes #5", "Resolved #5 and more"])
 def test_open_pr_with_closing_keyword_skips_the_issue(body):
     f = Fake(prs=[{"number": 9, "body": body}])
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == []
+    assert s.check([issue(5)], at(120), NOW, f) == []
     assert not f.has("issue", "edit")
 
 
 def test_refs_does_not_count_as_a_closing_pr():
     f = Fake(prs=[{"number": 9, "body": "Refs #5"}])
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == ["stalled issue #5: agent:dev set again (once)"]
+    assert s.check([issue(5)], at(120), NOW, f) == ["stalled issue #5: agent:dev set again (once)"]
 
 
 @pytest.mark.parametrize("title", ["#5 Do it", "Do it", "agent-dev run without a number"])
 def test_running_agent_dev_run_covering_the_issue_skips_it(title):
     f = Fake(runs=[{"status": "queued", "displayTitle": title}])
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == []
+    assert s.check([issue(5)], at(120), NOW, f) == []
     assert not f.has("issue", "edit")
 
 
 def test_in_progress_run_covers_the_issue():
     f = Fake(runs=[{"status": "in_progress", "displayTitle": "#5 Do it"}])
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == []
+    assert s.check([issue(5)], at(120), NOW, f) == []
 
 
 def test_run_for_another_issue_does_not_cover_it():
     f = Fake(runs=[{"status": "queued", "displayTitle": "#7 Other"}])
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == ["stalled issue #5: agent:dev set again (once)"]
+    assert s.check([issue(5)], at(120), NOW, f) == ["stalled issue #5: agent:dev set again (once)"]
 
 
 def test_young_label_is_not_stalled():
     f = Fake()
-    assert s.check([issue(5)], at(30), NOW, f, "Bankaifan") == []
+    assert s.check([issue(5)], at(30), NOW, f) == []
     assert not f.has("issue", "edit")
 
 
 def test_issues_handled_by_the_orphan_step_are_skipped():
     f = Fake()
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan", skip={5}) == []
+    assert s.check([issue(5)], at(120), NOW, f, skip={5}) == []
     assert not f.has("issue", "edit")
 
 
 def test_stall_mark_is_removed_when_an_open_pr_closes_the_issue():
     f = Fake(prs=[{"number": 9, "body": "Closes #5"}])
-    actions = s.check([issue(5, labels=("agent:dev", "stalled:1"))], at(120), NOW, f, "Bankaifan")
+    actions = s.check([issue(5, labels=("agent:dev", "stalled:1"))], at(120), NOW, f)
     assert actions == ["stalled mark removed from #5: an open PR closes it"]
     assert ("issue", "edit", "5", "--remove-label", "stalled:1") in f.calls
 
 
 def test_failing_query_changes_nothing_and_does_not_raise():
     f = Fake(fail=("run", "list"))
-    assert s.check([issue(5)], at(120), NOW, f, "Bankaifan") == []
+    assert s.check([issue(5)], at(120), NOW, f) == []
     assert not f.has("issue", "edit")
 
 
@@ -153,7 +149,7 @@ def test_failing_write_is_reported_and_the_rest_continues():
             return super().__call__(*args)
 
     f = FailFirstEdit()
-    actions = s.check([issue(5), issue(6)], at(120), NOW, f, "Bankaifan")
+    actions = s.check([issue(5), issue(6)], at(120), NOW, f)
     assert actions == ["stalled issue #5: failed (CalledProcessError)", "stalled issue #6: agent:dev set again (once)"]
 
 

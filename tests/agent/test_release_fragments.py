@@ -31,14 +31,19 @@ def test_parse_fragment_refuses(text):
         rf.parse_fragment("1.md", text)
 
 
-def test_two_fragments_two_versions_two_sections(tmp_path):
-    root = repo(tmp_path, {"11.md": "second\nstep: x\n", "9.md": "first\n"})
-    assert rf.release(root, "2026-11-12") == [("1.5", "9.md"), ("2.0", "11.md")]
-    assert (root / "VERSION").read_text() == "2.0\n"
+def test_many_fragments_are_one_release_and_one_version_step(tmp_path):
+    root = repo(tmp_path, {"11.md": "second\n", "9.md": "first\ninternal: refactor\n"})
+    notes = []
+    assert rf.release(root, "2026-11-12", notes) == [("1.5", "9.md"), ("1.5", "11.md")]
+    assert (root / "VERSION").read_text() == "1.5\n" and notes == ["- first", "- second"]
     text = (root / "CHANGELOG.md").read_text()
-    assert text.index("## [Unreleased]") < text.index("## [2.0] - 2026-11-12") < text.index("## [1.5] - 2026-11-12") < text.index("## [1.4]")
-    assert "- first\n" in text and "- second\n" in text and "- pending\n" in text
+    assert "## [1.5] - 2026-11-12\n- first\n- refactor\n- second\n\n## [1.4]" in text and "- pending\n" in text
     assert sorted(p.name for p in (root / "changelog.d").iterdir()) == ["README.md"]
+
+
+def test_one_step_x_fragment_makes_the_release_a_major_step(tmp_path):
+    root = repo(tmp_path, {"11.md": "second\nstep: x\n", "9.md": "first\n"})
+    assert rf.release(root, "2026-11-12") == [("2.0", "9.md"), ("2.0", "11.md")]
 
 
 def test_no_fragments_changes_nothing(tmp_path):
@@ -69,6 +74,6 @@ def test_bad_version_is_refused(tmp_path):
 def test_main_cli(tmp_path, capsys):
     root = repo(tmp_path, {"3.md": "x\n"})
     assert rf.main([str(root)]) == 0
-    assert "3.md -> 1.5" in capsys.readouterr().out
+    assert "3.md -> 1.5\nnote: - x" in capsys.readouterr().out
     assert rf.main([str(root)]) == 0
     assert "no fragments" in capsys.readouterr().out

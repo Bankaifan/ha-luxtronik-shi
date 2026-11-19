@@ -1,4 +1,4 @@
-"""Run report for agents that may do nothing (issue #179): one comment on the "Agent status" issue per run.
+"""Run report for agents that may do nothing (issue #179): written to the job summary, never a comment.
 
 Script step after the model step, no extra model turns. Reads the execution file (exec_log.py) and posts:
 workflow, run link, model, turns, outcome (PR/issue numbers created, or "no change"), the model's final
@@ -6,7 +6,7 @@ workflow, run link, model, turns, outcome (PR/issue numbers created, or "no chan
 opens one `prio:2` guard issue per workflow and command (dedup by title), signed with GUARD_KEY (guard_mark.py).
 Only fixed script strings go into the signed issue; denied command text only appears in the unsigned report.
 
-CLI (env: GH_TOKEN, GH_REPO, EXEC_FILE, RUN_URL, MODEL, STATUS_ISSUE (default 57), GUARD_KEY, WORKFLOW_FILE):
+CLI (env: GH_TOKEN, GH_REPO, EXEC_FILE, RUN_URL, MODEL, GITHUB_STEP_SUMMARY, GUARD_KEY, WORKFLOW_FILE):
   run_report.py WORKFLOW_NAME
 Never fails the job: a reporting error prints a warning and exits 0.
 """
@@ -20,8 +20,6 @@ import exec_log
 import guard_mark
 import liveness
 
-STATUS_ISSUE = "57"
-STATUS_TITLE = "Agent status"
 GUARD_LABEL = "prio:2"
 MAX_LINE = 300
 _CREATED = re.compile(r"github\.com/[^/\s]+/[^/\s]+/(pull|issues)/(\d+)")
@@ -122,7 +120,7 @@ def denial_title(workflow, key):
 def denial_body(workflow, key):
     # Fixed script text only: the body is signed (see guard_mark.py).
     return (f"The workflow {workflow} was denied the command `{key}`, which its prompt requires. "
-            "Check the allowedTools of the workflow and the latest run report on the Agent status issue.")
+            "Check the allowedTools of the workflow and the summary of its latest run.")
 
 
 def ensure_denial_issue(workflow, key, key_secret=None, repo=None, run=liveness.gh):
@@ -158,7 +156,9 @@ def report(workflow, env=None, run=liveness.gh):
     env = os.environ if env is None else env
     text = exec_log.read_exec(env.get("EXEC_FILE", ""))
     body = build_report(workflow, text, env.get("RUN_URL", ""), env.get("MODEL", ""))
-    liveness.post_comment("issue", env.get("STATUS_ISSUE") or STATUS_ISSUE, body, run)
+    if env.get("GITHUB_STEP_SUMMARY"):
+        with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+            f.write(body + "\n")
     project = env.get("GH_REPO", "")
     repo = target_repo(workflow, project, workflow_file=env.get("WORKFLOW_FILE"))
     issue_run, other = run, None

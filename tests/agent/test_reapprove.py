@@ -61,8 +61,8 @@ class Gh:
             return json.dumps([self.comments])
         if path.endswith("/timeline"):
             return json.dumps([self.timeline])
-        if "/commits/" in path:
-            return self.patches[path.rsplit("/", 1)[1]]
+        if "/compare/" in path:
+            return self.patches[path.rsplit("...", 1)[1]]
         self.pr_reads += 1
         if self.moved_head and self.pr_reads > 1:
             return json.dumps({**self.pr, "head": {**self.pr["head"], "sha": self.moved_head}})
@@ -148,7 +148,7 @@ def test_no_earlier_approval_refuses():
 
 
 @pytest.mark.parametrize("kw", [
-    {"commits": 2}, {"state": "closed"}, {"labels": [{"name": "needs-human"}]},
+    {"state": "closed"}, {"labels": [{"name": "parked"}]},
     {"head": {"sha": NEW, "ref": "feat/x", "repo": {"full_name": REPO}}},
     {"head": {"sha": NEW, "ref": "agent/1-x", "repo": {"full_name": "fork/r"}}},
     {"head": {"sha": "e" * 40, "ref": "agent/1-x", "repo": {"full_name": REPO}}},

@@ -2,8 +2,11 @@
 
 Usage: release_fragments.py [ROOT]   (ROOT default: the current directory; run on main, one writer)
 A PR adds `changelog.d/<issue>.md`: one or more changelog lines and an optional `step: x` or `step: y` line (default y).
-Each fragment, in issue-number order, gets the next version (x: (m+1).0, y: m.(n+1)), its own `## [x.y] - date` section
-above the newest released heading in CHANGELOG.md, and is deleted. VERSION is rewritten. Prints one line per version.
+One run is one release and one version step, however many fragments it folds: (m+1).0 when a fragment says `step: x`,
+else m.(n+1). All lines, in issue-number order, go into one `## [x.y] - date` section above the newest released heading
+in CHANGELOG.md; the fragments are deleted and VERSION is rewritten. Prints one line per fragment, then one
+`note: <line>` per line meant for the owner (the release PR body, tools/train.py). A line `internal: <text>` is a change
+users do not see: it goes into CHANGELOG.md without the prefix and is no note.
 Nothing to do (no fragments): no change, exit 0. A malformed fragment stops the run before any file is written (exit 1).
 """
 import datetime
@@ -16,6 +19,7 @@ CHANGELOG = "CHANGELOG.md"
 FRAGMENT_DIR = "changelog.d"
 FRAGMENT_NAME = re.compile(r"[0-9]+\.md")
 STEP = re.compile(r"step:\s*([xy])\s*")
+INTERNAL = "- internal:"
 HEADING = re.compile(r"^## \[([^\]]+)\](.*)$")
 
 
@@ -82,8 +86,9 @@ def fragments(root):
     return sorted((p for p in d.iterdir() if FRAGMENT_NAME.fullmatch(p.name)), key=lambda p: int(p.stem))
 
 
-def release(root, today):
-    """Release every fragment under `root`; returns [(version, fragment name)]. Writes only when all fragments parse."""
+def release(root, today, notes=None):
+    """Release every fragment under `root` as one version; returns [(version, fragment name)]. Writes only when all
+    fragments parse. `notes`, if a list, receives the user-facing lines."""
     root = pathlib.Path(root)
     files = fragments(root)
     if not files:
@@ -94,12 +99,13 @@ def release(root, today):
     version = version_path.read_text(encoding="utf-8").strip()
     parse_version(version)
     changelog = changelog_path.read_text(encoding="utf-8")
-    done = []
-    for p in files:
-        step, bullets = parse_fragment(p.name, p.read_text(encoding="utf-8"))
-        version = next_version(version, step)
-        changelog = add_section(changelog, version, today, bullets)
-        done.append((version, p.name))
+    parsed = [parse_fragment(p.name, p.read_text(encoding="utf-8")) for p in files]
+    version = next_version(version, "x" if any(step == "x" for step, _ in parsed) else "y")
+    bullets = [b for _, bs in parsed for b in bs]
+    changelog = add_section(changelog, version, today, [f"- {b[len(INTERNAL):].lstrip()}" if b.startswith(INTERNAL) else b for b in bullets])
+    done = [(version, p.name) for p in files]
+    if notes is not None:
+        notes.extend(b for b in bullets if not b.startswith(INTERNAL))
     version_path.write_text(f"{version}\n", encoding="utf-8")
     changelog_path.write_text(changelog, encoding="utf-8")
     for p in files:
@@ -111,12 +117,15 @@ def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
     root = pathlib.Path(args[0]) if args else pathlib.Path(".")
     try:
-        done = release(root, datetime.datetime.now(datetime.UTC).date().isoformat())
+        notes = []
+        done = release(root, datetime.datetime.now(datetime.UTC).date().isoformat(), notes)
     except (Refused, OSError) as e:
         print(f"release_fragments: refused: {e}")
         return 1
     for version, name in done:
         print(f"release_fragments: {name} -> {version}")
+    for note in notes:
+        print(f"note: {note}")
     if not done:
         print("release_fragments: no fragments")
     return 0

@@ -3,7 +3,6 @@ import json
 import subprocess
 
 import agent_guard as g
-import decision
 import guard_mark
 import pytest
 
@@ -24,7 +23,7 @@ def test_empty_and_different_logins_never_match():
 class Recorder:
     def __init__(self, fail_create=False, replies=None):
         self.calls, self.fail_create, self.replies = [], fail_create, replies or {}
-        self.posted, self.lossy = [], False
+        self.posted, self.lossy, self.status = [], False, True
 
     def __call__(self, *args):
         self.calls.append(args)
@@ -39,9 +38,9 @@ class Recorder:
 
 def test_labels_are_created_before_they_are_added():
     r = Recorder()
-    g.add_labels("pr", 7, ["review:3", "needs-human"], r)
-    assert r.calls == [("label", "create", "review:3", "--force"), ("label", "create", "needs-human", "--force"),
-                       ("pr", "edit", "7", "--add-label", "review:3", "--add-label", "needs-human")]
+    g.add_labels("pr", 7, ["review:3", "parked"], r)
+    assert r.calls == [("label", "create", "review:3", "--force"), ("label", "create", "parked", "--force"),
+                       ("pr", "edit", "7", "--add-label", "review:3", "--add-label", "parked")]
 
 
 def test_label_create_failure_does_not_stop_the_add():
@@ -79,7 +78,7 @@ def test_review_missing_for_head_sha():
 def test_agent_pr_by_author_app_owner_or_label():
     assert g.is_agent_pr("app/my-author", [""], "my-author[bot]", "Bankaifan")
     assert g.is_agent_pr("Bankaifan", [""], "my-author[bot]", "Bankaifan")
-    assert g.is_agent_pr("someone", ["agent:review"], "my-author[bot]", "Bankaifan")
+    assert not g.is_agent_pr("someone", ["agent:review"], "my-author[bot]", "Bankaifan")
     assert not g.is_agent_pr("someone", [""], "my-author[bot]", "Bankaifan")
 
 
@@ -113,23 +112,12 @@ def test_report_without_denials_keeps_the_tail():
     assert "no denied tool calls found" in body and "permission_denials" in body
 
 
-def test_escalate_issue_labels_comments_assigns(monkeypatch):
+def test_escalate_parks_and_asks_nobody(monkeypatch):
     monkeypatch.delenv("EXEC_FILE", raising=False)
     r = Recorder()
-    g.escalate("dev", "22", False, "no PR", "Bankaifan", r)
-    kinds = [c[:2] for c in r.calls]
-    assert ("issue", "comment") in kinds and ("issue", "edit") in kinds
-    assert r.calls[-1] == ("issue", "edit", "22", "--add-assignee", "Bankaifan")
-
-
-def test_escalate_pr_requests_review_unless_owner_is_author(monkeypatch):
-    monkeypatch.delenv("EXEC_FILE", raising=False)
-    r = Recorder(replies={("pr", "view"): json.dumps({"author": {"login": "app/my-author"}})})
     g.escalate("fix", "5", True, "no fix", "Bankaifan", r)
-    assert ("pr", "edit", "5", "--add-reviewer", "Bankaifan") in r.calls
-    r = Recorder(replies={("pr", "view"): json.dumps({"author": {"login": "Bankaifan"}})})
-    g.escalate("fix", "5", True, "no fix", "Bankaifan", r)
-    assert ("pr", "edit", "5", "--add-reviewer", "Bankaifan") not in r.calls
+    assert ("pr", "edit", "5", "--add-label", "parked") in r.calls and g.PARK_MARK in r.posted[0]["body"]
+    assert not any("--add-reviewer" in c or "--add-assignee" in c for c in r.calls)
 
 
 @pytest.fixture
@@ -178,14 +166,14 @@ def test_cli_same_exit_codes():
 def test_cli_agent_pr_exit_codes(monkeypatch):
     monkeypatch.setenv("AUTHOR_BOT", "my-author[bot]")
     assert g.main(["g", "agent-pr", "app/my-author"]) == 0
-    assert g.main(["g", "agent-pr", "someone", "x,agent:review"]) == 0
+    assert g.main(["g", "agent-pr", "someone", "x,agent:review"]) == 1
     assert g.main(["g", "agent-pr", "someone", "x"]) == 1
     assert g.main(["g", "agent-pr", "someone"]) == 1
 
 
 def test_cli_label_creates_then_adds(stub_gh):
-    assert g.main(["g", "label", "pr", "7", "agent:review"]) == 0
-    assert stub_gh() == ["label create agent:review --force", "pr edit 7 --add-label agent:review"]
+    assert g.main(["g", "label", "pr", "7", "parked"]) == 0
+    assert stub_gh() == ["label create parked --force", "pr edit 7 --add-label parked"]
 
 
 def test_cli_unknown_command_fails():
@@ -195,7 +183,7 @@ def test_cli_unknown_command_fails():
 def test_silent_wrong_arg_count_escalates_and_fails(stub_gh):
     assert g.main(["g", "silent", "fix", "5"]) == 1
     log = stub_gh()
-    assert any(c.startswith("pr comment 5") for c in log) and "pr edit 5 --add-label needs-human" in log
+    assert any(c.startswith("pr comment 5") for c in log) and "pr edit 5 --add-label parked" in log
     assert g.main(["g", "silent", "dev", "22"]) == 1
     assert any(c.startswith("issue comment 22") for c in stub_gh())
 
@@ -223,7 +211,7 @@ def test_silent_dev_escalates_without_new_pr(stub_gh, monkeypatch):
     monkeypatch.setenv("GH_PR_LIST", json.dumps([{"headRefName": "agent/22-x", "createdAt": "2026-11-01T00:00:00Z"}]))
     assert g.main(["g", "silent", "dev", "22", T0]) == 0
     assert any(c.startswith("issue comment 22") for c in stub_gh())
-    assert "issue edit 22 --add-label needs-human" in stub_gh()
+    assert "issue edit 22 --add-label parked" in stub_gh()
 
 
 def test_silent_dev_quiet_with_new_pr(stub_gh, monkeypatch):
@@ -252,13 +240,13 @@ def test_silent_fix_on_a_settled_pr_is_logged_not_parked(stub_gh, monkeypatch, c
     monkeypatch.setenv("GH_PR_VIEW", _settled_view())
     assert g.main(["g", "silent", "fix", "5", "abc"]) == 0
     assert "logged only" in capsys.readouterr().out
-    assert not any("needs-human" in c or c.startswith("pr comment") for c in stub_gh())
+    assert not any("parked" in c or c.startswith("pr comment") for c in stub_gh())
 
 
 def test_silent_fix_on_an_unsettled_pr_still_escalates(stub_gh, monkeypatch):
     monkeypatch.setenv("GH_PR_VIEW", _settled_view(reviewDecision="REVIEW_REQUIRED"))
     assert g.main(["g", "silent", "fix", "5", "abc"]) == 0
-    assert "pr edit 5 --add-label needs-human" in stub_gh()
+    assert "pr edit 5 --add-label parked" in stub_gh()
 
 
 def test_silent_review_paths(stub_gh, monkeypatch):
@@ -342,10 +330,12 @@ class OrchGh:
         self.data = {("issue", "list", "--state", "open"): list(open_issues),
                      ("pr", "list"): list(prs), ("issue", "list", "--state", "all"): list(issues)}
         self.events, self.comments = list(events), list(comments)
-        self.posted, self.lossy = [], False
+        self.posted, self.lossy, self.status = [], False, True
 
     def __call__(self, *a):
         self.calls.append(a)
+        if a[:2] == ("issue", "list") and f'"{g.STATUS_TITLE}" in:title' in a:  # the status issue is found by title
+            return json.dumps([{"number": 57, "title": g.STATUS_TITLE, "author": {"login": BOT}}] if self.status else [])
         if a[1:2] == ("comment",) and not self.lossy:
             self.posted.append({"body": a[a.index("--body") + 1]})
         if a[:2] == ("issue", "view") and "comments" in a:
@@ -374,8 +364,14 @@ def orch_env(tmp_path, monkeypatch):
     monkeypatch.setenv("GH_REPO", "o/r")
     monkeypatch.setenv("AUTHOR_BOT", BOT)
     monkeypatch.setenv("RUN_URL", "https://x/run/9")
-    monkeypatch.delenv("STATUS_ISSUE", raising=False)
     return setup
+
+
+def test_orchestrator_without_a_status_issue_comments_nowhere_and_still_fails(orch_env):
+    orch_env(denials=[DENIAL] * 3)
+    r = OrchGh()
+    r.status = False
+    assert g.silent_orchestrator(T0, r) == 1 and not r.made("issue", "comment") and not r.made("issue", "create")
 
 
 def test_orchestrator_denials_escalate(orch_env):
@@ -528,99 +524,12 @@ def write_exec(tmp_path, monkeypatch, denials):
     monkeypatch.setenv("GH_REPO", "o/r")
 
 
-def note(id, body, at, login=BOT):
-    return {"id": id, "user": {"login": login}, "created_at": at, "body": body}
-
-
-class Hist(Recorder):
-    """Recorder that also serves the issue comments (the history) and the commits of the watched files."""
-    def __init__(self, history=(), commits=None):
-        super().__init__()
-        self.history, self.commits = list(history), commits or {}
-
-    def __call__(self, *args):
-        if args[:2] == ("api", "--paginate") and args[-1].endswith("/comments"):
-            return json.dumps([self.history])
-        if args[0] == "api" and "/commits?" in args[1]:
-            return json.dumps(self.commits.get(args[1].split("path=")[1].split("&")[0], []))
-        return super().__call__(*args)
-
-
-def denial_run(tmp_path, monkeypatch, history=(), commits=None, denials=(DENIED,)):
-    """One denied run escalated on issue 22; returns the posted note and the fake gh."""
-    write_exec(tmp_path, monkeypatch, denials)
-    r = Hist(history, commits)
-    g.escalate("dev", "22", False, "no PR", "Bankaifan", r)
-    return r.posted[0]["body"], r
-
-
-def test_first_denial_offers_the_retrigger(tmp_path, monkeypatch):
-    body, _ = denial_run(tmp_path, monkeypatch)
-    assert "(ja)" in body and decision.parse(body) == {"yes": "drop-block", "no": "close-issue"}
-
-
-def test_135_same_denial_again_gives_no_retrigger_and_ends_restarts(tmp_path, monkeypatch):
-    first, _ = denial_run(tmp_path, monkeypatch)
-    second, r = denial_run(tmp_path, monkeypatch, history=[note(1, first, T1)])
-    assert "(ja)" not in second and decision.parse(second) == {"no": "close-issue"}
-    assert ("issue", "edit", "22", "--add-label", "needs-human", "--add-label", "restart:1",
-            "--add-label", "unblock:1") in r.calls
-
-
-def test_a_slip_comment_after_the_last_denial_offers_the_retrigger_again(tmp_path, monkeypatch):
-    first, _ = denial_run(tmp_path, monkeypatch)
-    hist = [note(1, first, T1), {"id": 2, "user": {"login": "stranger"}, "created_at": T2, "body": "clarified"}]
-    second, _ = denial_run(tmp_path, monkeypatch, history=hist, denials=(OTHER,))
-    assert "(ja)" in second
-
-
-def test_answered_owner_comment_and_receiver_confirmation_do_not_reopen(tmp_path, monkeypatch):
-    first, _ = denial_run(tmp_path, monkeypatch)
-    hist = [note(1, first, T1), {"id": 2, "user": {"login": "Bankaifan"}, "created_at": T2, "body": "ja"},
-            note(3, "Verstanden <!-- answer-receiver comment=2 -->", T2)]
-    second, _ = denial_run(tmp_path, monkeypatch, history=hist, denials=(OTHER,))
-    assert "(ja)" not in second
-
-
-def test_a_commit_to_the_allow_list_offers_the_retrigger_again(tmp_path, monkeypatch):
-    first, _ = denial_run(tmp_path, monkeypatch)
-    commits = {".github/workflows/agent-dev.yml": [{"sha": "abc"}]}
-    second, _ = denial_run(tmp_path, monkeypatch, history=[note(1, first, T1)], commits=commits, denials=(OTHER,))
-    assert "(ja)" in second
-
-
-def test_protected_path_gives_a_note_and_never_a_retrigger(tmp_path, monkeypatch):
-    edit = {"tool_name": "Edit", "tool_input": {"file_path": ".github/CODEOWNERS"}}
-    body, _ = denial_run(tmp_path, monkeypatch, denials=(edit,))
-    assert "(ja)" not in body and "geschuetzte Datei" in body and "CODEOWNERS" in body
-    assert decision.parse(body) == {"no": "close-issue"}
-
-
-def test_unreadable_history_offers_no_retrigger(tmp_path, monkeypatch):
-    write_exec(tmp_path, monkeypatch, [DENIED])
-    r = Recorder()  # the history read returns nothing: unknown, fail closed
-    g.escalate("dev", "22", False, "no PR", "Bankaifan", r)
-    assert "(ja)" not in r.posted[0]["body"] and "nicht lesbar" in r.posted[0]["body"]
-
-
-def test_owner_note_refuses_a_body_without_decision_marker():  # #416 req. 7
+def test_park_labels_and_comments_with_the_marker_and_asks_nobody():
     r = Recorder()
-    with pytest.raises(ValueError):
-        g.post_owner_note("issue", 5, "Soll ich das tun?", r)
-    assert not any(c[:2] == ("issue", "comment") for c in r.calls)
-    g.post_owner_note("issue", 5, "Soll ich das tun?\n" + decision.build(yes="drop-block"), r)
-    assert r.posted and "decision:" in r.posted[0]["body"]
-
-
-def test_park_adds_marker_and_refuses_a_bad_action():  # #416 req. 7
-    r = Recorder()
-    g.park("pr", 5, "drop-block", "close-pr", "Frage?", r)
-    assert decision.parse(r.posted[0]["body"]) == {"yes": "drop-block", "no": "close-pr"}
-    g.park("issue", 6, "-", "close-issue", "Frage?", r)
-    assert decision.parse(r.posted[1]["body"]) == {"no": "close-issue"}
-    with pytest.raises(ValueError):
-        g.park("issue", 7, "merge", "-", "Frage?", r)
-    assert len(r.posted) == 2
+    g.park("pr", 5, "review limit reached", r)
+    assert ("pr", "edit", "5", "--add-label", "parked") in r.calls
+    assert r.posted == [{"body": "Parked: review limit reached\n<!-- parked -->"}]
+    assert not any("--add-reviewer" in c or "--add-assignee" in c for c in r.calls) and "@" not in r.posted[0]["body"]
 
 
 # --- upstream issue for an allow-list miss (#416 goal 2, security requirements 3 to 5) ---
@@ -679,7 +588,7 @@ def test_allow_list_miss_creates_one_signed_issue_and_the_source_waits(upstream_
     assert "gh issue list" not in title + body  # the model's command text never reaches the signed issue
     (edit,) = r.made("issue", "edit", "22")
     assert "Depends on: #77" in edit[edit.index("--body") + 1].splitlines()
-    assert not any("--add-label" in c and "needs-human" in c for c in r.calls)
+    assert not any("--add-label" in c and "parked" in c for c in r.calls)
 
 
 def test_next_run_with_the_same_miss_bumps_the_issue(upstream_env):
@@ -759,11 +668,11 @@ def test_only_harness_tool_names_reach_the_title():
     assert g.denied_tools(denial_text(DENIED, odd)) == ["Bash"]
 
 
-def test_denied_issue_escalation_waits_instead_of_needs_human(tmp_path, monkeypatch, upstream_env):
+def test_denied_issue_escalation_waits_instead_of_parking(tmp_path, monkeypatch, upstream_env):
     f = tmp_path / "exec.json"
     f.write_text(denial_text(DENIED))
     monkeypatch.setenv("EXEC_FILE", str(f))
     r = Upstream()
     g.escalate("dev", "22", False, "no PR", "Bankaifan", r)
     assert r.made("issue", "create") and r.made("issue", "edit", "22")
-    assert not any("--add-label" in c and "needs-human" in c for c in r.calls)
+    assert not any("--add-label" in c and "parked" in c for c in r.calls)

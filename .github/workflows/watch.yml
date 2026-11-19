@@ -19,17 +19,18 @@ on:
       - agent-fix
       - agent-review
       - agent-security-review
-      - answer-receiver
       - automerge
       - branch-cleanup
       - canary
       - dependabot-automerge
       - design-split
       - dispatch
+      - intake
       - nightly
       - orchestrator
       - risk
       - rule-keeper
+      - cleaner
       - scout
       - setup
       - status
@@ -44,6 +45,14 @@ on:
 permissions:
   contents: read
 jobs:
+  alive:
+    # GitHub fires the cron only every few hours; a run whose only job is skipped does not count as a success for
+    # tools/liveness.py. This no-op job makes every workflow_run delivery a success. No concurrency: it never blocks watch.
+    if: github.event_name == 'workflow_run'
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 2
+    steps:
+      - run: echo "watch is alive"
   watch:
     # Skipped runs take no minutes and, at job level, do not take over the concurrency group.
     if: >-
@@ -78,7 +87,7 @@ jobs:
           RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}
           FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}
-          OWNER: Bankaifan
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           MAX_DEV: ${{ vars.MAX_DEV || '4' }}
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the failure issues; script step only, never a model step

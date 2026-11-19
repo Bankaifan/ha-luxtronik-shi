@@ -15,14 +15,14 @@ CLI (needs the gh CLI with GH_TOKEN and GH_REPO):
   agent_guard.py silent review PR SHA [BODYHASH]
                                              after agent-review: no approver review for SHA (and BODYHASH) -> escalate
   agent_guard.py silent orchestrator - SINCE after the orchestrator model step: denials, or STARTABLE=true and no visible action
-                                             by AUTHOR_BOT since SINCE -> comment on STATUS_ISSUE (default 57), exit 1; 2nd in 24 h -> prio:1 issue
-  agent_guard.py park pr|issue N YES NO TEXT post the German owner note with a decision marker (YES/NO = action id or -)
+                                             by AUTHOR_BOT since SINCE -> comment on the status issue (found by its title), exit 1; 2nd in 24 h -> prio:1 issue
+  agent_guard.py park pr|issue N REASON      set the item aside: label `parked` and one short comment (no mention, no request)
 `silent` ignores extra trailing arguments (the guard runs from main, the workflow from the PR branch: no version drift).
 A usage error or exception in `silent` escalates with reason "guard error" and exits 1; it never fails quietly.
-Escalate = comment (run URL, denied tool calls from the execution file, else its last lines), label needs-human, request OWNER's review.
-Environment for escalation: RUN_URL, EXEC_FILE (path of the action's execution file), OWNER (default Bankaifan).
+Escalate = park: label `parked` and one comment (run URL, denied tool calls from the execution file, else its last lines).
+Nobody is asked: status.py un-parks the item after a cool-down. Environment: RUN_URL, EXEC_FILE (the action's execution file).
 An allow-list miss on an issue (a denied call that is not a protected path) becomes ONE signed issue in the template repo
-(route_upstream) and the issue waits with `Depends on:` instead of needs-human. Needs GUARD_KEY (script step only).
+(route_upstream) and the issue waits with `Depends on:` instead of being parked. Needs GUARD_KEY (script step only).
 """
 import datetime as dt
 import hashlib
@@ -32,10 +32,8 @@ import re
 import subprocess
 import sys
 
-import decision
 import guard_mark
 import liveness
-import owner_hold
 
 # Execution-file helpers live in exec_log.py; re-exported here so `agent_guard.X` keeps working.
 from exec_log import (  # noqa: F401
@@ -51,13 +49,9 @@ from exec_log import (  # noqa: F401
 )
 
 OWNER_DEFAULT = "Bankaifan"
-DENIAL_RE = re.compile(r"<!-- denied-run sig=([0-9a-f]{16}|none) -->")  # hidden line of every denial note
-RECEIVER_RE = re.compile(r"<!-- answer-receiver comment=(\d+)")  # receiver confirmations name the owner comment they answer
+PARKED = "parked"
+PARK_MARK = "<!-- parked -->"  # hidden line of every park comment; status.py counts them for the cool-down
 PROTECTED = ("CODEOWNERS", "claude-judge-settings.json")  # a retrigger never changes these
-ALLOW_FILES = {"dev": (".github/workflows/agent-dev.yml", ".agents/roles/developer.md"),
-               "fix": (".github/workflows/agent-fix.yml", ".agents/roles/developer.md"),
-               "review": (".github/workflows/agent-review.yml", ".agents/roles/reviewer.md")}
-CAP_LABELS = ("restart:1", "unblock:1")  # the same call denied twice: no automatic restart any more
 TOOL_RE = re.compile(r"[A-Za-z]{1,20}")  # only harness tool names reach an upstream issue, never model text
 WORKFLOW_NAME = {"dev": "agent-dev", "fix": "agent-fix", "review": "agent-review"}  # fixed names of the workflow files
 UPSTREAM_CAP = 5  # open denied-command issues per workflow in the template repo
@@ -90,12 +84,7 @@ def ensure_label(name, run=gh):
 
 
 def add_labels(kind, number, labels, run=gh):
-    """Add labels (created first). `needs-human` and `review:N` that OWNER removed are not set again (owner_hold):
-    one comment says so, the rest of the labels are still added."""
-    refused = owner_hold.held(kind, number, labels, run)
-    if refused:
-        liveness.post_comment(kind, number, f"Daniel removed {', '.join(refused)}; not set again for this head.", run)
-    labels = [name for name in labels if name not in refused]
+    """Add labels (created first)."""
     for name in labels:
         ensure_label(name, run)
     if labels:
@@ -104,8 +93,7 @@ def add_labels(kind, number, labels, run=gh):
 
 def count_round(number, sha, run=gh):
     """One review round per head SHA, shared by both reviewers. Marker label `round:<sha7>` (older markers are removed).
-    Returns "already" (this head was counted), "limit" (review:3 is set, nothing bumped), "held" (OWNER removed that
-    review label, nothing bumped) or "counted" (review:N bumped)."""
+    Returns "already" (this head was counted), "limit" (review:3 is set, nothing bumped) or "counted" (review:N bumped)."""
     labels = set(run("pr", "view", str(number), "--json", "labels", "--jq", ".labels[].name").split())
     mark = f"round:{sha[:7]}"
     if mark in labels:
@@ -113,9 +101,6 @@ def count_round(number, sha, run=gh):
     if "review:3" in labels:
         return "limit"
     nxt = "review:3" if "review:2" in labels else "review:2" if "review:1" in labels else "review:1"
-    if owner_hold.held("pr", number, [nxt], run):
-        add_labels("pr", number, [nxt], run)  # refuses and comments
-        return "held"
     add_labels("pr", number, [nxt, mark], run)
     for old in sorted(n for n in labels if n.startswith("round:")):
         try:
@@ -208,8 +193,8 @@ def is_stale_head(number, sha, run=gh):
 
 
 def is_agent_pr(author, labels, author_bot, owner):
-    """Own-branch PRs by the author app or by the owner's account are reviewed; others only with agent:review."""
-    return same_login(author, author_bot) or same_login(author, owner) or "agent:review" in labels
+    """PRs by the author app or by the owner's account are reviewed; nobody else's, and no label changes that."""
+    return same_login(author, author_bot) or same_login(author, owner)
 
 
 _BODY_HASH_LINE = re.compile(r"^\s*body-hash:\s*([0-9a-f]{8,64})\s*$", re.IGNORECASE | re.MULTILINE)
@@ -282,15 +267,29 @@ def recent_failures(comments, author_bot, since):
                and _after(c.get("created_at"), since) and ORCH_MARK in (c.get("body") or ""))
 
 
+STATUS_TITLE = "Agent status"  # the issue tools/status.py rewrites; found by title, its number differs per project
+
+
+def status_issue(run=gh, bot=""):
+    """Number (string) of the open status issue: titled STATUS_TITLE and written by BOT (no BOT: any author), else ""."""
+    found = json.loads(run("issue", "list", "--state", "open", "--search", f'"{STATUS_TITLE}" in:title',
+                           "--json", "number,title,author"))
+    return next((str(i["number"]) for i in found if i["title"] == STATUS_TITLE
+                 and (not bot or same_login((i.get("author") or {}).get("login"), bot))), "")
+
+
 def escalate_orchestrator(why, status_issue, repo, author_bot, run=gh, now=None):
-    """Comment on the status issue (run URL, denied calls). Second failure within 24 h: one prio:1 issue, no duplicates."""
+    """Comment on the status issue (run URL, denied calls). Second failure within 24 h: one prio:1 issue, no duplicates.
+    No status issue yet (""): nothing is written, the failed run is the signal."""
+    if not status_issue:
+        return
     now = now or dt.datetime.now(dt.UTC)
     day_ago = (now - dt.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
     pages = json.loads(run("api", "--paginate", "--slurp",
                            f"repos/{repo}/issues/{status_issue}/comments?since={day_ago}"))
     earlier = recent_failures([c for p in pages for c in p], author_bot, day_ago)
     body = report("orchestrator", why, os.environ.get("RUN_URL", ""), read_exec(os.environ.get("EXEC_FILE", "")))
-    body = body.split("Labelled needs-human")[0] + "The run is marked failed."  # no needs-human here: the status issue is not a task
+    body += "The run is marked failed."  # never parked: the status issue is not a task
     liveness.post_comment("issue", status_issue, body, run)
     if earlier:
         open_ = json.loads(run("issue", "list", "--state", "open", "--search", f'"{ORCH_REPEAT_TITLE}" in:title',
@@ -317,7 +316,7 @@ def silent_orchestrator(since, run=gh):
     why = orchestrator_silent(denials, startable, acted)
     if not why:
         return 0
-    escalate_orchestrator(why, os.environ.get("STATUS_ISSUE", "57"), repo, bot, run)
+    escalate_orchestrator(why, status_issue(run, bot), repo, bot, run)
     return 1
 
 
@@ -328,8 +327,7 @@ def report(kind, what, run_url, exec_text):
     else:
         tail = tail_text(exec_text) if exec_text else "(no execution file)"
         detail = f"Last lines of the execution file (no denied tool calls found):\n```\n{tail}\n```\n"
-    return (f"agent-{kind} run finished silently: {what}.\n\nRun: {run_url or '(unknown)'}\n\n{detail}"
-            "Labelled needs-human; Daniel is asked to look at it.")
+    return f"agent-{kind} run finished silently: {what}.\n\nRun: {run_url or '(unknown)'}\n\n{detail}"
 
 
 def read_body_before(path):
@@ -356,79 +354,11 @@ def protected_hit(exec_text):
     return False
 
 
-def last_denial(history, author_bot):
-    """(sig, created_at) of the newest denial note by the author app, or None. HISTORY: issue comments, oldest first."""
-    for c in reversed(history):
-        m = DENIAL_RE.search(c.get("body") or "")
-        if m and same_login((c.get("user") or {}).get("login"), author_bot):
-            return m.group(1), c.get("created_at") or ""
-    return None
-
-
-def changed_since(kind, number, history, since, run=gh):
-    """Something changed after SINCE: a commit to the kind's allow list or role file, or a slip comment. Answers by
-    Daniel, receiver confirmations and denial notes do not count: they would reopen the same loop."""
-    repo = os.environ.get("GH_REPO", "")
-    for path in ALLOW_FILES.get(kind, ()):
-        try:
-            if json.loads(run("api", f"repos/{repo}/commits?path={path}&since={since}&per_page=1")):
-                return True
-        except (ValueError, OSError, subprocess.CalledProcessError):
-            return False  # unknown: fail closed
-    answered = {int(m) for c in history for m in RECEIVER_RE.findall(c.get("body") or "")}
-    return any((c.get("created_at") or "") > since and c.get("id") not in answered
-               and not RECEIVER_RE.search(c.get("body") or "") and not DENIAL_RE.search(c.get("body") or "")
-               for c in history)
-
-
-def retrigger_offer(kind, number, sig, exec_text, run=gh):
-    """(offer, reason, cap): may the note offer "ja" (a retrigger)? Only if something changed since the last denied run.
-    A protected file is never retriggered. The same call denied twice sets CAP: automatic restarts end. Unknown history
-    (or unknown author app) fails closed: no offer."""
-    if protected_hit(exec_text):
-        return False, "eine geschuetzte Datei (CODEOWNERS oder claude-judge-settings.json) wurde verweigert; die Aenderung kommt ueber einen geskripteten Weg oder einen PR des Owners", False
-    author = os.environ.get("AUTHOR_BOT", "")
-    if not author:
-        return False, "der Autor-App-Login ist nicht bekannt", False
-    try:
-        pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{os.environ.get('GH_REPO', '')}/issues/{number}/comments"))
-        history = [c for page in pages for c in page]
-    except (ValueError, TypeError, OSError, subprocess.CalledProcessError):
-        return False, "der Verlauf des Items ist nicht lesbar", False
-    prev = last_denial(history, author)
-    if prev is None:
-        return True, "", False
-    if sig != "none" and prev[0] == sig:
-        return False, "dieselbe verweigerte Aktion zum zweiten Mal", True
-    if changed_since(kind, number, history, prev[1], run):
-        return True, "", False
-    return False, "seit dem letzten verweigerten Lauf hat sich nichts geaendert (Erlaubnisliste, Rollendatei, Auftrag)", False
-
-
-def denial_question(is_pr, offer, reason):
-    """The German question for Daniel: "ja" is offered only when a retrigger is allowed; the marker follows the offer."""
-    thing = "pr" if is_pr else "issue"
-    what = "der PR" if is_pr else "das Issue"
-    head = "\n\nHallo Daniel, ein Agenten-Lauf ist ohne Ergebnis geendet. "
-    if offer:
-        return (head + f"Frage: Soll der Block aufgehoben werden (ja) oder {what} geschlossen werden (nein)?\n"
-                + decision.build(yes="drop-block", no=f"close-{thing}"))
-    return (head + f"Kein Neustart angeboten: {reason}. Frage: Soll {what} geschlossen werden (nein)? "
-            "Ja fuehrt in diesem Fall nichts aus.\n" + decision.build(no=f"close-{thing}"))
-
-
-def post_owner_note(kind, number, body, run=gh):
-    """The one path for a note that parks something with Daniel: refuses a body without a valid decision marker."""
-    if not decision.has_marker(body):
-        raise ValueError("an owner note needs a valid decision marker")
-    liveness.post_comment(kind, number, body, run)
-
-
-def park(kind, number, yes, no, text, run=gh):
-    """Park an item with Daniel: TEXT (the German note) plus a marker built from YES/NO action ids ("-" = no answer of
-    that kind). The only path the orchestrator uses; an invalid action id raises before anything is posted."""
-    answers = {k: v for k, v in (("yes", yes), ("no", no)) if v != "-"}
-    post_owner_note(kind, number, text.rstrip() + "\n" + decision.build(**answers), run)
+def park(kind, number, reason, run=gh):
+    """Set an item aside: label `parked` and one comment with the hidden marker. No mention, no review request, no
+    question: status.py gives it a fresh start after the cool-down."""
+    add_labels(kind, number, [PARKED], run)
+    liveness.post_comment(kind, number, f"Parked: {reason}\n{PARK_MARK}", run)
 
 
 def denied_tools(exec_text):
@@ -500,8 +430,8 @@ def create_upstream(workflow, title, key, run=gh):
 
 def route_upstream(kind, source, exec_text, run=gh):
     """An allow-list miss (a denied call, not a protected path) gets ONE signed issue in the template repo; the next run
-    with the same miss comments on it. The source issue then waits with `Depends on:` instead of needs-human.
-    True if it waits. False: escalate as before (no key, protected path, cross-repo or unknown template, cap reached,
+    with the same miss comments on it. The source issue then waits with `Depends on:` instead of being parked.
+    True if it waits. False: park (no key, protected path, cross-repo or unknown template, cap reached,
     any error)."""
     workflow, key = WORKFLOW_NAME.get(kind), guard_mark.key_from_env()
     sig = denial_sig(exec_text)
@@ -522,8 +452,7 @@ def route_upstream(kind, source, exec_text, run=gh):
         else:
             return False
         add_dependency(source, f"#{number}", key, run)
-        liveness.post_comment("issue", source, f"Waiting for #{number}, the template issue for a denied tool call. "
-                              "Not needs-human: a retrigger would be denied again.", run)
+        liveness.post_comment("issue", source, f"Waiting for #{number}, the template issue for a denied tool call.", run)
     except (subprocess.CalledProcessError, OSError, ValueError, liveness.ReadbackError):
         return False
     return True
@@ -555,9 +484,9 @@ def _stuck_issue(kind, number, what, key, run):
 
 
 def self_heal(kind, number, is_pr, what, run=gh):
-    """#624: a silent run is the agents' job, not Daniel's. First time on an item: retry once (dev: agent:dev re-added;
+    """#624: a silent run is the agents' job. First time on an item: retry once (dev: agent:dev re-added;
     fix: the task restarts from main unless it already has restart:1). Again: one signed prio:1 issue for the agents.
-    True if handled; False (no key, no author app, a review run, any error): the old needs-human path."""
+    True if handled; False (no key, no author app, a review run, any error): the item is parked."""
     key, author = guard_mark.key_from_env(), os.environ.get("AUTHOR_BOT", "")
     if not key or not author or kind not in ("dev", "fix"):
         return False
@@ -579,8 +508,7 @@ def self_heal(kind, number, is_pr, what, run=gh):
                     restart.restart_issue(number, issue, [], run, why=f"a fix run on #{number} ended silently ({what})")
                     return True
         n = _stuck_issue(kind, number, what, key, run)
-        liveness.post_comment(thing, number, f"{RETRY_MARK}\nSilent again ({what}): {url}. Handed to #{n}, "
-                              "not needs-human.", run)
+        liveness.post_comment(thing, number, f"{RETRY_MARK}\nSilent again ({what}): {url}. Handed to #{n}.", run)
         return True
     except (subprocess.CalledProcessError, OSError, ValueError, KeyError, liveness.ReadbackError):
         return False
@@ -592,7 +520,7 @@ SETTLED_MARK = "<!-- settled -->"
 def settle_if_done(number, exec_text, run=gh):
     """A dev run without a PR on an issue that already has a merged agent/NUMBER-* PR, and no denied call, found nothing
     left to build: drop agent:dev and close the issue, or the dispatcher would start it again (no retry, no stuck issue,
-    no needs-human). True if settled; any error: False."""
+    no park). True if settled; any error: False."""
     if count_denials(exec_text):
         return False
     try:
@@ -612,33 +540,12 @@ def settle_if_done(number, exec_text, run=gh):
 def escalate(kind, number, is_pr, what, owner, run=gh):
     exec_text = read_exec(os.environ.get("EXEC_FILE", ""))
     if not is_pr and route_upstream(kind, number, exec_text, run):
-        return  # the issue waits for the template issue: no needs-human, no question to Daniel
+        return  # the issue waits for the template issue
     if kind == "dev" and not is_pr and not protected_hit(exec_text) and settle_if_done(number, exec_text, run):
         return  # work already merged: nothing to retry
     if not protected_hit(exec_text) and self_heal(kind, number, is_pr, what, run):
-        return  # retried once, or handed to a signed issue for the agents: no needs-human
-    body = report(kind, what, os.environ.get("RUN_URL", ""), exec_text)
-    thing = "pr" if is_pr else "issue"
-    sig = denial_sig(exec_text)
-    offer, reason, cap = retrigger_offer(kind, number, sig, exec_text, run)
-    body += denial_question(is_pr, offer, reason) + f"\n<!-- denied-run sig={sig} -->"
-    blocked = bool(owner_hold.held(thing, number, ["needs-human"], run, owner))
-    add_labels(thing, number, ["needs-human", *(CAP_LABELS if cap else [])], run)
-    post_owner_note(thing, number, body, run)
-    if blocked:  # Daniel removed needs-human: comment only, no review request or assignment
-        return
-    if is_pr:
-        author = json.loads(run("pr", "view", str(number), "--json", "author"))["author"]["login"]
-        if not same_login(author, owner):  # nobody can review their own PR
-            try:
-                run("pr", "edit", str(number), "--add-reviewer", owner)
-            except subprocess.CalledProcessError:
-                print("review request failed")
-    else:  # an issue has no reviewers: assigning puts it in the owner's inbox
-        try:
-            run("issue", "edit", str(number), "--add-assignee", owner)
-        except subprocess.CalledProcessError:
-            print("assignment failed")
+        return  # retried once, or handed to a signed issue for the agents
+    park("pr" if is_pr else "issue", number, report(kind, what, os.environ.get("RUN_URL", ""), exec_text), run)
 
 
 class UsageError(ValueError):
@@ -660,7 +567,7 @@ def silent_check(args, owner):
         before = read_body_before(args[3]) if len(args) >= 4 else None
         if fix_produced(args[2], now["headRefOid"], before, now.get("body")):
             pass
-        elif is_settled(number, os.environ.get("APPROVER_BOT", "")):  # nothing to fix: log it, no needs-human
+        elif is_settled(number, os.environ.get("APPROVER_BOT", "")):  # nothing to fix: log it
             print(f"fix run on #{number} pushed nothing, but the PR is green and approved at its head: logged only")
         else:
             escalate("fix", number, True, "no fix was produced (no new commit, PR body unchanged)", owner)
@@ -689,8 +596,8 @@ def silent_guarded(args, owner, check=silent_check):
         why = f"guard error ({detail})"
         try:
             if kind == "orchestrator" or not number.isdigit():
-                escalate_orchestrator(why, os.environ.get("STATUS_ISSUE", "57"), os.environ.get("GH_REPO", ""),
-                                      os.environ.get("AUTHOR_BOT", ""))
+                bot = os.environ.get("AUTHOR_BOT", "")
+                escalate_orchestrator(why, status_issue(bot=bot), os.environ.get("GH_REPO", ""), bot)
             else:
                 escalate(kind if kind in ("dev", "fix", "review") else "guard", number, kind != "dev", why, owner)
         except Exception as exc2:  # noqa: BLE001
@@ -721,12 +628,8 @@ def main(argv):
     elif cmd == "reviewed" and len(args) in (2, 3):
         bh = args[2] if len(args) == 3 else None
         return 0 if has_review(reviews_of(args[0]), os.environ.get("APPROVER_BOT", ""), args[1], bh) else 1
-    elif cmd == "park" and len(args) == 5 and args[0] in ("pr", "issue"):
-        try:
-            park(args[0], args[1], args[2], args[3], args[4])
-        except ValueError as exc:
-            print(f"refused: {exc}", file=sys.stderr)
-            return 1
+    elif cmd == "park" and len(args) == 3 and args[0] in ("pr", "issue"):
+        park(args[0], args[1], args[2])
     elif cmd == "silent":
         return silent_guarded(args, owner)
     else:

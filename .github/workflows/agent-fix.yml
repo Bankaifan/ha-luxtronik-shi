@@ -6,7 +6,7 @@ run-name: "${{ github.event_name == 'pull_request_review' && github.event.pull_r
 # Both triggers run in the base repo context and get the repo secrets.
 # Also started by `workflow_dispatch` with input `pr` (the status run, for a PR that conflicts with main): a conflict
 # is no finding, so it starts a fix without reading or bumping the round labels.
-# Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else needs-human.
+# Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else parked.
 # A red CI bumps the label first; the first PR-form or VERSION/CHANGELOG failure of a PR gets an uncounted fix run (formfix).
 on:
   pull_request_review:
@@ -88,10 +88,9 @@ jobs:
             echo "Review not by the approver app"; exit 0
           fi
           limit() {
-            # First limit of an issue: restart the task once (restart:1) and close this PR. Second: needs-human,
-            # review request to Daniel (unless author) and the German note, see tools/restart.py.
-            # Never silent: if the hand-over fails, the PR still gets needs-human (the status run picks up the rest).
-            python3 tools/restart.py limit "$pr" || guard label pr "$pr" needs-human
+            # First limit of an issue: restart the task once (restart:1) and close this PR. Second: the PR is parked,
+            # see tools/restart.py. Never silent: if the hand-over fails, the PR is still parked.
+            python3 tools/restart.py limit "$pr" || guard park pr "$pr" "review limit reached, the hand-over failed"
             echo "fix=false" >> "$GITHUB_OUTPUT"
           }
           if [ "$EVENT" = pull_request_review ]; then
@@ -143,7 +142,7 @@ jobs:
             if grep -qE '^(\.github/|tools/)' <<< "$files"; then model=sonnet; fi
           fi
           echo "model=$model" >> "$GITHUB_OUTPUT"
-          case "$labels" in *,needs-human,*) echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
+          case "$labels" in *,parked,*) echo "fix=false" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
           if [ "$EVENT" = workflow_run ]; then
             # A red CI caused by PR form or VERSION/CHANGELOG is no finding on the diff: the first one per PR gets a
             # fix run without a round (label formfix); a second one counts a round like any red CI, so it cannot loop.
@@ -288,8 +287,9 @@ jobs:
             - workflow_run: the validate run ${{ env.RUN_ID }} failed. Its failing lines are in `ci-failure.log`
               (read it with Read; never commit it). CI tests the PR merged with current main: rebase onto
               origin/main first, then reproduce with `make check`.
-            Fix exactly what is raised, run `make check` and the tests, then squash the branch into ONE commit
-            authored by Daniel (no Co-authored-by) on top of current origin/main and `git push --force-with-lease`.
+            Fix exactly what is raised in new small commits (subject `V<VERSION>-<NAME>: <change>` like the others on the
+            branch; never squash), run `make check` and the tests, and `git push --force-with-lease`. If the same finding
+            came back, try a different approach than the last commit. A denied tool call is no reason to stop.
             No tool or AI attribution in commits, PR bodies or comments (no "Generated with", session link, Co-Authored-By, Claude-Session).
             The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
             never `pip install`. Use one simple command per Bash call (a pipe may end in head, tail, grep, sort, wc or jq); no `&&`, `;`, `$(...)` or redirects
@@ -390,13 +390,7 @@ jobs:
           done
           gh workflow run validate.yml --ref "$BRANCH"
           echo "triggered=true" >> "$GITHUB_OUTPUT"
-      - name: Label the PR for review
-        if: ${{ steps.open.outputs.open == 'true' && steps.ci.outputs.triggered == 'true' }}
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-        run: python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" label pr "$PR" agent:review
-      # Never end silently: no new commit on the PR head means a comment, needs-human and Daniel's review.
+      # Never end silently: no new commit on the PR head means the PR is parked (label and one comment).
       - name: Escalate a run that pushed no fix
         if: ${{ always() && steps.open.outputs.open == 'true' }}
         env:

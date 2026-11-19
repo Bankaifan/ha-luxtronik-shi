@@ -21,7 +21,8 @@ PR404 = {"number": 404, "headRefName": "agent/404-flow", "createdAt": "2026-11-1
          "mergedAt": "2026-11-12T10:30:00Z", "labels": [],
          "reviews": [{"state": "CHANGES_REQUESTED", "submittedAt": "2026-11-12T09:50:00Z"},
                      {"state": "APPROVED", "submittedAt": "2026-11-12T10:10:00Z"}]}
-EV404 = [ev("approved", "2026-11-12T09:00:00Z"), ev("agent:dev", "2026-11-12T09:05:00Z")]
+EV404 = [ev("agent:dev", "2026-11-12T09:05:00Z")]
+MADE404 = "2026-11-12T09:00:00Z"
 RUNS404 = [run("agent-dev", "success", "2026-11-12T09:05:00Z", "2026-11-12T09:19:00Z"),
            run("validate", "failure", "2026-11-12T09:20:00Z", "2026-11-12T09:25:00Z"),
            run("validate", "success", "2026-11-12T09:30:00Z", "2026-11-12T09:40:00Z"),
@@ -29,9 +30,9 @@ RUNS404 = [run("agent-dev", "success", "2026-11-12T09:05:00Z", "2026-11-12T09:19
            run("agent-fix", "success", "2026-11-12T09:51:00Z", "2026-11-12T10:00:00Z"),
            run("agent-review", "skipped", "2026-11-12T10:01:00Z", "2026-11-12T10:01:00Z")]
 
-# ha-luxtronik-shi #135: no trusted label (owner's own issue), restart, needs the owner.
+# ha-luxtronik-shi #135: restart, needs the owner.
 PR135 = {"number": 135, "headRefName": "agent/135-heat", "createdAt": "2026-11-12T08:30:00Z",
-         "mergedAt": "2026-11-12T11:00:00Z", "labels": [{"name": "needs-human"}], "reviews": []}
+         "mergedAt": "2026-11-12T11:00:00Z", "labels": [{"name": "parked"}], "reviews": []}
 EV135 = [ev("agent:dev", "2026-11-12T08:00:00Z"), ev("restart:1", "2026-11-12T08:10:00Z")]
 
 
@@ -41,25 +42,25 @@ def test_issue_number():
 
 
 def test_row_stage_waits_and_counts():
-    row = flow.pr_row(PR404, EV404, RUNS404)
+    row = flow.pr_row(PR404, EV404, RUNS404, MADE404)
     assert [row[f"{s}_min"] for s in flow.STAGES] == [5.0, 15.0, 20.0, 10.0, 20.0, 20.0]
     assert row["lead_min"] == 90.0
     assert row["fix_rounds"] == 1
     assert row["model_runs"] == 3  # the skipped run does not count
     assert row["runs_by_workflow"] == "agent-dev:1;agent-fix:1;agent-review:1"
-    assert (row["restarts"], row["needs_human"]) == (0, "no")
+    assert (row["restarts"], row["parked"]) == (0, "no")
 
 
-def test_row_without_trusted_label_uses_issue_creation_and_leaves_gaps_empty():
+def test_row_counts_from_issue_creation_and_leaves_gaps_empty():
     row = flow.pr_row(PR135, EV135, [], issue_created="2026-11-12T07:50:00Z")
     assert row["dispatch_min"] == 10.0 and row["develop_min"] == 30.0
     assert row["ci_min"] == row["review_min"] == row["fix_min"] == row["train_min"] == ""
     assert row["lead_min"] == 190.0
-    assert (row["restarts"], row["needs_human"]) == (1, "yes")
+    assert (row["restarts"], row["parked"]) == (1, "yes")
 
 
 def test_block_summarises_the_last_24_hours():
-    rows = [flow.pr_row(PR404, EV404, RUNS404), flow.pr_row(PR135, EV135, [], "2026-11-12T07:50:00Z")]
+    rows = [flow.pr_row(PR404, EV404, RUNS404, MADE404), flow.pr_row(PR135, EV135, [], "2026-11-12T07:50:00Z")]
     old = dict(rows[0], merged_at="2026-11-10T10:00:00Z")
     lines = flow.flow_block(rows + [old], RUNS404, NOW)
     text = "\n".join(lines)
@@ -68,7 +69,7 @@ def test_block_summarises_the_last_24_hours():
     assert "slowest stage: develop (median 22 min)" in text
     assert "max parallel agent jobs (runs of these PRs): 1" in text
     assert "model runs per merged PR: 1.5" in text
-    assert "needed the owner: 1 of 2 (50 %)" in text
+    assert "were parked: 1 of 2 (50 %)" in text
 
 
 def test_block_without_merged_prs():
@@ -84,7 +85,7 @@ def test_max_parallel_counts_overlap():
 
 def test_write_csv(tmp_path):
     path = tmp_path / "flow.csv"
-    flow.write_csv([flow.pr_row(PR404, EV404, RUNS404)], path)
+    flow.write_csv([flow.pr_row(PR404, EV404, RUNS404, MADE404)], path)
     lines = path.read_text(encoding="utf-8").splitlines()
     assert lines[0] == ",".join(flow.COLUMNS)
     assert lines[1].startswith("404,404,2026-11-12T10:30:00Z,5.0,15.0")
@@ -96,9 +97,11 @@ def test_collect_reads_prs_events_and_runs():
             return json.dumps([PR404, {"number": 9, "headRefName": "feature/x", "mergedAt": "2026-11-12T10:30:00Z"}])
         if args[0] == "api":
             return json.dumps([EV404])
+        if args[0] == "issue":
+            return json.dumps({"createdAt": MADE404})
         return json.dumps(RUNS404)
     rows, runs = flow.collect("o/r", fake)
-    assert [r["pr"] for r in rows] == [404] and len(runs) == len(RUNS404)
+    assert [r["pr"] for r in rows] == [404] and len(runs) == len(RUNS404) and rows[0]["dispatch_min"] == 5.0
 
 
 def test_status_body_has_flow_block_only_when_given():

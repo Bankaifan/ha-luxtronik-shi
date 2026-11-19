@@ -1,8 +1,8 @@
 """Flow metrics (issue #420, no model): stage waits and counts per merged agent PR, and the status block.
 
-Stages (minutes): dispatch (issue trusted -> agent:dev), develop (agent:dev -> PR opened), ci (PR opened -> first green
+Stages (minutes): dispatch (issue created -> agent:dev), develop (agent:dev -> PR opened), ci (PR opened -> first green
 validate run), review (green CI -> first review), fix (first review -> first approval), train (approval -> merge).
-Counts: fix rounds (CHANGES_REQUESTED reviews), model runs by workflow, restart:1, needs-human. A missing timestamp
+Counts: fix rounds (CHANGES_REQUESTED reviews), model runs by workflow, restart:1, parked. A missing timestamp
 leaves its stage empty. Open (carry item): train rebases, conflict fixes, denied calls, cost per PR, the two guard issues.
 
 CLI (env GH_REPO): flow.py [CSV_PATH]   print the "Flow, last 24 h" block, write one CSV row per merged PR to CSV_PATH
@@ -14,11 +14,10 @@ import statistics
 import subprocess
 import sys
 
-TRUSTED_LABELS = ("approved", "auto-ok")
 MODEL_WORKFLOWS = ("agent-dev", "agent-fix", "agent-review", "orchestrator", "scout", "rule-keeper")
 STAGES = ("dispatch", "develop", "ci", "review", "fix", "train")
 COLUMNS = ["pr", "issue", "merged_at", *(f"{s}_min" for s in STAGES), "lead_min", "fix_rounds", "model_runs",
-           "runs_by_workflow", "restarts", "needs_human"]
+           "runs_by_workflow", "restarts", "parked"]
 WINDOW_H = 24
 
 
@@ -65,7 +64,7 @@ def pr_row(pr, events, runs, issue_created=None):
     reviews = sorted(pr.get("reviews") or [], key=lambda r: r["submittedAt"])
     first_review = reviews[0]["submittedAt"] if reviews else None
     approved = next((r["submittedAt"] for r in reviews if r["state"] == "APPROVED"), None)
-    trusted = first_label_time(events, TRUSTED_LABELS) or issue_created
+    trusted = issue_created
     dev = first_label_time(events, ("agent:dev",))
     green = first_green(runs)
     waits = {"dispatch": minutes(trusted, dev), "develop": minutes(dev, pr["createdAt"]),
@@ -78,7 +77,7 @@ def pr_row(pr, events, runs, issue_created=None):
            "lead_min": minutes(trusted, pr["mergedAt"]) if trusted else "",
            "fix_rounds": sum(r["state"] == "CHANGES_REQUESTED" for r in reviews), "model_runs": sum(by_wf.values()),
            "runs_by_workflow": ";".join(f"{k}:{v}" for k, v in sorted(by_wf.items())),
-           "restarts": int("restart:1" in labels), "needs_human": "yes" if "needs-human" in labels else "no"}
+           "restarts": int("restart:1" in labels), "parked": "yes" if "parked" in labels else "no"}
     row["lead_min"] = "" if row["lead_min"] is None else row["lead_min"]
     return row
 
@@ -117,8 +116,8 @@ def flow_block(rows, runs, now, hours=WINDOW_H):
         lines.append(f"- slowest stage: {slow} (median {med[slow]:.0f} min)")
     lines.append(f"- max parallel agent jobs (runs of these PRs): {max_parallel(runs)}")
     lines.append(f"- model runs per merged PR: {sum(r['model_runs'] for r in recent) / len(recent):.1f}")
-    owner = sum(r["needs_human"] == "yes" for r in recent)
-    lines.append(f"- needed the owner: {owner} of {len(recent)} ({100 * owner // len(recent)} %)")
+    parked = sum(r["parked"] == "yes" for r in recent)
+    lines.append(f"- were parked: {parked} of {len(recent)} ({100 * parked // len(recent)} %)")
     return lines
 
 
@@ -134,7 +133,7 @@ def gh(*args):
 
 
 def collect(repo, run=gh, limit=30):
-    """(rows, runs) for the newest merged agent PRs. Network: one call each for events and runs per PR."""
+    """(rows, runs) for the newest merged agent PRs. Network: one call each for issue, events and runs per PR."""
     prs = json.loads(run("pr", "list", "--state", "merged", "--limit", str(limit), "--json",
                          "number,createdAt,mergedAt,headRefName,labels,reviews"))
     rows, all_runs = [], []
@@ -146,7 +145,8 @@ def collect(repo, run=gh, limit=30):
         events = [e for page in pages for e in page]
         runs = json.loads(run("run", "list", "--branch", pr["headRefName"], "--limit", "50", "--json",
                               "workflowName,conclusion,createdAt,updatedAt"))
-        rows.append(pr_row(pr, events, runs))
+        created = json.loads(run("issue", "view", str(n), "--json", "createdAt")).get("createdAt")
+        rows.append(pr_row(pr, events, runs, created))
         all_runs += runs
     return rows, all_runs
 

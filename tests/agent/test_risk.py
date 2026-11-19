@@ -99,7 +99,8 @@ GREEN_RUNS = [{"name": n, "status": "completed", "conclusion": "success"} for n 
 SEC_OK = [{"context": "security-review", "state": "success"}]
 
 
-def _stub(calls, reviews, files, comments, diff_text, runs=GREEN_RUNS, statuses=SEC_OK, user="agent-bot", lossy=False):
+def _stub(calls, reviews, files, comments, diff_text, runs=GREEN_RUNS, statuses=SEC_OK, user="agent-bot", lossy=False,
+          requested=()):
     posted = []
 
     def run(*a):
@@ -119,7 +120,8 @@ def _stub(calls, reviews, files, comments, diff_text, runs=GREEN_RUNS, statuses=
         if a[0] == "api" and a[-1].endswith("/statuses"):
             return json.dumps(statuses)
         if a[0] == "api" and "/pulls/" in a[-1]:
-            return json.dumps({"head": {"sha": "abc"}, "user": {"login": user}, "body": "Adds a gate.\nCloses #65"})
+            return json.dumps({"head": {"sha": "abc"}, "user": {"login": user}, "body": "Adds a gate.\nCloses #65",
+                               "requested_reviewers": [{"login": x} for x in requested]})
         if a[:2] == ("pr", "diff"):
             return diff_text
         return ""
@@ -138,25 +140,16 @@ def _wait_env(monkeypatch, tmp_path):
 REV = [{"user": {"login": "appr[bot]"}, "state": "APPROVED", "commit_id": "abc", "body": "Looks right."}]
 
 
-def test_run_wait_all_green_labels_and_comments_once(monkeypatch, tmp_path):
+def test_run_wait_all_green_requests_the_owner_once_without_label_or_note(monkeypatch, tmp_path):
     _wait_env(monkeypatch, tmp_path)
-    calls = []
-    run = _stub(calls, REV, ["AGENTS.md"], [], diff("AGENTS.md", "+x"))
-    assert risk.run_wait("5", "abc", run) == 0
-    assert ("pr", "edit", "5", "--add-label", "needs-human") in calls
-    notes = [c[-1] for c in calls if c[:3] == ("pr", "comment", "5")]
-    assert len(notes) == 1 and "Hallo Daniel" in notes[0] and "Adds a gate." in notes[0] and "abc" in notes[0]
-    calls.clear()
-    run = _stub(calls, REV, ["AGENTS.md"], [{"body": notes[0]}], diff("AGENTS.md", "+x"))
-    risk.run_wait("5", "abc", run)
-    assert not any(c[:2] == ("pr", "comment") or "--add-label" in c for c in calls)
-
-
-def test_run_wait_fails_loudly_when_note_missing(monkeypatch, tmp_path):
-    _wait_env(monkeypatch, tmp_path)
-    run = _stub([], REV, ["AGENTS.md"], [], diff("AGENTS.md", "+x"), lossy=True)
-    with pytest.raises(risk.liveness.ReadbackError):
-        risk.run_wait("5", "abc", run)
+    asked, calls = [], []
+    monkeypatch.setattr(risk.subprocess, "run", lambda cmd, **k: asked.append(cmd))
+    assert risk.run_wait("5", "abc", _stub(calls, REV, ["AGENTS.md"], [], diff("AGENTS.md", "+x"))) == 0
+    assert asked == [["gh", "pr", "edit", "5", "--add-reviewer", "Bankaifan"]]
+    assert not any(c[:2] in (("pr", "edit"), ("pr", "comment")) for c in calls)
+    asked.clear()
+    risk.run_wait("5", "abc", _stub(calls, REV, ["AGENTS.md"], [], diff("AGENTS.md", "+x"), requested=["Bankaifan"]))
+    assert asked == []
 
 
 def test_run_wait_security_review_pending_or_failed_sets_nothing(monkeypatch, tmp_path):
@@ -190,9 +183,15 @@ def test_removed_line_starting_with_dashes_is_scanned():
     assert risk.classify(d) == "security"
 
 
-def _pr_stub(calls, pr, statuses=(), diff_text="", files=()):
+PLAIN_ISSUE = {"body": "Goal: x", "user": {"login": "Bankaifan"}}
+INTAKE_ISSUE = {"body": "Goal: x\nFiles: docs/a.md\nIntake: #7\n", "user": {"login": "agent-bot[bot]"}}
+
+
+def _pr_stub(calls, pr, statuses=(), diff_text="", files=(), issue=PLAIN_ISSUE):
     def run(*a):
         calls.append(a)
+        if a[0] == "api" and "/issues/" in a[1]:
+            return json.dumps(issue) if issue else ""
         if a[0] == "api" and a[-1].endswith("/files"):
             return json.dumps([list(files)])
         if a[0] == "api" and a[1].endswith("/statuses"):
@@ -265,11 +264,10 @@ def test_run_pr_non_agent_or_none_is_success_and_status_not_overwritten(monkeypa
     assert not _has(calls, "context=security-review")
 
 
-def test_run_pr_closed_removes_needs_human(monkeypatch, tmp_path):
+def test_run_pr_closed_publishes_nothing(monkeypatch, tmp_path):
     calls = []
-    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(["needs-human"], state="closed")))
+    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(state="closed")))
     assert risk.run_pr("5") == 0
-    assert ("pr", "edit", "5", "--remove-label", "needs-human") in calls
     assert not _has(calls, "name=risk")
 
 
@@ -295,6 +293,61 @@ def test_run_pr_security_outside_codeowner_paths_needs_no_owner(monkeypatch, tmp
     assert risk.run_pr("5") == 0
     assert _has(calls, "conclusion=success") and _has(calls, "--add-label", "risk:security")
     assert _has(calls, "context=security-review", "state=pending")  # the AI security reviewer still gates it
+
+
+@pytest.mark.parametrize("path,line", [("tools/status.py", "+x = 1"), (".github/workflows/x.yml", "+permissions:")])
+def test_intake_pr_with_infra_or_security_diff_fails_risk(monkeypatch, tmp_path, path, line):
+    calls = []
+    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(), diff_text=diff(path, line), issue=INTAKE_ISSUE))
+    assert risk.run_pr("5") == 0
+    assert _has(calls, "conclusion=failure") and any(risk.INTAKE_MSG in part for c in calls for part in c)
+
+
+def test_intake_pr_with_none_diff_passes_without_reading_the_issue(monkeypatch, tmp_path):
+    calls = []
+    _setup_pr(monkeypatch, tmp_path, _pr_stub(calls, _pr(), diff_text=diff("docs/a.md", "+x"), issue=INTAKE_ISSUE))
+    risk.run_pr("5")
+    assert _has(calls, "conclusion=success") and not _has(calls, "repos/o/r/issues/1")
+
+
+def _block(ref, level, run, bot="agent-bot", files=(), body="", user="agent-bot"):
+    pr = {"head": {"ref": ref}, "body": body, "user": {"login": user}}
+    return risk.intake_block(pr, level, list(files), "o/r", bot, run)
+
+
+def test_intake_rule_needs_the_author_app_and_fails_closed_on_an_unreadable_issue():
+    def issue(obj):
+        return lambda *a: json.dumps(obj) if obj else ""
+    forged = dict(INTAKE_ISSUE, user={"login": "mallory"})
+    assert _block("agent/1-x", "infra", issue(INTAKE_ISSUE)) == risk.INTAKE_MSG
+    assert _block("agent/1-x", "infra", issue(forged)) == ""
+    assert _block("agent/1-x", "infra", issue(forged), bot="") == risk.INTAKE_MSG
+    assert _block("agent/1-x", "infra", issue(PLAIN_ISSUE)) == ""
+    assert "could not be read" in _block("agent/1-x", "security", issue(None))
+    assert _block("feature/x", "infra", issue(None), user="human") == ""
+
+
+def test_intake_pr_may_not_touch_a_design_file_even_at_risk_none():
+    design = ["docs/a.md", "docs/design/0018-x.md"]
+    assert _block("agent/1-x", "none", lambda *a: json.dumps(INTAKE_ISSUE), files=design) == risk.INTAKE_MSG
+    assert _block("agent/1-x", "none", lambda *a: json.dumps(PLAIN_ISSUE), files=design) == ""
+
+
+def test_intake_rule_reads_every_linked_issue_and_an_author_app_pr_must_name_one():
+    issues = {"1": INTAKE_ISSUE, "3": PLAIN_ISSUE}
+
+    def run(*a):
+        return json.dumps(issues[a[1].rsplit("/", 1)[-1]])  # KeyError is not caught: only known issues are read
+    assert _block("agent/3-x", "infra", run, body="Closes #3\nRefs #1") == risk.INTAKE_MSG  # another issue's number
+    assert _block("agent/3-x", "infra", run, body="Closes #3") == ""
+    assert "names no issue" in _block("fix/x", "infra", run)  # a branch without a number
+    assert "names no issue" in _block("fix/x", "none", run, files=["docs/design/0018-x.md"])
+    assert _block("fix/x", "infra", run, user="Bankaifan") == ""  # the owner's own PR needs no issue
+    for ref in risk.NO_ISSUE_BRANCHES:
+        assert _block(f"{ref}2026-01-01", "security", run) == ""
+    unreadable = lambda *a: ""
+    assert _block("dependabot/x", "infra", unreadable, body="fixes #99", user="dependabot[bot]") == ""
+    assert "could not be read" in _block("fix/x", "infra", unreadable, body="Refs #99")
 
 
 def test_pr_paths_include_rename_source():
