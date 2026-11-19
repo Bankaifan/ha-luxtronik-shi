@@ -14,7 +14,7 @@ if [ "${1:-}" = lint ]; then
 else
   pip install -r "$root/requirements-lint.txt" pytest-timeout
   for f in requirements.txt requirements_test.txt; do
-    if [ -f "$f" ]; then pip install -r "$f"; fi
+    if [ -f "$root/$f" ]; then pip install -r "$root/$f"; fi
   done
 fi
 # Project-specific extra command: only from the environment (repo variable vars.EXTRA_INSTALL), never from a file in the
