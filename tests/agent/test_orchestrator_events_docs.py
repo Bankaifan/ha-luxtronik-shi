@@ -3,14 +3,20 @@ import re
 
 import pytest
 
+# The template's own ADR 0012 and docs/variables.md: a project has no synced copy of them (docs/ is not managed).
+pytestmark = pytest.mark.template_only
+
+
+def _doc(path):
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
 ROOT = pathlib.Path(__file__).parent.parent.parent
-if not (ROOT / "docs" / "decisions" / "0012-orchestrator-events.md").exists():
-    pytest.skip("template ADR 0012 is not part of this project", allow_module_level=True)
 PREFILTER = (ROOT / "tools" / "prefilter.py").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github" / "workflows" / "orchestrator.yml").read_text(encoding="utf-8")
 ROLE = (ROOT / ".agents" / "roles" / "orchestrator.md").read_text(encoding="utf-8")
-ADR = (ROOT / "docs" / "decisions" / "0012-orchestrator-events.md").read_text(encoding="utf-8")
-VARIABLES = (ROOT / "docs" / "variables.md").read_text(encoding="utf-8")  # where operators look up repo variables
+ADR = _doc(ROOT / "docs" / "decisions" / "0012-orchestrator-events.md")
+VARIABLES = _doc(ROOT / "docs" / "variables.md")  # where operators look up repo variables
 
 
 def reasons():
