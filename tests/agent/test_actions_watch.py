@@ -446,3 +446,14 @@ def test_dry_run_heal_writes_nothing(monkeypatch):
 def test_readonly_guard_rejects_workflow_dispatch():
     with pytest.raises(RuntimeError):
         aw.readonly(lambda *a: "")("workflow", "run", "orchestrator.yml")
+
+
+def test_watch_has_alive_heartbeat_job_for_workflow_run():
+    # Cause of #689: workflow_run deliveries of watch were skipped at job level, which liveness.last_success
+    # does not count. A no-op job must run on every workflow_run delivery, without a concurrency group.
+    jobs = WATCH.split("\njobs:\n", 1)[1]
+    alive = jobs.split("\n  watch:\n", 1)[0]
+    assert alive.lstrip().startswith("alive:")
+    assert "if: github.event_name == 'workflow_run'" in alive
+    assert "concurrency:" not in alive.replace("No concurrency:", "")
+    assert "run: echo" in alive

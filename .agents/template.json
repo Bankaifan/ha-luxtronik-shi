@@ -1,6 +1,6 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "2d719caf60af1a44def505380fb2a9cf100da8c2",
+  "synced_sha": "de7a913345f21343b0f6c00dc3f291f82b750977",
   "synced_version": "1.101",
   "managed": [
     ".github/workflows/",
