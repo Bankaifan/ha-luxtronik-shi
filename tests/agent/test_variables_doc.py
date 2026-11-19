@@ -3,10 +3,11 @@ import re
 
 import pytest
 
+# The template's own docs/variables.md: a project has no synced copy (the file is not managed), so nothing here applies there.
+pytestmark = pytest.mark.template_only
 ROOT = pathlib.Path(__file__).parent.parent.parent
-if not (ROOT / "docs" / "variables.md").exists():
-    pytest.skip("template docs/variables.md is not part of this project", allow_module_level=True)
-DOC = (ROOT / "docs" / "variables.md").read_text(encoding="utf-8")
+_DOC = ROOT / "docs" / "variables.md"
+DOC = _DOC.read_text(encoding="utf-8") if _DOC.is_file() else ""
 WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
 
 
@@ -26,7 +27,6 @@ def test_every_workflow_variable_has_a_row():
     assert workflow_variables() <= table_names(), sorted(workflow_variables() - table_names())
 
 
-@pytest.mark.template_only  # the template's own README; a project replaces it and keeps no such link
 def test_readmes_link_the_table():
     for name in ("README.md", "README.de.md"):
         assert "[docs/variables.md](docs/variables.md)" in (ROOT / name).read_text(encoding="utf-8"), name
