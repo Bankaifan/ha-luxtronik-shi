@@ -1,7 +1,9 @@
 {
   "files": {
+    ".agents/roles/cleaner.md": 1461,
     ".agents/roles/design-reviewer.md": 2140,
     ".agents/roles/developer.md": 4497,
+    ".agents/roles/intake.md": 600,
     ".agents/roles/orchestrator.md": 9027,
     ".agents/roles/reviewer.md": 2558,
     ".agents/roles/scout.md": 1309,
@@ -9,5 +11,5 @@
     ".agents/roles/unblocker.md": 3068,
     "AGENTS.md": 5800
   },
-  "total": 29344
+  "total": 31405
 }
