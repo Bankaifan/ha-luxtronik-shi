@@ -105,14 +105,6 @@
     {
       "path": ".github/workflows/template-sync.yml",
       "why": "sets up Python (PYTHON_VERSION or 3.13) before installing the pinned tools, as the project's install_tools.sh needs it (#193); to be proposed upstream in agent-template"
-    },
-    {
-      "path": "tools/train.py",
-      "why": "release_main records why a release failed and run_train prints it (#203); to be proposed upstream in agent-template"
-    },
-    {
-      "path": "tests/agent/test_train.py",
-      "why": "covers the failure reason and the red run of tools/train.py (#203)"
     }
   ]
 }
