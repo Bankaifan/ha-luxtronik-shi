@@ -97,6 +97,14 @@
     {
       "path": ".github/workflows/release.yml",
       "why": "project-only release workflow (not in the template): tags and publishes the integration from the CHANGELOG section"
+    },
+    {
+      "path": "tests/agent/test_install_tools_cwd.py",
+      "why": "covers the project's own tools/ci/install_tools.sh reading the requirements files from the script root (#193); not a template test"
+    },
+    {
+      "path": ".github/workflows/template-sync.yml",
+      "why": "sets up Python (PYTHON_VERSION or 3.13) before installing the pinned tools, as the project's install_tools.sh needs it (#193); to be proposed upstream in agent-template"
     }
   ]
 }
