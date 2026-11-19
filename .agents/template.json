@@ -97,6 +97,14 @@
     {
       "path": ".github/workflows/template-sync.yml",
       "why": "sets up Python (PYTHON_VERSION or 3.13) before installing the pinned tools, as the project's install_tools.sh needs it (#193); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tools/actions_watch.py",
+      "why": "skips a run on the GitHub API rate limit instead of failing (#208); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/agent/test_actions_watch.py",
+      "why": "covers the rate-limit skip of tools/actions_watch.py (#208)"
     }
   ]
 }
