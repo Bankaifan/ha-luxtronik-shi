@@ -18,6 +18,7 @@ import flow
 import ghcall
 import guard_mark
 import liveness
+import restart
 import trusted_issues
 
 PREFIX = "Canary: "
@@ -74,9 +75,12 @@ def stopped_stage(issue, pr, events, runs):
 
 
 def find_pr(number, run):
+    """The newest PR of the canary issue: its `agent/<N>-` PR, or the merged batch PR that landed it (decision 0018:
+    the member itself is then closed unmerged)."""
     prs = json.loads(run("pr", "list", "--state", "all", "--limit", "50", "--json",
-                         "number,createdAt,mergedAt,headRefName,labels,reviews"))
-    mine = [p for p in prs if flow.issue_number(p) == number]
+                         "number,createdAt,mergedAt,headRefName,labels,reviews,body"))
+    mine = [p for p in prs if flow.issue_number(p) == number or (
+        p.get("mergedAt") and p["headRefName"] == restart.BATCH_BRANCH and number in restart.own_issues(p.get("body")))]
     return max(mine, key=lambda p: p["createdAt"], default=None)
 
 

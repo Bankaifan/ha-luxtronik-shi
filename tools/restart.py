@@ -14,6 +14,9 @@ import sys
 import liveness
 from agent_guard import add_labels, park
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "check"))
+from check_pr_form import BATCH_BRANCH
+
 RESTART = "restart:1"
 _REFS = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\s+#(\d+)", re.IGNORECASE)
 _CLOSING = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", re.IGNORECASE)
@@ -40,7 +43,9 @@ def own_issues(body):
 
 
 def is_agent_branch(pr):
-    return (pr.get("headRefName") or "").startswith("agent/") and not pr.get("isCrossRepository")
+    """Same-repo agent/* PR. The train's batch (decision 0018) names its members' issues and replaces none of them."""
+    head = pr.get("headRefName") or ""
+    return head.startswith("agent/") and head != BATCH_BRANCH and not pr.get("isCrossRepository")
 
 
 def superseded(prs):

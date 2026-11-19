@@ -1,6 +1,7 @@
 name: train
 # No model: tools/train.py rebases the oldest approved agent PR that is BEHIND main and starts the conflict fix round
 # (design docs/design/0003-merge-train.md, 4.3). Runs right after every push to main, every 30 min as a fallback, and by hand.
+# Two or more ready PRs land as one batch PR on agent/batch (decision 0018; TRAIN_BATCH=off keeps the serial train).
 # Repo variable TRAIN=off disables it. Checkout is main only; PR data is read through gh as data, never executed.
 on:
   push:
@@ -50,4 +51,5 @@ jobs:
           OWNER_LANG: ${{ vars.OWNER_LANG || 'German' }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+          TRAIN_BATCH: ${{ vars.TRAIN_BATCH || 'on' }}
         run: python3 tools/train.py

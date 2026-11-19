@@ -57,7 +57,7 @@ def test_write_tokens_only_in_publish_and_the_report_fallback():
     writes = {name: re.findall(r"permission-[\w-]+: write", body) for name, body in JOBS.items()}
     assert writes["build"] == []
     assert writes["publish"] == ["permission-contents: write", "permission-pull-requests: write",
-                                 "permission-issues: write"]
+                                 "permission-issues: write", "permission-workflows: write"]
     assert writes["report"] == ["permission-issues: write"]
 
 
@@ -124,3 +124,13 @@ def test_force_and_mode_reach_main_through_env():
 
 def test_issue_flow_keeps_the_developer_label():
     assert "--label agent:dev" in JOBS["publish"]
+
+
+def test_tools_are_installed_from_the_base_checkout_so_project_requirements_are_found():
+    step = TEXT.split("- name: Install pinned tools")[1].split("- name:")[0]
+    assert "working-directory: base" in step and "run: bash tools/ci/install_tools.sh" in step
+
+
+def test_only_the_model_free_publish_job_may_push_workflow_files():
+    assert "permission-workflows: write" in JOBS["publish"] and "claude-code-action" not in JOBS["publish"]
+    assert all("permission-workflows" not in body for name, body in JOBS.items() if name != "publish")

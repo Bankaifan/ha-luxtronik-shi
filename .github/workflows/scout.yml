@@ -76,7 +76,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: python3 tools/scout_titles.py
       - id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         if: steps.pre.outputs.work == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -113,6 +113,7 @@ jobs:
             --max-turns 200
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(python3 tools/idea_route.py create:*),Bash(gh label create:*),Bash(gh api repos/${{ github.repository }}/dependabot/alerts?state=open),Bash(gh api repos/${{ github.repository }}/code-scanning/alerts?state=open)"
       - name: Run report (script, no model)
         if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}

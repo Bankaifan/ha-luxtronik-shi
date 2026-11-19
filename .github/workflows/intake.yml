@@ -100,7 +100,7 @@ jobs:
       # requires instead of its OIDC exchange; nothing here can write to GitHub. The run may be started by an outsider's
       # issue or comment, so the action's write-permission check on the actor is off: the step has nothing to protect.
       - id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         if: steps.gate.outputs.ok == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -119,6 +119,7 @@ jobs:
             --max-turns 15
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Edit(verdict.json)"
       # The model step may have written anywhere in the checkout: keep only the verdict, restore everything else.
       - name: Keep the verdict, restore a clean checkout

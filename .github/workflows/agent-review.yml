@@ -75,15 +75,22 @@ jobs:
           case "$labels" in
             *,parked,*) skip ;;
           esac
-          # One round per head SHA (marker label round:<sha7>), shared with the security reviewer.
-          case "$(guard round "$num" "$SHA")" in
-            limit)
-              guard park pr "$num" "review limit reached (3 reviews, 2 fix rounds)"
-              skip ;;
-          esac
+          # One round per head SHA (marker label round:<sha7>), shared with the security reviewer. The train's batch PR
+          # (exactly agent/batch, by the author app; decision 0018) is a script product: no round is counted, so a
+          # refused head is never a lost round and the batch is never parked.
+          if [ "$BRANCH" = agent/batch ] && guard same "$author" "$AUTHOR_BOT"; then
+            echo "Batch PR: no review round"
+          else
+            case "$(guard round "$num" "$SHA")" in
+              limit)
+                guard park pr "$num" "review limit reached (3 reviews, 2 fix rounds)"
+                skip ;;
+            esac
+          fi
           echo "pr=$num" >> "$GITHUB_OUTPUT"; echo "bhash=$bhash" >> "$GITHUB_OUTPUT"
       # Rebased head with the patch a model already approved: script approval (tools/reapprove.py, from main). Any refusal
-      # or error leaves approved unset and the model reviews as before.
+      # or error leaves approved unset and the model reviews as before. The train's batch PR (agent/batch, decision
+      # 0018) is a script product: the script approves it or nobody does, no model reviews it and the train closes it.
       - name: Re-approve an unchanged patch without the model
         id: reapprove
         if: steps.round.outputs.skip != 'true'
@@ -95,7 +102,7 @@ jobs:
       # The change as plain files, so the reviewer reads it with Read instead of shell output that can be cut off
       # (same as agent-security-review.yml). Data only: nothing here is run, the checkout stays main.
       - name: Stage the change as files
-        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
+        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true' && env.BRANCH != 'agent/batch'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.round.outputs.pr }}
@@ -115,14 +122,14 @@ jobs:
       # Round 2 and 3: also stage the delta since the last reviewed head and the earlier findings. Round 1, a rebase
       # (head not an ancestor) or a compare error stage nothing and the reviewer keeps the full diff.
       - name: Stage the delta since the last reviewed head
-        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
+        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true' && env.BRANCH != 'agent/batch'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.round.outputs.pr }}
         run: python3 tools/review_delta.py "$PR" "$SHA"
       - id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
-        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true'
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+        if: steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true' && env.BRANCH != 'agent/batch'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -153,6 +160,7 @@ jobs:
             --max-turns 20
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr review:*),Bash(gh issue view:*)"
       # Approved and on a CODEOWNERS path of the owner: GitHub needs his approval, so his review is requested (no label, no note).
       - name: Request the code owner's review for an approved PR on a CODEOWNERS path

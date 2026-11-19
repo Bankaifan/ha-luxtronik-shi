@@ -2,6 +2,8 @@ import importlib.util
 import json
 import pathlib
 
+import pytest
+
 _path = pathlib.Path(__file__).parent.parent.parent / "tools" / "prefilter.py"
 _spec = importlib.util.spec_from_file_location("prefilter", _path)
 mod = importlib.util.module_from_spec(_spec)
@@ -134,7 +136,7 @@ def run_main(monkeypatch, tmp_path, dev, bodies, trusted, merged=(), waiting=(),
         if args[:2] == ("issue", "list") and "agent:dev" in args:
             return json.dumps([{"number": n, "labels": [{"name": x} for x in labs]} for n, labs in dev.items()])
         if args[:2] == ("issue", "list"):
-            assert args[-1] == "number,body"
+            assert args[-1] == "number,body,title,labels"
             return json.dumps([{"number": n, "body": b} for n, b in bodies.items()])
         if "merged" in args:
             n = int(args[args.index("--search") + 1].split()[0][1:])
@@ -230,6 +232,32 @@ def test_event_pr_closed():
     assert reason("pull_request", "closed") == (False, "no-match")
 
 
+def test_the_batch_pr_and_a_member_closed_as_landed_wake_nobody():
+    assert reason("pull_request", "closed", closing={5}, batched=True) == (False, "batch")
+    assert reason("pull_request", "opened", agent_pr=True, free_prs=0, batched=True) == (False, "batch")
+    assert reason("pull_request", "closed", merged=True, closing_agent_dev=True, batched=True) == (True, "merged-pr")
+    train_note = {"author": {"login": "bankaifan-agent-author"}, "body": "Merged with #50."}
+    assert mod.batched([{"author": {"login": "stranger"}, "body": "x"}, train_note, {"author": {"login": "stranger"}, "body": "y"}])
+    assert not mod.batched([{**train_note, "author": {"login": "stranger"}}])
+    assert not mod.batched([train_note, {**train_note, "body": "Superseded by #50"}])
+
+
+@pytest.mark.parametrize("state, batch, landed", [
+    ("CLOSED", {"state": "MERGED", "headRefName": "agent/batch", "isCrossRepository": False}, True),
+    ("OPEN", {"state": "MERGED", "headRefName": "agent/batch", "isCrossRepository": False}, False),
+    ("CLOSED", {"state": "CLOSED", "headRefName": "agent/batch", "isCrossRepository": False}, False),
+    ("CLOSED", {"state": "MERGED", "headRefName": "agent/7-x", "isCrossRepository": False}, False),
+    ("CLOSED", {"state": "MERGED", "headRefName": "agent/batch", "isCrossRepository": True}, False),
+])
+def test_the_train_note_counts_only_on_a_closed_pr_and_for_a_merged_batch(state, batch, landed):
+    """The developer model posts as the author app too: `Merged with #N.` alone must not silence the orchestrator."""
+    note = {"author": {"login": "bankaifan-agent-author"}, "body": "Merged with #50."}
+    calls = []
+    got = mod.landed_in_batch({"state": state, "comments": [note]}, lambda *a: calls.append(a) or json.dumps(batch))
+    assert got is landed and [c[:3] for c in calls] == ([("pr", "view", "50")] if state == "CLOSED" else [])
+    assert not mod.landed_in_batch({"state": "CLOSED", "comments": []}, lambda *a: pytest.fail("no lookup without the note"))
+
+
 def test_event_review_submitted():
     ok = {"agent_pr": True, "reviewer_ok": True}
     assert reason("pull_request_review", "submitted", review_state="APPROVED", **ok) == (True, "review")
@@ -279,3 +307,13 @@ def test_handover_done_today(monkeypatch):
     assert "head:agent/orchestrator-handover-" in calls[0][calls[0].index("--search") + 1]
     monkeypatch.setattr(mod, "gh", lambda *a: "[]")
     assert not mod.handover_done_today()
+
+
+def test_a_failure_issue_waits_for_its_second_failure():
+    def issue(body, title="Failing workflow: x.yml / j / s", labels=("prio:2",)):
+        return {"title": title, "body": body, "labels": [{"name": n} for n in labels]}
+
+    assert mod.first_failure(issue("The workflow x.yml failed in job j, step s.\nFailures: 1\nLast run: u\n"))
+    assert not mod.first_failure(issue("The workflow x.yml failed in job j, step s.\nFailures: 2\nLast run: u\n"))
+    assert not mod.first_failure(issue("Failures: 1", labels=("prio:1",)))  # red main: no second run may ever come
+    assert not mod.first_failure(issue("Goal: x\nFailures: 1\nFiles: a.py", title="V1-X: owner issue"))

@@ -3,6 +3,7 @@
 Every agent run loads AGENTS.md plus its role file, so their growth is capped. The caps live in docs/budgets.json
 (bytes per file, plus a total). Shrinking never fails. Fails: a file over its cap, a file without a budget entry,
 the total over its cap. Raising a cap is an edit of docs/budgets.json, which shows up in the diff.
+Skipped in a downstream project: its docs/budgets.json is not synced, so a new template role would fail there.
 """
 import json
 import pathlib
@@ -48,6 +49,9 @@ def errors(sizes, budgets):
 
 def main(root=None) -> int:
     root = pathlib.Path(root) if root is not None else pathlib.Path(__file__).resolve().parent.parent.parent
+    if (root / ".agents" / "template.json").is_file():  # the caps are the template's; a project gets the files by sync
+        print("check_budget: skipped (downstream project: .agents/template.json exists)")
+        return 0
     try:
         budgets = load_budgets(root)
         sizes = {name: (root / name).stat().st_size for name in instruction_files(root)}

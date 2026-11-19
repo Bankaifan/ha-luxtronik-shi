@@ -4,7 +4,7 @@ Unset keeps the command list; the 0004 deny settings stay in both cases. The swi
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 PATCHES = ROOT / ".agents" / "workflow-patches"
 MODEL_JOBS = ("agent-dev.yml", "agent-fix.yml")

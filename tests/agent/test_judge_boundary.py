@@ -10,7 +10,7 @@ import re
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 MODEL_ACTION = "anthropics/claude-code-action"
 APP_ACTION = "actions/create-github-app-token"
 READ = ["Read", "Glob", "Grep"]

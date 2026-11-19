@@ -94,7 +94,7 @@ jobs:
           gh pr diff "$PR" | python3 tools/ci/stage_review.py .review >> "$GITHUB_OUTPUT"
           wc -l .review/pr.diff .review/skipped.txt
       - id: claude
-        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         if: steps.pr.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -122,6 +122,7 @@ jobs:
             --max-turns ${{ steps.stage.outputs.turns }}
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*)"
       # The model has no write or comment tools: a script posts the verdict from its final reply. `changes` also gets a
       # request-changes review by the approver app, which starts a normal agent-fix round. No verdict: denials are logged.

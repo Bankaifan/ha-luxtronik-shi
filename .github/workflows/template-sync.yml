@@ -155,6 +155,9 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
+          # A template release usually changes workflow files; without this scope GitHub refuses the push of the sync
+          # branch. No model runs in this job: it only applies the patch the build job made from the template.
+          permission-workflows: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] this job pushes the branch with the app token persisted by checkout
         with:
           ref: ${{ github.sha }}

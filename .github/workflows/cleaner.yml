@@ -60,7 +60,7 @@ jobs:
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
-      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
+      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
         if: steps.branch.outputs.go == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -81,4 +81,5 @@ jobs:
             --max-turns 200
             --setting-sources user
             --settings .github/claude-judge-settings.json
+            --permission-mode default
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git rm:*),Bash(git add:*),Bash(git commit:*),Bash(git push origin HEAD),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git restore:*),Bash(gh pr create:*),Bash(make check),Bash(graphify affected:*),Bash(graphify explain:*),Bash(wc:*),Bash(ls:*)"

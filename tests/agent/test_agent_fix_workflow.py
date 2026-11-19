@@ -45,3 +45,8 @@ def test_fix_job_steps_after_open_are_all_gated():
 
 def test_a_failed_hand_over_parks_with_the_marker_comment_so_the_cool_down_grows():
     assert 'guard park pr "$pr"' in TEXT and "label pr \"$pr\" parked" not in TEXT
+
+
+def test_the_batch_pr_gets_no_fix_round_whatever_started_the_run():
+    gate = TEXT.index('if [ "$branch" = agent/batch ]; then echo "Batch PR: no fix round"; echo "fix=false"')
+    assert TEXT.index('branch="$RUN_BRANCH"') < gate < TEXT.index('echo "pr=$pr" >> "$GITHUB_OUTPUT"')  # before any label

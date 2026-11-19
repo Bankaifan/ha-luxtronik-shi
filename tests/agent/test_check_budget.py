@@ -79,3 +79,9 @@ def test_malformed_budgets_file_is_an_error(repo, capsys):
 
 def test_repo_is_within_its_budgets(capsys):
     assert mod.main(REPO) == 0, capsys.readouterr().out
+
+
+def test_a_downstream_project_is_skipped(repo, capsys):
+    (repo / ".agents" / "roles" / "new.md").write_bytes(b"x")  # a role the template added, no entry in the project's file
+    (repo / ".agents" / "template.json").write_text("{}")
+    assert mod.main(repo) == 0 and "skipped (downstream" in capsys.readouterr().out
