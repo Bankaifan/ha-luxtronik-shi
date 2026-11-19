@@ -383,6 +383,29 @@ def test_release_main_refuses_a_bad_fragment_and_pushes_nothing(tmp_path):
     assert g(origin, "branch", "--list", "release/next") == ""
 
 
+def test_release_main_names_the_cause_of_a_bad_fragment(tmp_path):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "step: y\n")
+    why = []
+    assert release_main(str(origin), why=why) is None
+    assert len(why) == 1 and "10.md: no changelog line" in why[0]
+
+
+def test_release_main_names_the_cause_of_a_failed_git_call(tmp_path):
+    why = []
+    assert release_main(str(tmp_path / "missing.git"), why=why) is None
+    assert len(why) == 1 and why[0].startswith("git fetch exited")
+
+
+def test_run_train_prints_the_cause_of_a_failed_release(monkeypatch, capsys):
+    def fake(remote, token="", base="main", notes=None, why=None):
+        why.append("git push exited 1: remote rejected")
+
+    monkeypatch.setattr(train, "release_main", fake)
+    assert train.run_train(ENV, Gh([])) == 1
+    assert "release: failed because: git push exited 1: remote rejected" in capsys.readouterr().out
+
+
 def test_release_main_refuses_a_commit_touching_other_paths(tmp_path, monkeypatch):
     origin, work = origin_repo(tmp_path)
     merge_fragment(work, "10.md", "first change\n")
@@ -396,7 +419,7 @@ def test_fragments_on_main_open_one_release_pr_and_a_second_run_updates_it(tmp_p
     merge_fragment(work, "10.md", "first change\n")
     main_before = g(origin, "rev-parse", "main")
     monkeypatch.setattr(train, "release_main",
-                        lambda remote, token="", base="main", notes=None: release_main(str(origin), notes=notes))
+                        lambda remote, token="", base="main", notes=None, why=None: release_main(str(origin), notes=notes))
     run = Gh([])
     assert train.run_train(ENV, run) == 0
     creates = [c for c in run.calls if c[:2] == ("pr", "create")]
