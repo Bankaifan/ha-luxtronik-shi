@@ -32,6 +32,7 @@ jobs:
       AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
       APPROVER_BOT: ${{ vars.APPROVER_BOT }}
       GH_REPO: ${{ github.repository }}
+      OWNER: ${{ vars.OWNER || github.repository_owner }}
     steps:
       - name: Fail if a required repo variable is unset
         env:
@@ -115,7 +116,7 @@ jobs:
             `changes` is only for findings in the code.
             Do not post anything yourself: end your final reply with your verdict, whose first line is exactly
             `security-review: approve ${{ env.SHA }}` or `security-review: changes ${{ env.SHA }}`, followed by the
-            reasons (file, line). A script posts it as the PR comment. Do not post a note for Daniel (a script does).
+            reasons (file, line). A script posts it as the PR comment. Post nothing else.
           claude_args: >-
             --model sonnet
             --max-turns ${{ steps.stage.outputs.turns }}
@@ -139,8 +140,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.pr.outputs.num }}
         run: python3 tools/ci/risk.py verdict "$PR" "$SHA"
-      # Whichever of agent-review / agent-security-review finishes last marks the PR for Daniel (idempotent).
-      - name: Mark an approved PR that waits for Daniel
+      # Whichever of agent-review / agent-security-review finishes last requests the code owner's review (idempotent).
+      - name: Request the code owner's review for an approved PR on a CODEOWNERS path
         if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}

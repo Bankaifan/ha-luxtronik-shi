@@ -13,7 +13,7 @@ Anything else, or a missing/invalid template.json, stays in the project.
 The model step runs `create` with the project GH_TOKEN only: project ideas are opened at once,
 template ideas are queued as JSON under /tmp/idea-queue. TEMPLATE_GH_TOKEN exists only in the
 later `flush` step (no model), so a model never has it. Labels are an allowlist (prio:2, prio:3),
-so approved/auto-ok can never be set.
+so no other label can ever be set.
 """
 import argparse
 import json

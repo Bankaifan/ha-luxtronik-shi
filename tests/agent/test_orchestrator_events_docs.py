@@ -20,24 +20,25 @@ def reasons():
 
 def test_every_prefilter_reason_is_documented_in_role_and_adr():
     found = reasons()
-    assert len(found) == 11, found
+    assert len(found) == 9, found
     for name in found:
         assert f"`{name}`" in ROLE, name
         assert f"`{name}`" in ADR, name
 
 
-def test_adr_table_lists_the_same_reasons_as_the_code():
+def test_adr_table_lists_every_reason_of_the_code():
     table = ADR.split("| Event (action)", 1)[1].split("Any other combination", 1)[0]
-    # Reason names are the backticked words followed by a colon (`startable-issue`: ...); `needs-human` is not one.
-    assert set(re.findall(r"`([a-z-]+)`:", table)) == reasons()
+    # Reason names are the backticked words followed by a colon (`startable-issue`: ...).
+    # The ADR is history: it also lists the two owner rows that decision 0017 removed.
+    assert reasons() <= set(re.findall(r"`([a-z-]+)`:", table))
 
 
 def test_adr_names_the_triggers_that_exist_in_the_workflow():
     for trigger in ("issue_comment", "pull_request_target", "pull_request_review"):
         assert f"  {trigger}:" in WORKFLOW, trigger
         assert f"`{trigger}`" in ADR, trigger
-    assert "types: [opened, edited, closed, labeled]" in WORKFLOW
-    assert "`issues` opened, edited, closed, labeled" in ADR
+    assert "types: [opened, edited, closed]" in WORKFLOW
+    assert "`issues` opened, edited, closed;" in ADR
 
 
 def test_switch_is_documented_where_operators_look():

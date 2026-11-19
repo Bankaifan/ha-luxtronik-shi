@@ -1,7 +1,7 @@
 """List the open issues the orchestrator may act on, as one line of JSON.
 
-Trusted: authored by OWNER, or labelled `approved` / `auto-ok` where the latest label event
-on the issue timeline was made by OWNER. Everything else is never shown to the agent.
+Trusted: authored by OWNER, or one of the script-written classes below. Everything else is never shown to the
+agent; a label never makes an issue trusted.
 Output is sorted by prio (1, 2, 3, unlabelled), then oldest first; `prio` is 4 for unlabelled.
 Also trusted: an issue created by the orchestrator (author AUTHOR_BOT) from a merged design study. Its body
 has a line `Design: docs/design/NNNN-slug.md` naming a file that exists on the checked-out `main`, and it
@@ -10,6 +10,8 @@ Also trusted: a template sync issue (author AUTHOR_BOT, title starting `Template
 `Template-Sync: <40 hex>`; design 0001, section 4.4).
 Also trusted: an issue a guard script wrote (liveness `Overdue scheduled run`): author AUTHOR_BOT, not an `idea`,
 and a valid HMAC signature over title and body (tools/guard_mark.py, repo secret GUARD_KEY). No key, no trust.
+Also trusted: an intake slip (tools/outside_intake.py): author AUTHOR_BOT, a body line `Intake: #<digits>`, not an
+`idea`. Outside issues and scout ideas themselves are never trusted; a PR for an intake slip must be risk `none`.
 Needs the gh CLI (GH_TOKEN, GH_REPO). Environment: OWNER (default Bankaifan), AUTHOR_BOT (login of the author app).
 """
 import json
@@ -21,7 +23,6 @@ import sys
 import guard_mark
 from agent_guard import same_login  # logins compare as `x`, `app/x` and `x[bot]` alike
 
-GATED = ("approved", "auto-ok")
 PRIOS = ("prio:1", "prio:2", "prio:3")  # counted only when Daniel or the author app set the label
 NO_PRIO = 4  # unlabelled (or a stranger's prio label) sorts after prio:3
 _DESIGN = re.compile(r"^Design: (docs/design/\d{4}-[a-z0-9-]+\.md)\s*$", re.MULTILINE)
@@ -64,6 +65,27 @@ def is_guard_issue(issue, author_bot, key):
     return guard_mark.verify(issue.get("title"), issue.get("body"), key)
 
 
+INTAKE = re.compile(r"^Intake: #(\d+)\s*$", re.MULTILINE)
+
+
+def by_app(author, author_bot):
+    """True if a gh `author` object is the author app itself: `is_bot`, or a login form no person can have
+    (`app/<slug>`, `<slug>[bot]`). A person whose account is named like the app slug is not the app (`same_login`
+    alone cannot tell them apart)."""
+    login = (author or {}).get("login") or ""
+    return same_login(login, author_bot) and (
+        (author or {}).get("is_bot") is True or login.startswith("app/") or login.endswith("[bot]"))
+
+
+def is_intake_slip(issue, author_bot):
+    """True for a slip the intake script wrote: author app, a line `Intake: #N`, not an idea."""
+    if not by_app(issue.get("author"), author_bot):
+        return False
+    if any(lab["name"] == "idea" for lab in issue.get("labels", [])):
+        return False
+    return bool(INTAKE.search(issue.get("body") or ""))
+
+
 def label_set_by(events, label, actor):
     """True if the latest label/unlabel event for `label` is a `labeled` made by `actor`."""
     last = None
@@ -84,26 +106,25 @@ def prio_of(labels, events, owner, author_bot):
 
 
 def classify(issue, events, owner, author_bot="", exists=os.path.isfile, guard_key=""):
-    """Return a dict for a trusted issue, or None. `events` is only needed for gated labels."""
+    """Return a dict for a trusted issue, or None. `events` is only needed for prio labels."""
     labels = {lab["name"] for lab in issue.get("labels", [])}
-    by_owner = {g for g in GATED if g in labels and label_set_by(events, g, owner)}
     authored = same_login((issue.get("author") or {}).get("login"), owner)
     design = design_ref(issue, author_bot, exists)
     sync = is_sync_issue(issue, author_bot)
     guard = is_guard_issue(issue, author_bot, guard_key)
-    if not authored and not by_owner and not design and not sync and not guard:
+    intake = is_intake_slip(issue, author_bot)
+    if not authored and not design and not sync and not guard and not intake:
         return None
     return {
         "number": issue["number"],
         "title": issue["title"],
         "authored_by_owner": authored,
-        "approved": "approved" in by_owner,
-        "auto_ok": "auto-ok" in by_owner,
         "design": design,
         "template_sync": sync,
         "guard": guard,
+        "intake": intake,
         "prio": prio_of(labels, events, owner, author_bot),
-        "labels": sorted((labels - set(GATED)) | by_owner),
+        "labels": sorted(labels),
     }
 
 
@@ -127,7 +148,7 @@ def main() -> int:
     result = []
     for issue in issues:
         names = {lab["name"] for lab in issue["labels"]}
-        events = timeline(issue["number"], repo) if names & (set(GATED) | set(PRIOS)) else []
+        events = timeline(issue["number"], repo) if names & set(PRIOS) else []
         item = classify(issue, events, owner, author_bot, guard_key=guard_key)
         if item:
             result.append(item)

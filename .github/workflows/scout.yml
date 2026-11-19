@@ -106,8 +106,7 @@ jobs:
             `python3 tools/idea_route.py create --title "<title>" --body "<body>" --files <comma-separated repo paths the idea touches> --label prio:2`
             (prio:2 = bug or missing guard, prio:3 = feature, improvement; run `gh label create <label> --force` first, one call per label).
             The tool adds the label `idea` and opens ideas that only touch template-managed files in the template repo, all others here.
-            Do not call `gh issue create` yourself. Never
-            `auto-ok` or `approved`: Daniel sets those himself. If nothing is worth doing, open nothing. Never edit files, never merge.
+            Do not call `gh issue create` yourself. If nothing is worth doing, open nothing. Never edit files, never merge.
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
             --model ${{ env.MODEL }}

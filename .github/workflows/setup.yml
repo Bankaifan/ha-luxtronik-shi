@@ -46,7 +46,7 @@ jobs:
           IDEAS_PER_WEEK: ${{ vars.IDEAS_PER_WEEK }}
           STATUS_INTERVAL: ${{ vars.STATUS_INTERVAL }}
           UNBLOCKER: ${{ vars.UNBLOCKER }}
-          ANSWER_RECEIVER: ${{ vars.ANSWER_RECEIVER }}
+          INTAKE: ${{ vars.INTAKE }}
           NIGHTLY_HEAVY_TESTS: ${{ vars.NIGHTLY_HEAVY_TESTS }}
         run: |
           # row NAME DEFAULT VALUE: an unset or empty variable means the default, as in the workflows' || fallbacks
@@ -64,7 +64,7 @@ jobs:
             row IDEAS_PER_WEEK 3 "$IDEAS_PER_WEEK"
             row STATUS_INTERVAL "30 public / 60 private" "$STATUS_INTERVAL"
             row UNBLOCKER on "$UNBLOCKER"
-            row ANSWER_RECEIVER on "$ANSWER_RECEIVER"
+            row INTAKE on "$INTAKE"
             row NIGHTLY_HEAVY_TESTS false "$NIGHTLY_HEAVY_TESTS"
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - id: app
@@ -80,7 +80,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          for l in agent:dev agent:review model:sonnet review:1 review:2 review:3 needs-human unblock:1 idea auto-ok approved prio:1 prio:2 prio:3; do
+          for l in agent:dev model:sonnet review:1 review:2 review:3 parked idea prio:1 prio:2 prio:3; do
             gh label create "$l" --force
           done
       - name: Report Dependabot secrets (best effort)

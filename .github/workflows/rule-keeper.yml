@@ -57,6 +57,14 @@ jobs:
           branch="agent/rule-keeper-$(date +%F)"
           git checkout -b "$branch"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      # `make check` needs ruff, pytest, actionlint and zizmor; the allow list only has the exact command `make check`.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ vars.PYTHON_VERSION || '3.x' }}
+      - name: Install pinned CI tools (ruff, pytest, actionlint, zizmor)
+        env:
+          EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
+        run: bash tools/ci/install_tools.sh
       - id: claude
         uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         env:
@@ -70,7 +78,7 @@ jobs:
           prompt: |
             You are the rule keeper of ${{ github.repository }}. Read AGENTS.md, .agents/roles/*.md, tools/check/,
             the last 30 merged PRs with reviews and comments (gh pr list --state merged --limit 30; gh pr view --comments)
-            and all PRs labeled needs-human. Look for:
+            and all PRs labeled parked. Look for:
             1. rules a script could check (propose the script in tools/check/, remove the rule text),
             2. rules that never mattered (propose removal),
             3. repeated failures where a rule was missing,
@@ -84,9 +92,9 @@ jobs:
             not edited here; name them in the PR body.
             If nothing is worth changing, do nothing. Otherwise first run `gh pr list --state open --search "head:agent/rule-keeper-"`
             and stop if one is open. The workflow already created the branch `${{ steps.branch.outputs.branch }}` from main and
-            checked it out: make the edits on it (do not create, switch or check out branches yourself), run `make check`,
-            commit, run `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
-            Never edit main directly, never merge. Daniel merges.
+            checked it out: make the edits on it (do not create, switch or check out branches yourself), run plain `make check`
+            (the tools are already installed: never `pip install`, no `&&`, `;` or redirects), commit, run `git push origin HEAD` and open ONE PR (English, ASCII title, body max 5 lines) with a reason per change.
+            Never edit main directly, never merge: the PR takes the normal path (CI, reviewer, train).
             Finish with the required last line `Conclusion: <one sentence: what you found or why you did nothing>`.
           claude_args: >-
             --model ${{ env.MODEL }}

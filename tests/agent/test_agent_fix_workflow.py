@@ -41,3 +41,7 @@ def test_fix_job_steps_after_open_are_all_gated():
     # The agent run and checkout are among the gated steps.
     assert any("uses: actions/checkout@" in s for s in after)
     assert any("anthropics/claude-code-action@" in s for s in after)
+
+
+def test_a_failed_hand_over_parks_with_the_marker_comment_so_the_cool_down_grows():
+    assert 'guard park pr "$pr"' in TEXT and "label pr \"$pr\" parked" not in TEXT

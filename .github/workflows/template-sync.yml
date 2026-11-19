@@ -1,7 +1,7 @@
 name: template-sync
 # Daily poll (designs 0001, 0011) and the scripted sync (design 0014). No model.
 # Off when the repo variable TEMPLATE_SYNC is `off`. TEMPLATE_SYNC_APPLY `off` (default on) keeps the issue-only report.
-# TEMPLATE_SYNC_MODE `all` (default) skips the version gate; so does the `force` input. `version` keeps the gate.
+# TEMPLATE_SYNC_MODE `version` (default): one sync per template release (its VERSION moved). `all` or the `force` input: every template commit.
 # build: template reads and the script from base/ (read token only); make check in work/ with no token; no push.
 # publish: the only job with write tokens; git and gh only, the patch and the body are data from build.
 # report: the issue flow, when TEMPLATE_SYNC_APPLY is off or build failed (red check, error in the gate or apply).
@@ -49,7 +49,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           SYNC_FORCE: ${{ inputs.force == true }}
-          SYNC_ALL: ${{ (vars.TEMPLATE_SYNC_MODE || 'all') == 'all' }}
+          SYNC_ALL: ${{ (vars.TEMPLATE_SYNC_MODE || 'version') == 'all' }}
         run: |
           python3 - <<'EOF'
           import os
@@ -216,7 +216,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           SYNC_FORCE: ${{ inputs.force == true }}
-          SYNC_ALL: ${{ (vars.TEMPLATE_SYNC_MODE || 'all') == 'all' }}
+          SYNC_ALL: ${{ (vars.TEMPLATE_SYNC_MODE || 'version') == 'all' }}
         run: >-
           python3 -c "import os, sys; sys.path.insert(0, 'tools'); import template_sync;
           sys.exit(template_sync.main(force=os.environ['SYNC_FORCE'] == 'true',

@@ -1,9 +1,9 @@
-"""Stalled agent:dev issues (issue #366): restart once, then park with Daniel. Model-free, called by status.py.
+"""Stalled agent:dev issues (issue #366): restart once, then park. Model-free, called by status.py.
 
 An open issue with agent:dev is stalled when no open PR closes it (closing keywords only, `Refs` does not count), no
 queued or in-progress agent-dev run covers it, and the agent:dev label is older than STALL_MIN minutes.
   first stall:  stalled:1 is set, agent:dev is removed and set again (the restart of restart.restart_issue, no slip)
-  second stall: needs-human, OWNER as assignee, German yes/no note with the decision marker (yes restarts, no closes)
+  second stall: parked (label and one comment; status.py un-parks it after the cool-down)
 A run covers an issue if its title names the issue or the issue title, or names no issue at all (in doubt: no restart).
 Issues in `skip` were handled by the orphan step of status.py in the same run and are left alone.
 Reads: open PRs, queued and in-progress agent-dev runs. Writes: the labels and comments above, and the stalled:1 mark
@@ -14,7 +14,7 @@ import json
 import re
 import subprocess
 
-import decision
+import agent_guard
 import liveness
 from agent_guard import add_labels
 
@@ -26,13 +26,6 @@ _NUMBER = re.compile(r"#\d+\b")
 NOTE_RESTART = (
     f"Status run: agent:dev for more than {STALL_MIN} min with no queued or running agent-dev run and no open PR "
     "that closes this issue. Restarting once (stalled:1): agent:dev is set again."
-)
-NOTE_PARKED = (
-    "Hallo Daniel, @Bankaifan, dieses Issue haengt fest: agent:dev steht, aber seit mehr als "
-    f"{STALL_MIN} min laeuft dafuer kein Agent-Lauf und kein offener PR schliesst es, auch nach dem einen "
-    "automatischen Neustart (stalled:1) nicht. Schlimmster Fall: die Aufgabe bleibt liegen, sonst passiert nichts. "
-    "Frage: Soll die Aufgabe neu gestartet werden (ja) oder das Issue geschlossen werden (nein)?\n"
-    + decision.build(yes="restart-issue", no="close-issue")
 )
 
 
@@ -66,7 +59,7 @@ def covers(run, issue):
 def stalled(issues, closed, runs, labeled_at, now):
     out = []
     for i in issues:
-        if "needs-human" in names(i) or i["number"] in closed or any(covers(r, i) for r in runs):
+        if "parked" in names(i) or i["number"] in closed or any(covers(r, i) for r in runs):
             continue
         if minutes_since(labeled_at(i), now) > STALL_MIN:
             out.append(i)
@@ -82,18 +75,7 @@ def restart(issue, run):
     add_labels("issue", n, ["agent:dev"], run)
 
 
-def park(issue, owner, run):
-    """Second stall: needs-human, owner as assignee (issues get no review request), the German note once."""
-    n = issue["number"]
-    add_labels("issue", n, ["needs-human"], run)
-    try:
-        run("issue", "edit", str(n), "--add-assignee", owner)
-    except subprocess.CalledProcessError:
-        print(f"assignee {owner} on issue #{n} failed")
-    liveness.post_comment("issue", n, NOTE_PARKED, run)
-
-
-def check(issues, labeled_at, now, run, owner, skip=()):
+def check(issues, labeled_at, now, run, skip=()):
     """Actions taken, as text for the status run. Never raises: a failing query or write only ends the check."""
     actions = []
     try:
@@ -113,8 +95,8 @@ def check(issues, labeled_at, now, run, owner, skip=()):
                 continue
             try:
                 if STALLED in names(i):
-                    park(i, owner, run)
-                    actions.append(f"stalled issue #{n}: parked with Daniel")
+                    agent_guard.park("issue", n, f"agent:dev stalled again after the one restart ({STALLED})", run)
+                    actions.append(f"stalled issue #{n}: parked")
                 else:
                     restart(i, run)
                     actions.append(f"stalled issue #{n}: agent:dev set again (once)")

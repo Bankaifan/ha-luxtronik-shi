@@ -84,14 +84,12 @@ def read_version(text):
     return value
 
 
-def _major(version):
-    return int(version.split(".")[0])
-
-
 def needs_sync(template_version, synced_version):
-    """True when the template x is greater than the recorded x; no record counts as x = 0."""
-    recorded = _major(synced_version) if synced_version else 0
-    return _major(read_version(template_version)) > recorded
+    """True when the template version is greater than the recorded one: one sync per template release, because the
+    template's VERSION moves only when its owner merges a release PR. No record counts as 0.0."""
+    def key(v):
+        return tuple(int(n) for n in v.split("."))
+    return key(read_version(template_version)) > key(read_version(synced_version) if synced_version else "0.0")
 
 
 def sync_lines(changelog, cap=SYNC_CAP):
@@ -392,7 +390,7 @@ def main(force=False, mode="version") -> int:
         return 1
     synced_version = cfg.get("synced_version", "")
     if not force and mode != "all" and not needs_sync(version, synced_version):
-        print("template-sync: x unchanged, skipped")
+        print("template-sync: no new template release, skipped")
         return 0
     try:
         sync = sync_lines(read_template_file(template, "CHANGELOG.md", main_sha))

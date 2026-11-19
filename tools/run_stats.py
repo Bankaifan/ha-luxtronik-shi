@@ -25,7 +25,7 @@ CLAUDE_MARK = "claude-code-action"
 LIMIT_RE = re.compile(r"rate.?limit|usage limit|too many requests|\b429\b", re.IGNORECASE)
 ROLES = {"orchestrator.yml": "orchestrator", "agent-dev.yml": "dev", "agent-fix.yml": "fix",
          "agent-review.yml": "review", "agent-security-review.yml": "security review", "scout.yml": "scout",
-         "unblocker.yml": "unblocker", "answer-receiver.yml": "answer receiver", "rule-keeper.yml": "rule keeper"}
+         "unblocker.yml": "unblocker", "rule-keeper.yml": "rule keeper", "intake.yml": "intake"}
 
 
 def parse_time(text):

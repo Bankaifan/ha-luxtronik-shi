@@ -134,7 +134,7 @@ def test_required_contexts_null_cases(tmp_path):
 
 
 def test_waits_for_daniel():
-    assert st.waits_for(pr(labels=["needs-human"]), "Bankaifan") == "needs-human"
+    assert st.waits_for(pr(labels=["parked"]), "Bankaifan") == "parked"
     assert st.waits_for(pr(reviewRequests=[{"login": "Bankaifan"}]), "Bankaifan") == "waiting for Daniel"
     ready = pr(reviewDecision="REVIEW_REQUIRED", statusCheckRollup=[{"conclusion": "SUCCESS"}])
     assert st.waits_for(ready, "Bankaifan") == "waiting for code owner review"
@@ -153,7 +153,7 @@ def test_orphan_issue_needs_age_no_job_no_pr():
     assert st.orphan_issues([i], [pr(branch="agent/7-x")], [], old, NOW) == []
     job = {"workflowName": "agent-dev", "displayTitle": "Do it"}
     assert st.orphan_issues([i], [], [job], old, NOW) == []
-    assert st.orphan_issues([issue(7, ("agent:dev", "needs-human"))], [], [], old, NOW) == []
+    assert st.orphan_issues([issue(7, ("agent:dev", "parked"))], [], [], old, NOW) == []
 
 
 def test_orphan_pr_needs_age_and_no_validate_run():
@@ -167,18 +167,18 @@ def test_orphan_pr_needs_age_and_no_validate_run():
 
 def test_handle_orphan_first_retriggers_second_escalates():
     run = Recorder()
-    assert st.handle_orphan("pr", pr(7, "agent/7-x"), "Bankaifan", run) == "retriggered"
+    assert st.handle_orphan("pr", pr(7, "agent/7-x"), run) == "retriggered"
     assert ("workflow", "run", "validate.yml", "--ref", "agent/7-x") in run.calls
     run = Recorder()
-    assert st.handle_orphan("pr", pr(7, labels=[st.RETRIGGER]), "Bankaifan", run) == "escalated"
-    assert ("pr", "edit", "7", "--add-reviewer", "Bankaifan") in run.calls
+    assert st.handle_orphan("pr", pr(7, labels=[st.RETRIGGER]), run) == "escalated"
+    assert not any("--add-reviewer" in c or "--add-assignee" in c for c in run.calls)
     assert any(c[:3] == ("pr", "comment", "7") for c in run.calls)
-    assert any("needs-human" in c for c in run.calls)
+    assert any("parked" in c for c in run.calls)
 
 
 def test_handle_orphan_issue_readds_label():
     run = Recorder()
-    assert st.handle_orphan("issue", issue(4), "Bankaifan", run) == "retriggered"
+    assert st.handle_orphan("issue", issue(4), run) == "retriggered"
     assert ("issue", "edit", "4", "--remove-label", "agent:dev") in run.calls
     assert ("issue", "edit", "4", "--add-label", "agent:dev") in run.calls
 
@@ -204,14 +204,14 @@ def test_conflict_dispatches_one_fix_per_head_and_counts_no_round():
     assert st.handle_conflict(dirty, "Bankaifan", run) == "fix dispatched"
     assert ("workflow", "run", "agent-fix.yml", "-f", "pr=9") in run.calls
     assert ("pr", "edit", "9", "--add-label", "conflict:sha9") in run.calls
-    assert not any("review:3" in c or "needs-human" in c for c in run.calls)
+    assert not any("review:3" in c or "parked" in c for c in run.calls)
     again = pr(9, labels=["conflict:sha9"], mergeStateStatus="DIRTY")
     assert st.conflict_prs([again]) == []
 
 
 def test_limit_prs_picks_only_unhandled_review3():
     stuck = pr(1, labels=["review:3"])
-    others = [pr(2, labels=["review:3", "needs-human"]), pr(3, labels=["review:2"]),
+    others = [pr(2, labels=["review:3", "parked"]), pr(3, labels=["review:2"]),
               pr(4, labels=["review:3"], reviewDecision="APPROVED"),
               pr(5, labels=["review:3"], commits=[{"committedDate": ago(5)}]),
               pr(6, labels=["review:3"], isCrossRepository=True)]
@@ -230,27 +230,27 @@ def test_limit_hand_over_when_code_approved_but_security_changes():
 
 
 def test_stuck_limit_hands_over_or_escalates(monkeypatch):
-    monkeypatch.setattr(st, "handle_limit", lambda n, o, run: "restarted")
-    assert st.handle_stuck_limit(pr(7), "Bankaifan", Recorder()) == "handed over (restarted)"
+    monkeypatch.setattr(st, "handle_limit", lambda n, run: "restarted")
+    assert st.handle_stuck_limit(pr(7), Recorder()) == "handed over (restarted)"
 
-    def boom(n, o, run):
+    def boom(n, run):
         raise subprocess.CalledProcessError(1, "gh")
     monkeypatch.setattr(st, "handle_limit", boom)
     run = Recorder()
-    assert st.handle_stuck_limit(pr(7), "Bankaifan", run) == "escalated"
-    assert ("pr", "edit", "7", "--add-label", "needs-human") in run.calls
+    assert st.handle_stuck_limit(pr(7), run) == "escalated"
+    assert ("pr", "edit", "7", "--add-label", "parked") in run.calls
 
 
 def test_workflows_never_ignore_limit_or_dev_on_pr():
     root = pathlib.Path(__file__).parent.parent.parent / ".github" / "workflows"
-    assert "|| guard label pr" in (root / "agent-fix.yml").read_text()
+    assert "|| guard park pr" in (root / "agent-fix.yml").read_text()
     dev = (root / "agent-dev.yml").read_text()
     assert "dev-on-pr:" in dev and "github.event.issue.pull_request &&" in dev
 
 
-def test_conflict_prs_skip_needs_human_and_clean():
+def test_conflict_prs_skip_parked_and_clean():
     dirty = pr(1, mergeStateStatus="DIRTY")
-    assert st.conflict_prs([dirty, pr(2), pr(3, mergeStateStatus="DIRTY", labels=["needs-human"])]) == [dirty]
+    assert st.conflict_prs([dirty, pr(2), pr(3, mergeStateStatus="DIRTY", labels=["parked"])]) == [dirty]
 
 
 def test_build_body_sections():
@@ -340,8 +340,8 @@ def test_no_rebase_while_main_is_red_or_for_foreign_prs():
     dependabot = pr(8, "dependabot/x", mergeStateStatus="BEHIND")
     assert st.rebase_candidates([dependabot], main, _failed, "Bankaifan") == []
     two = _agent_pr()
-    two["commits"] = two["commits"] * 2
-    assert st.rebase_candidates([two], main, _failed, "Bankaifan") == []
+    two["commits"] = two["commits"] * 2  # many small commits by the owner are fine
+    assert st.rebase_candidates([two], main, _failed, "Bankaifan") == [two]
 
 
 # --- liveness (issue #74) ----------------------------------------------------------------------
@@ -355,7 +355,7 @@ def test_escalate_fails_loudly_when_comment_missing():
             return super().__call__(*args)
 
     with pytest.raises(st.liveness.ReadbackError):
-        st.escalate("pr", 7, "stuck.", "Bankaifan", Lossy())
+        st.escalate("pr", 7, "stuck.", Lossy())
 
 
 def test_update_issue_fails_when_body_missing():
@@ -549,11 +549,8 @@ GREEN = [{"name": "validate", "conclusion": "SUCCESS"}]
 CODEOWNERS = "/.github/CODEOWNERS @Bankaifan\n/tools/trusted_issues.py @Bankaifan\n"
 
 
-PARKED = {"author": {"login": "approver"}, "body": "Review limit reached (3 reviews, 2 fix rounds)."}
-
-
-def settled_pr(number=456, labels=("needs-human", "review:2"), **kw):
-    base = {"statusCheckRollup": GREEN, "reviewDecision": "APPROVED", "comments": [PARKED]}
+def settled_pr(number=456, labels=("parked", "review:2"), **kw):
+    base = {"statusCheckRollup": GREEN, "reviewDecision": "APPROVED", "comments": []}
     base.update(kw)
     return pr(number, labels=labels, **base)
 
@@ -562,7 +559,7 @@ def _files(*paths):
     return lambda p: list(paths)
 
 
-def test_green_approved_needs_human_pr_is_released_and_not_parked_again():
+def test_green_approved_parked_pr_is_released():
     # #456 / #464: round labels from a version clash and a rebase, then green and approved: label is stale
     for n in (456, 464):
         p = settled_pr(n)
@@ -571,7 +568,7 @@ def test_green_approved_needs_human_pr_is_released_and_not_parked_again():
     assert st.limit_prs([settled_pr(456, labels=("review:2",))], [], NOW) == []
 
 
-def test_needs_human_stays_when_not_settled():
+def test_parked_stays_when_not_settled():
     args = ("app/approver", None, CODEOWNERS, "Bankaifan", _files("tools/x.py"))
     assert st.parked_but_settled([settled_pr(reviewDecision="REVIEW_REQUIRED")], *args) == []
     assert st.parked_but_settled([settled_pr(statusCheckRollup=[{"name": "validate", "conclusion": "FAILURE"}])],
@@ -579,45 +576,15 @@ def test_needs_human_stays_when_not_settled():
     assert st.parked_but_settled([settled_pr(statusCheckRollup=[])], *args) == []
     assert st.parked_but_settled([settled_pr()], "app/approver", None, CODEOWNERS, "Bankaifan",
                                  _files("tools/x.py", ".github/CODEOWNERS")) == []
-    sec = settled_pr(labels=("needs-human", "risk:security"))
+    sec = settled_pr(labels=("parked", "risk:security"))
     assert st.parked_but_settled([sec], *args) == []  # no security approve yet
     sec["headRefOid"] = "abcdef1234567"
-    sec["comments"] = [PARKED, {"author": {"login": "approver"}, "body": "security-review: approve abcdef1234567"}]
+    sec["comments"] = [{"author": {"login": "approver"}, "body": "security-review: approve abcdef1234567"}]
     assert st.parked_but_settled([sec], *args) == [sec]
 
     def broken(p):
         raise subprocess.CalledProcessError(1, "gh")
     assert st.parked_but_settled([settled_pr()], "app/approver", None, CODEOWNERS, "Bankaifan", broken) == []
-
-
-def test_needs_human_not_set_by_the_script_or_commented_on_stays():
-    args = ("app/approver", None, CODEOWNERS, "Bankaifan", _files("tools/x.py"))
-    silent = {"author": {"login": "approver"}, "body": "Fix: no fix was produced (no new commit)."}
-    owner = {"author": {"login": "Bankaifan"}, "body": "hold on"}
-    other = {"author": {"login": "approver"}, "body": "Some other escalation."}
-    assert st.parked_but_settled([settled_pr(comments=[silent])], *args) != []
-    assert st.parked_but_settled([settled_pr(comments=[])], *args) == []  # no script comment: unknown origin
-    assert st.parked_but_settled([settled_pr(comments=[other])], *args) == []
-    assert st.parked_but_settled([settled_pr(comments=[PARKED, owner])], *args) == []  # a human spoke afterwards
-    assert st.parked_but_settled([settled_pr(comments=[owner, PARKED])], *args) != []
-
-
-def test_needs_human_relabelled_by_a_person_stays(monkeypatch):
-    monkeypatch.setattr(st, "required_contexts", lambda: None)
-    monkeypatch.setattr(st.risk, "read_text", lambda path: CODEOWNERS)
-    monkeypatch.setenv("GH_REPO", "o/r")
-    calls = []
-
-    def run(*a):
-        calls.append(a)
-        if a[-1].endswith("/events"):
-            ev = [{"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "Bot"}},
-                  {"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "User"}}]
-            return json.dumps([ev])
-        return json.dumps([[{"filename": "tools/x.py"}]])
-
-    assert st.release_settled([settled_pr(464)], "app/approver", "Bankaifan", run) == []
-    assert not any(a[:2] == ("pr", "edit") for a in calls)
 
 
 def test_release_settled_removes_the_label(monkeypatch):
@@ -629,13 +596,12 @@ def test_release_settled_removes_the_label(monkeypatch):
 
     def run(*a):
         calls.append(a)
-        if a[-1].endswith("/events"):
-            return json.dumps([[{"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "Bot"}}]])
         return json.dumps([[{"filename": "tools/x.py"}]])
 
-    out = st.release_settled([settled_pr(464)], "app/approver", "Bankaifan", run)
-    assert out == ["needs-human removed from PR #464: green and approved at its head"]
-    assert ("pr", "edit", "464", "--remove-label", "needs-human") in calls
+    p = settled_pr(464)
+    out = st.release_settled([p], "app/approver", "Bankaifan", run)
+    assert out == ["parked removed from PR #464: green and approved at its head"]
+    assert ("pr", "edit", "464", "--remove-label", "parked") in calls and "parked" not in st.names(p)
 
 
 @pytest.mark.parametrize("pages", [
@@ -650,8 +616,6 @@ def test_release_settled_keeps_the_label_for_renames_and_cut_lists(monkeypatch, 
 
     def run(*a):
         calls.append(a)
-        if a[-1].endswith("/events"):
-            return json.dumps([[{"event": "labeled", "label": {"name": "needs-human"}, "actor": {"type": "Bot"}}]])
         return json.dumps(pages)
 
     assert st.release_settled([settled_pr(464)], "app/approver", "Bankaifan", run) == []
@@ -662,3 +626,72 @@ def test_release_settled_keeps_the_label_for_renames_and_cut_lists(monkeypatch, 
 def test_status_workflow_passes_failure_watch_switch_in_script_step():
     text = (pathlib.Path(__file__).parent.parent.parent / ".github/workflows/status.yml").read_text(encoding="utf-8")
     assert "FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}" in text
+
+
+# --- un-park (decision 0017, rule 4) -------------------------------------------------------------
+
+def test_cool_down_doubles_per_park_and_stops_at_seven_days():
+    assert [st.cool_down_hours(n) for n in (0, 1, 2, 3, 4, 9)] == [24, 24, 48, 96, 168, 168]
+    mark = {"author": {"login": "app/author"}, "body": f"Parked: x\n{st.PARK_MARK}"}
+    forged = {"author": {"login": "mallory"}, "body": st.PARK_MARK}
+    assert st.park_count([mark, forged, mark], ["author[bot]"]) == 2
+
+
+class ParkGh(Recorder):
+    """Fake gh for un_park: one parked issue #4, the label events of every item at EVENT_AGE hours ago."""
+    def __init__(self, hours):
+        super().__init__()
+        self.hours = hours
+
+    def __call__(self, *args):
+        if args[:2] == ("issue", "list"):
+            self.calls.append(args)
+            return json.dumps([issue(4, ("agent:dev", "parked", "stalled:1", "prio:1"))])
+        if args[0] == "api":
+            return json.dumps([[{"event": "labeled", "label": {"name": "parked"}, "created_at": ago(self.hours * 60)}]])
+        if args[:2] == ("issue", "view") and "labels" in args:
+            return json.dumps({"labels": [{"name": "agent:dev"}, {"name": "restart:1"}]})
+        return super().__call__(*args)
+
+
+def test_un_park_gives_issue_and_pr_a_fresh_start_after_the_cool_down():
+    parked_pr = pr(9, "agent/8-x", labels=["parked", "review:3", "round:abc1234", "risk:infra"], body="Closes #8",
+                   comments=[])
+    run = ParkGh(hours=25)
+    out = st.un_park([parked_pr, pr(2)], "o/r", ["app/author"], NOW, run)
+    assert out == ["un-parked pr #9: fresh start after 24 h", "un-parked issue #4: fresh start after 24 h"]
+    calls = run.calls
+    assert ("issue", "edit", "4", "--remove-label", "parked", "--remove-label", "stalled:1") in calls  # prio:1 stays
+    assert calls.index(("issue", "edit", "4", "--remove-label", "agent:dev")) < calls.index(
+        ("issue", "edit", "4", "--add-label", "agent:dev"))
+    assert ("pr", "edit", "9", "--remove-label", "parked", "--remove-label", "review:3", "--remove-label",
+            "round:abc1234") in calls
+    assert ("pr", "close", "9") in calls and ("issue", "edit", "8", "--remove-label", "restart:1") in calls
+    assert ("issue", "edit", "8", "--add-label", "agent:dev") in calls
+    assert st.PARK_MARK in run.comments[0]["body"]  # the issue keeps the park count for the next PR
+    assert st.un_park([parked_pr], "o/r", ["app/author"], NOW, ParkGh(hours=23)) == []
+
+
+def test_un_park_of_a_pr_on_another_branch_only_clears_the_labels():
+    sync = pr(9, "template-sync/1.2", labels=["parked", "review:3", "risk:infra"], body="Refs #8", comments=[])
+    fork = pr(10, "template-sync/1.2", labels=["parked"], isCrossRepository=True, comments=[])
+    run = ParkGh(hours=25)
+    assert st.un_park([sync, fork], "o/r", ["app/author"], NOW, run)[0] == "un-parked pr #9: labels cleared after 24 h"
+    assert ("pr", "edit", "9", "--remove-label", "parked", "--remove-label", "review:3") in run.calls
+    assert not any(c[:2] == ("pr", "close") or c[:3] == ("pr", "edit", "10") for c in run.calls) and not run.comments
+
+
+def test_un_park_that_keeps_failing_on_the_pr_does_not_comment_on_the_issue_every_tick():
+    """A PR whose label edit fails stays parked; the park comment on its issue must not be repeated tick after tick."""
+    class Failing(ParkGh):
+        def __call__(self, *args):
+            if args[:2] == ("pr", "edit"):
+                raise subprocess.CalledProcessError(1, "gh", stderr="boom")
+            return super().__call__(*args)
+
+    parked_pr = pr(9, "agent/8-x", labels=["parked", "review:3"], body="Closes #8", comments=[])
+    run = Failing(hours=8 * 24)  # past the longest cool-down: every tick is due
+    for _ in range(3):
+        st.un_park([parked_pr], "o/r", ["app/author"], NOW, run)
+    assert len([c for c in run.calls if c[:3] == ("issue", "comment", "8")]) <= 1
+    assert all("reviewer" not in a and "assignee" not in a and "@" not in a for c in run.calls for a in c)

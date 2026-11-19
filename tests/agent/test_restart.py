@@ -45,7 +45,7 @@ def repo(monkeypatch):
 
 def test_first_limit_restarts_the_issue_and_closes_the_pr():
     f = Fake(reviews=[{"state": "CHANGES_REQUESTED", "body": "Missing test for X"}, {"state": "APPROVED", "body": "ok"}])
-    assert r.handle_limit("64", "Bankaifan", f) == "restarted"
+    assert r.handle_limit("64", f) == "restarted"
     calls = f.flat()
     assert "issue edit 68 --add-label restart:1" in calls
     comment = next(c for c in f.calls if c[:3] == ("issue", "comment", "68"))
@@ -54,17 +54,16 @@ def test_first_limit_restarts_the_issue_and_closes_the_pr():
     # agent:dev is removed, then added again so the label event fires
     assert calls.index("issue edit 68 --remove-label agent:dev") < calls.index("issue edit 68 --add-label agent:dev")
     assert ("pr", "close", "64", "--comment", "Superseded: round limit reached, task restarted, see #68") in f.calls
-    assert not any("needs-human" in c for c in calls)
+    assert not any("parked" in c for c in calls)
     assert not f.has("pr", "edit") and not f.has("pr", "comment")
 
 
-def test_limit_with_restart_label_parks_with_daniel_once():
+def test_limit_with_restart_label_parks_and_asks_nobody():
     f = Fake(issue_labels=["restart:1", "agent:dev"])
-    assert r.handle_limit("70", "Bankaifan", f) == "parked"
-    assert "pr edit 70 --add-label needs-human" in f.flat()
-    assert ("pr", "edit", "70", "--add-reviewer", "Bankaifan") in f.calls
+    assert r.handle_limit("70", f) == "parked"
+    assert "pr edit 70 --add-label parked" in f.flat() and not f.has("pr", "edit", "70", "--add-reviewer")
     comments = [c for c in f.calls if c[:2] == ("pr", "comment")]
-    assert len(comments) == 1 and "already failed" in comments[0][4] and "Hallo Daniel" in comments[0][4]
+    assert len(comments) == 1 and "restart:1" in comments[0][4] and "<!-- parked -->" in comments[0][4]
     assert not f.has("pr", "close") and not f.has("issue", "comment")
 
 
@@ -72,7 +71,7 @@ def test_missing_slip_comment_fails_loudly_before_the_pr_is_closed():
     f = Fake()
     f.lossy = True
     with pytest.raises(r.liveness.ReadbackError):
-        r.handle_limit("64", "Bankaifan", f)
+        r.handle_limit("64", f)
     assert not f.has("pr", "close")
 
 
@@ -80,35 +79,29 @@ def test_missing_limit_comment_fails_loudly():
     f = Fake(issue_labels=["restart:1"])
     f.lossy = True
     with pytest.raises(r.liveness.ReadbackError):
-        r.handle_limit("70", "Bankaifan", f)
+        r.handle_limit("70", f)
 
 
 def test_one_restart_max_second_limit_never_restarts_again():
     first = Fake()
-    assert r.handle_limit("64", "Bankaifan", first) == "restarted"
+    assert r.handle_limit("64", first) == "restarted"
     second = Fake(issue_labels=["restart:1"])  # the issue now carries the label the first restart set
-    assert r.handle_limit("67", "Bankaifan", second) == "parked"
+    assert r.handle_limit("67", second) == "parked"
     assert not second.has("issue", "edit")
 
 
 def test_limit_restarts_the_closed_issue_not_the_parent_ref():
     # the parent #352 already carries restart:1 (a sibling restarted it); this PR closes #357 and must still restart it
     f = Fake(body="Refs #352\n\nCloses #357", labelled={352: ["restart:1"]})
-    assert r.handle_limit("364", "Bankaifan", f) == "restarted"
+    assert r.handle_limit("364", f) == "restarted"
     assert "issue edit 357 --add-label restart:1" in f.flat()
     assert not f.has("issue", "edit", "352") and not f.has("pr", "edit")
 
 
-def test_no_review_request_when_daniel_is_the_author():
-    f = Fake(issue_labels=["restart:1"], author="Bankaifan")
-    r.handle_limit("70", "Bankaifan", f)
-    assert not f.has("pr", "edit", "70", "--add-reviewer")
-
-
 def test_pr_without_issue_is_parked_and_closed_pr_is_left_alone():
-    assert r.handle_limit("5", "Bankaifan", Fake(body="no issue")) == "parked"
+    assert r.handle_limit("5", Fake(body="no issue")) == "parked"
     f = Fake(state="CLOSED")
-    assert r.handle_limit("5", "Bankaifan", f) == "closed"
+    assert r.handle_limit("5", f) == "closed"
     assert len(f.calls) == 1
 
 

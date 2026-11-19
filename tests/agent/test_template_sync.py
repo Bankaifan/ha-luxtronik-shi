@@ -92,22 +92,18 @@ def test_read_version_rejects_everything_else():
         mod.read_version(None)
 
 
-def test_needs_sync_gate_on_x():
-    assert mod.needs_sync("2.0", "1.5")
-    assert not mod.needs_sync("1.9", "1.0")
-    assert not mod.needs_sync("1.0", "1.0")
-    assert not mod.needs_sync("1.0", "2.0")
-    assert mod.needs_sync("1.0", None)
-    assert mod.needs_sync("1.0", "")
-    assert not mod.needs_sync("0.5", None)
+def test_needs_sync_once_per_template_release():
+    assert mod.needs_sync("2.0", "1.5") and mod.needs_sync("1.102", "1.101") and mod.needs_sync("1.10", "1.9")
+    assert not mod.needs_sync("1.0", "1.0") and not mod.needs_sync("1.0", "2.0") and not mod.needs_sync("1.9", "1.10")
+    assert mod.needs_sync("1.0", None) and mod.needs_sync("0.5", "") and not mod.needs_sync("0.0", None)
 
 
-def test_y_only_change_creates_no_issue(tmp_path, monkeypatch, capsys):
-    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.0", "managed": MANAGED}
+def test_unreleased_template_changes_create_no_issue(tmp_path, monkeypatch, capsys):
+    cfg = {"template": "o/t", "synced_sha": SHA, "synced_version": "1.7", "managed": MANAGED}
     code, calls = run_main(tmp_path, monkeypatch, cfg, X_CHANGE, version="1.7\n")
     assert code == 0 and not issue_calls(calls)
     assert not any("compare" in a[1] for a in calls if a[0] == "api")
-    assert "x unchanged" in capsys.readouterr().out
+    assert "no new template release" in capsys.readouterr().out
 
 
 def test_x_change_creates_one_issue_and_second_run_edits_it(tmp_path, monkeypatch):

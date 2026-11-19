@@ -1,8 +1,8 @@
 """Slip detection for the dispatcher (design 0015, step 1): does an issue already carry a task slip, and which model?
 
 A slip is a `Files:` line (`overlap.parse_files`) in the body of an issue written by a trusted author (the owner or
-the author app) or in a comment by one of them. A body by a stranger never counts, even when the owner labelled the
-issue `approved`: such an issue has no slip and goes to the model. Text is untrusted: only paths and the model word
+the author app) or in a comment by one of them. A body by a stranger never counts, whatever labels the issue
+has: such an issue has no slip (intake turns an accepted one into a slip issue of the author app). Text is untrusted: only paths and the model word
 are parsed, nothing is opened or run.
 """
 import re

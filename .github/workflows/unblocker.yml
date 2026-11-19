@@ -1,5 +1,5 @@
 name: unblocker
-# Looks at an item that just got `needs-human` and decides whether Daniel is really needed (design 0002, built on the
+# Looks at an item that just got `parked` and tries a different approach once (design 0002, built on the
 # untrusted-text boundary of design 0004). Off when the repo variable UNBLOCKER is `off`.
 # Order: read-only token (gate, landed, fetch) -> model step with NO app token and NO Bash -> clean checkout -> verdict
 # validation -> write token (created only now) -> apply. Never PR code: the checkout is the default branch.
@@ -14,7 +14,7 @@ jobs:
   unblock:
     if: >-
       (vars.UNBLOCKER || 'on') != 'off' &&
-      github.event.label.name == 'needs-human'
+      github.event.label.name == 'parked'
     # Job level on purpose: runs skipped by `if` must not take over the group.
     concurrency:
       group: unblocker-${{ github.event.issue.number || github.event.pull_request.number }}
@@ -27,6 +27,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
       APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+      OWNER: ${{ vars.OWNER || github.repository_owner }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Fail if a required repo variable is unset
@@ -50,7 +51,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
-      - name: Gate (still open, label set by a trusted party, no unblock:1, agent item)
+      - name: Gate (still open, label set by a trusted party, one restart per park, agent item)
         id: gate
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
@@ -121,10 +122,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.writer.outputs.token }}
         run: python3 tools/unblock.py apply "$KIND" "$NUMBER" "$RUNNER_TEMP/verdict.json"
-      # Never end silently: a failed or invalid run leaves needs-human in place and says so.
+      # Never end silently: a failed or invalid run leaves the item parked and says so.
       - name: Report a run that produced no valid verdict
         if: ${{ always() && steps.gate.outputs.ok == 'true' && steps.writer.outcome == 'success' && steps.apply.outcome != 'success' }}
         env:
           GH_TOKEN: ${{ steps.writer.outputs.token }}
         run: |
-          gh "$KIND" comment "$NUMBER" --body "Unblocker run ended without an applied verdict (invalid, missing or failed). needs-human stays. Run: $RUN_URL"
+          gh "$KIND" comment "$NUMBER" --body "Unblocker run ended without an applied verdict (invalid, missing or failed). Stays parked. Run: $RUN_URL"

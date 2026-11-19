@@ -69,11 +69,11 @@ def trusted(obj, authors):
 
 
 def waits_for_owner(pr):
-    """risk:security PR that waits only for Daniel: labelled needs-human, or its current head approved by the approver app."""
+    """risk:security PR that no agent works on: parked, or its current head approved by the approver app."""
     names = {(lb or {}).get("name") for lb in pr.get("labels") or []}
     if "risk:security" not in names:
         return False
-    if "needs-human" in names:
+    if "parked" in names:
         return True
     head = pr.get("headRefOid")
     return bool(head) and any(

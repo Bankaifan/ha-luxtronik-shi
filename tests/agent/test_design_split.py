@@ -36,7 +36,7 @@ none
 class FakeGh:
     """Records calls; keeps the created issues so a rerun sees them."""
 
-    def __init__(self, source_labels=("prio:2", "agent:dev", "needs-human"), source_body="Source text\n"):
+    def __init__(self, source_labels=("prio:2", "agent:dev", "parked"), source_body="Source text\n"):
         self.issues = []
         self.calls = []
         self.source_labels = source_labels
@@ -76,10 +76,10 @@ def test_three_steps_one_dependency_create_three_issues():
     assert all(i["labels"] == ["prio:2"] for i in gh.issues)
 
 
-def test_source_issue_loses_agent_dev_and_needs_human():
+def test_source_issue_loses_agent_dev_and_parked():
     gh = FakeGh()
     design_split.split(DESIGN, GOOD, 417, gh)
-    assert ("issue", "edit", "417", "--remove-label", "agent:dev", "--remove-label", "needs-human") in gh.calls
+    assert ("issue", "edit", "417", "--remove-label", "agent:dev", "--remove-label", "parked") in gh.calls
 
 
 def test_source_body_gets_depends_on_with_the_final_steps():

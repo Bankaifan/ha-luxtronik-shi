@@ -19,21 +19,21 @@ def issue(author, *labels):
 
 
 def test_label_set_by_owner():
-    assert mod.label_set_by([ev("labeled", "approved", "Bankaifan")], "approved", "Bankaifan")
+    assert mod.label_set_by([ev("labeled", "prio:1", "Bankaifan")], "prio:1", "Bankaifan")
 
 
 def test_label_set_by_other_is_rejected():
-    assert not mod.label_set_by([ev("labeled", "approved", "mallory")], "approved", "Bankaifan")
+    assert not mod.label_set_by([ev("labeled", "prio:1", "mallory")], "prio:1", "Bankaifan")
 
 
 def test_latest_event_wins():
-    events = [ev("labeled", "approved", "Bankaifan"), ev("unlabeled", "approved", "Bankaifan"),
-              ev("labeled", "approved", "mallory")]
-    assert not mod.label_set_by(events, "approved", "Bankaifan")
+    events = [ev("labeled", "prio:1", "Bankaifan"), ev("unlabeled", "prio:1", "Bankaifan"),
+              ev("labeled", "prio:1", "mallory")]
+    assert not mod.label_set_by(events, "prio:1", "Bankaifan")
 
 
 def test_other_label_events_ignored():
-    assert not mod.label_set_by([ev("labeled", "idea", "Bankaifan")], "approved", "Bankaifan")
+    assert not mod.label_set_by([ev("labeled", "idea", "Bankaifan")], "prio:1", "Bankaifan")
 
 
 def test_owner_issue_is_trusted():
@@ -45,15 +45,11 @@ def test_stranger_issue_is_dropped():
     assert mod.classify(issue("mallory", "idea"), [], "Bankaifan") is None
 
 
-def test_stranger_issue_forged_label_is_dropped():
-    events = [ev("labeled", "approved", "mallory")]
-    assert mod.classify(issue("mallory", "approved"), events, "Bankaifan") is None
-
-
-def test_idea_approved_by_owner():
-    events = [ev("labeled", "approved", "Bankaifan")]
-    r = mod.classify(issue("author-app[bot]", "idea", "approved"), events, "Bankaifan")
-    assert r["approved"] and not r["auto_ok"] and "approved" in r["labels"]
+def test_a_label_never_makes_an_issue_trusted():
+    for label in ("approved", "auto-ok"):
+        events = [ev("labeled", label, "Bankaifan")]
+        assert mod.classify(issue("mallory", label), events, "Bankaifan") is None
+        assert mod.classify(issue("author-app[bot]", "idea", label), events, "Bankaifan", "author-app[bot]") is None
 
 
 BOT = "author-app[bot]"
@@ -73,7 +69,7 @@ def exists(path):
 def test_design_derived_issue_is_trusted():
     r = mod.classify(derived(), [], "Bankaifan", BOT, exists)
     assert r["design"] == "docs/design/0001-big-thing.md"
-    assert not r["authored_by_owner"] and not r["approved"] and not r["auto_ok"]
+    assert not r["authored_by_owner"] and not r["intake"]
 
 
 def test_design_ref_from_stranger_is_dropped():
@@ -113,14 +109,28 @@ def test_design_issue_author_in_any_login_form(form):
 @pytest.mark.parametrize("form", ["Bankaifan", "app/Bankaifan", "Bankaifan[bot]"])
 def test_owner_in_any_login_form(form):
     assert mod.classify(issue(form), [], "Bankaifan")["authored_by_owner"]
-    assert mod.label_set_by([ev("labeled", "approved", form)], "approved", "Bankaifan")
+    assert mod.label_set_by([ev("labeled", "prio:1", form)], "prio:1", "Bankaifan")
 
 
-def test_auto_ok_only_counts_from_owner():
-    scout = [ev("labeled", "auto-ok", "author-app[bot]")]
-    assert mod.classify(issue("author-app[bot]", "idea", "auto-ok"), scout, "Bankaifan") is None
-    owner = [ev("labeled", "auto-ok", "Bankaifan")]
-    assert mod.classify(issue("author-app[bot]", "idea", "auto-ok"), owner, "Bankaifan")["auto_ok"]
+def intake_slip(author=BOT, body="Goal: x\nFiles: docs/a.md\nIntake: #7\n", labels=()):
+    d = issue(author, *labels)
+    d["body"] = body
+    return d
+
+
+def test_intake_slip_by_the_author_app_is_trusted():
+    assert mod.classify(intake_slip(), [], "Bankaifan", BOT)["intake"]
+
+
+def test_intake_line_needs_the_author_app_its_own_line_and_no_idea_label():
+    assert mod.classify(intake_slip(author="mallory"), [], "Bankaifan", BOT) is None
+    person = intake_slip(author=BOT.removeprefix("app/").removesuffix("[bot]"))  # a person named like the app slug
+    assert mod.classify(person, [], "Bankaifan", BOT) is None
+    assert mod.classify({**person, "author": {**person["author"], "is_bot": True}}, [], "Bankaifan", BOT)["intake"]
+    assert mod.classify(intake_slip(), [], "Bankaifan", "") is None
+    assert mod.classify(intake_slip(labels=("idea",)), [], "Bankaifan", BOT) is None
+    for body in ("see Intake: #7", "Intake: #x", "Intake: 7", None):
+        assert mod.classify(intake_slip(body=body), [], "Bankaifan", BOT) is None
 
 
 SHA = "a" * 40
@@ -134,7 +144,7 @@ def sync_issue(author=BOT, title="Template sync aaaaaaa", body="Changes.\n\nTemp
 
 def test_sync_issue_is_trusted():
     r = mod.classify(sync_issue(), [], "Bankaifan", BOT, exists)
-    assert r["template_sync"] and not r["authored_by_owner"] and not r["approved"]
+    assert r["template_sync"] and not r["authored_by_owner"]
 
 
 @pytest.mark.parametrize("form", ["author-app", "app/author-app", "author-app[bot]"])

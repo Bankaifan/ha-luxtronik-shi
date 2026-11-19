@@ -429,20 +429,20 @@ def test_failure_after_close_reopens_with_counter_and_pr_link():
     assert "Failures: 3" in issue["body"] and "Reopened: 1" in issue["body"]
     assert "Closed by: https://github.com/o/r/pull/9" in issue["body"]
     assert "Same failure again after the fix in https://github.com/o/r/pull/9" in f.comments[1][0]["body"]
-    assert guard_mark.verify(issue["title"], issue["body"], KEY) and "needs-human" not in f.labels(1)
+    assert guard_mark.verify(issue["title"], issue["body"], KEY) and "parked" not in f.labels(1)
 
 
-def test_third_recurrence_escalates_to_needs_human_once():
+def test_third_recurrence_escalates_to_parked_once():
     f = Fake()
     f.add_issue(title(), body(failures=5, rid=1, reopened=2), state="CLOSED", labels=["prio:1"])
     failing(f, 2)
     tick(f)
-    assert "needs-human" in f.labels(1) and "Reopened: 3" in f.issues[1]["body"]
+    assert "parked" in f.labels(1) and "Reopened: 3" in f.issues[1]["body"]
     note = f.comments[1][-1]["body"]
-    assert "<!-- decision: yes=restart-issue no=close-issue -->" in note
+    assert "<!-- parked -->" in note
     failing(f, 3)
     tick(f)  # still open: only a counter bump, no second label and no second note
-    assert [x["name"] for x in f.issues[1]["labels"]].count("needs-human") == 1
+    assert [x["name"] for x in f.issues[1]["labels"]].count("parked") == 1
     assert len(f.comments[1]) == 2 and guard_mark.verify(f.issues[1]["title"], f.issues[1]["body"], KEY)
 
 

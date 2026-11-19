@@ -3,6 +3,7 @@ name: risk
 # A `security` diff fails the check until the owner approved the head SHA. The checkout is explicitly the default
 # branch and the PR is read through gh, PR code never runs. For pull_request_review the workflow file itself comes
 # from the PR merge ref, so a PR could alter this file: it must stay in CODEOWNERS (and in SECURITY_FILES).
+# `issues: read` is for the intake rule: the issues a PR names (branch `agent/<N>-`, `Closes/Refs #N`) are read, never written.
 on:
   pull_request_target:  # zizmor: ignore[dangerous-triggers] checks out the default branch only and never runs PR code
     types: [opened, synchronize, reopened, closed]
@@ -16,6 +17,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      issues: read
       pull-requests: write
       checks: write
       statuses: write
@@ -32,5 +34,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+          OWNER: ${{ vars.OWNER || github.repository_owner }}
           PR: ${{ github.event.pull_request.number }}
         run: python3 tools/ci/risk.py pr "$PR"

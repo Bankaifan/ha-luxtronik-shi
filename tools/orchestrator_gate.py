@@ -1,20 +1,19 @@
 """Decide whether this orchestrator run may start (design 0007, sections 4.2, 4.4, 4.5).
 
-`issues: labeled` keeps its rule: label `approved`/`auto-ok`, labeller is OWNER (checked here, the event alone is not
-trusted) and no earlier orchestrator run was created at most WINDOW seconds before this one.
-The other event types (issues opened/edited/closed, issue_comment, pull_request(_target), pull_request_review) need:
+No label starts the orchestrator (decision 0017: a person never sets a label).
+The event types (issues opened/edited/closed, issue_comment, pull_request(_target), pull_request_review) need:
 1. ORCHESTRATOR_EVENTS=on (unset or anything else: skip),
 2. a sender that is OWNER, the author app or the approver app,
 3. a live check: the object is re-read and its author login equals the sender (payload fields are not trusted),
 4. no author-app event inside an orchestrator run window (self-loop rule G: run start .. run end + LOOP_GRACE),
 5. no newer pending orchestrator run (debounce rule E: a burst gives one run, on the last event),
 6. the brake: 3 runs in a row started by the author app, each at most BRAKE_GAP after the previous, refuse and
-   comment once in STATUS_ISSUE.
+   comment once in the status issue (found by its title, agent_guard.status_issue).
 Other events (schedule, workflow_dispatch, workflow_run) pass here; their own `if` in orchestrator.yml decides.
 Prints `true` or `false` on stdout, the reason on stderr.
 
-Needs the gh CLI (GH_TOKEN, GH_REPO). Environment: EVENT, EVENT_ACTION, LABEL, SENDER, RUN_ID, OWNER (default
-Bankaifan), AUTHOR_BOT, APPROVER_BOT, NUMBER, COMMENT_ID, REVIEW_ID, EVENT_AT (ISO time), STATUS_ISSUE,
+Needs the gh CLI (GH_TOKEN, GH_REPO). Environment: EVENT, EVENT_ACTION, SENDER, RUN_ID, OWNER (default
+Bankaifan), AUTHOR_BOT, APPROVER_BOT, NUMBER, COMMENT_ID, REVIEW_ID, EVENT_AT (ISO time),
 ORCHESTRATOR_EVENTS.
 """
 import json
@@ -25,13 +24,10 @@ from datetime import UTC, datetime
 from itertools import pairwise
 
 import budget
-from agent_guard import same_login
+from agent_guard import same_login, status_issue
 from ghcall import gh
 
-GATED = ("approved", "auto-ok")
-WINDOW = 180  # seconds, label events
 LOOP_GRACE = 60  # seconds after a run ended in which its own echo is still ignored
-NEVER_RAN = ("skipped", "cancelled")
 BRAKE_RUNS = 3
 BRAKE_GAP = 300  # seconds
 EVENTS = ("issues", "issue_comment", "pull_request", "pull_request_target", "pull_request_review")
@@ -41,17 +37,6 @@ BRAKE_MARK = "<!-- orchestrator-brake -->"
 
 def parse(ts):
     return datetime.fromisoformat(ts)  # accepts the trailing Z of gh's createdAt (Python 3.11+)
-
-
-def debounced(run_id, created, runs):
-    """True if an earlier run (lower id) was created at most WINDOW seconds before `created` (a datetime).
-
-    Runs that ended `skipped` (job-level `if`: any other label, issue opened) or `cancelled` never read the
-    candidate list, so they must not swallow a later `approved` label.
-    """
-    return any(r["databaseId"] < run_id and r.get("conclusion") not in NEVER_RAN
-               and 0 <= (created - parse(r["createdAt"])).total_seconds() <= WINDOW
-               for r in runs)
 
 
 def in_run_window(at, run_id, runs):
@@ -96,21 +81,11 @@ def decide_event(sender, owner, run_id, runs, now, *, author_bot="", approver_bo
     return True, "accepted event, last of its burst"
 
 
-def decide(event, label, sender, owner, run_id, runs, now, *, action="labeled", **kw):
+def decide(event, sender, owner, run_id, runs, now, **kw):
     """Return (run, reason). `runs`: recent orchestrator runs as {databaseId, createdAt, ...}; `now`: a datetime."""
-    if event in EVENTS and not (event == "issues" and action == "labeled"):
+    if event in EVENTS:
         return decide_event(sender, owner, run_id, runs, now, **kw)
-    if event != "issues":
-        return True, f"{event} is not a label event"
-    if label not in GATED:
-        return False, f"label {label!r} does not start the orchestrator"
-    if not same_login(sender, owner):
-        return False, f"labelled by {sender!r}, not by the owner"
-    own = next((r for r in runs if r["databaseId"] == run_id), None)
-    created = parse(own["createdAt"]) if own else now
-    if debounced(run_id, created, runs):
-        return False, f"an earlier orchestrator run was created within {WINDOW} seconds"
-    return True, "owner label, no recent run"
+    return True, f"{event} is not a repo event"
 
 
 def live_login(event, action, env, run=gh):
@@ -156,7 +131,7 @@ def announce_brake(issue, run=gh):
 
 def main() -> int:
     env = os.environ
-    event, action = env.get("EVENT", ""), env.get("EVENT_ACTION", "labeled" if env.get("EVENT") == "issues" else "")
+    event, action = env.get("EVENT", ""), env.get("EVENT_ACTION", "")
     run_id = int(env.get("RUN_ID", "0"))
     now = datetime.now(UTC)
     if reason := budget.low(budget.BACKGROUND, gh):
@@ -165,19 +140,15 @@ def main() -> int:
         return 0
     kw = {}
     runs = []
-    if event in EVENTS and not (event == "issues" and action == "labeled"):
+    if event in EVENTS:
         runs = fetch_runs(env.get("GH_REPO", ""))
         kw = {"author_bot": env.get("AUTHOR_BOT", ""), "approver_bot": env.get("APPROVER_BOT", ""),
               "enabled": env.get("ORCHESTRATOR_EVENTS") == "on",
               "event_at": parse(env["EVENT_AT"]) if env.get("EVENT_AT") else None,
               "live": live_login(event, action, env)}
-    elif event == "issues":
-        runs = json.loads(gh("run", "list", "--workflow", "orchestrator.yml", "--limit", "20",
-                             "--json", "databaseId,createdAt,conclusion"))
-    run, reason = decide(event, env.get("LABEL", ""), env.get("SENDER", ""), env.get("OWNER", "Bankaifan"),
-                         run_id, runs, now, action=action, **kw)
+    run, reason = decide(event, env.get("SENDER", ""), env.get("OWNER", "Bankaifan"), run_id, runs, now, **kw)
     if reason.startswith("brake"):
-        announce_brake(env.get("STATUS_ISSUE", ""))
+        announce_brake(status_issue(gh, env.get("AUTHOR_BOT", "")))
     print(reason, file=sys.stderr)
     print("true" if run else "false")
     return 0

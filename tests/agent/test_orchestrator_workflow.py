@@ -28,7 +28,7 @@ def _step(name_part: str) -> str:
 
 def test_event_triggers_exist():
     head = TEXT[: TEXT.index("permissions:")]
-    assert "types: [opened, edited, closed, labeled]" in head
+    assert "types: [opened, edited, closed]" in head
     assert "issue_comment:" in head and "types: [created]" in head
     assert "pull_request_target:" in head and "types: [opened, closed]" in head
     assert "pull_request_review:" in head and "types: [submitted]" in head

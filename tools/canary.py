@@ -66,8 +66,7 @@ def stopped_stage(issue, pr, events, runs):
     """Name of the first pipeline stage without its end mark, else `close`. pr is None when no PR exists."""
     if pr is None:
         dev = flow.first_label_time(events, ("agent:dev",))
-        trusted = flow.first_label_time(events, flow.TRUSTED_LABELS) or issue["createdAt"]
-        return "develop" if flow.minutes(trusted, dev) is not None else "dispatch"
+        return "develop" if flow.minutes(issue["createdAt"], dev) is not None else "dispatch"
     row = flow.pr_row(pr, events, runs, issue["createdAt"])
     if not pr.get("mergedAt"):
         return next((s for s in flow.STAGES if row[f"{s}_min"] == ""), "train")
