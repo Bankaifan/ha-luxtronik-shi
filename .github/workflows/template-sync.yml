@@ -84,7 +84,9 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
-        run: bash base/tools/ci/install_tools.sh
+        # In base/: install_tools.sh installs the project's requirements*.txt from its working directory (main's copy).
+        working-directory: base
+        run: bash tools/ci/install_tools.sh
       - name: Apply the template changes (template reads, script from base/)
         if: steps.gate.outputs.run == 'true'
         env:
