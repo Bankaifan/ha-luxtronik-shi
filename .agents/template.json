@@ -47,10 +47,6 @@
       "why": "NO_TEST_TOOLS lists the project's generator tools (no same-name test, full run)"
     },
     {
-      "path": "tests/agent/test_variables_doc.py",
-      "why": "skipped at module level: it checks the template's docs/variables.md and README links, which this project does not have"
-    },
-    {
       "path": "tests/agent/test_check_test_evidence.py",
       "why": "the temporary test repo gets a pytest.ini with asyncio_mode = auto: the Home Assistant pytest plugin (latest) errors on sync tests without it"
     },
