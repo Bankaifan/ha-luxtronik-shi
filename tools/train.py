@@ -117,13 +117,29 @@ def git_env(token=""):
     return env
 
 
-def release_main(remote, token="", base="main", notes=None):
+def reason_of(error):
+    """One line naming why a git call failed: its last stderr line, the exit code otherwise."""
+    text = getattr(error, "stderr", "") or ""
+    last = next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "")
+    if isinstance(error, subprocess.CalledProcessError):
+        cmd = error.cmd[1] if len(error.cmd) > 1 else "git"
+        return f"git {cmd} exited {error.returncode}: {last}" if last else f"git {cmd} exited {error.returncode}"
+    return f"{type(error).__name__}: {error}"
+
+
+def release_main(remote, token="", base="main", notes=None, why=None):
     """The one writer of VERSION and CHANGELOG.md (issue #468, #570): folds the changelog fragments on `base` into
     CHANGELOG.md, assigns the version (tools/release_fragments.py, main's copy) and force-pushes one commit to
     RELEASE_BRANCH, never to `base`. A run whose result equals the branch already there pushes nothing.
     Returns the new version ("" when there is nothing to release); None when it failed (git error, malformed
-    fragment, push refused). `notes`, if a list, receives the user-facing changelog lines."""
+    fragment, push refused). `notes`, if a list, receives the user-facing changelog lines; `why`, if a list,
+    receives one line naming the cause of a failure."""
     env = git_env(token)
+
+    def fail(text):
+        if why is not None:
+            why.append(text)
+        return None
 
     def git(tmp, *args):
         return subprocess.run(["git", *args], cwd=tmp, env=env, check=True, capture_output=True, text=True)
@@ -139,13 +155,13 @@ def release_main(remote, token="", base="main", notes=None):
             done = subprocess.run([sys.executable, "-I", str(RELEASE), tmp], check=False, env=env,
                                   capture_output=True, text=True)
             if done.returncode != 0:
-                return None
+                return fail("release_fragments: " + ((done.stdout.strip() or done.stderr.strip()).splitlines() or ["failed"])[-1])
             lines = done.stdout.splitlines()
             version = next(line.split(" -> ")[-1] for line in lines if " -> " in line)
             git(tmp, "add", "-A")
             staged = git(tmp, "diff", "--cached", "--name-only").stdout.split()
             if not staged or not all(p in RELEASE_PATHS or p.startswith("changelog.d/") for p in staged):
-                return None  # the release commit may only touch these paths, whatever the script did
+                return fail("the release commit would touch other paths: " + ", ".join(staged))
             git(tmp, "commit", "-q", "-m", f"V{old}-RELEASE: version {version}")
             tree = git(tmp, "rev-parse", "HEAD^{tree}").stdout.strip()
             main_sha = git(tmp, "rev-parse", f"origin/{base}").stdout.strip()
@@ -160,8 +176,8 @@ def release_main(remote, token="", base="main", notes=None):
             if notes is not None:
                 notes.extend(line.removeprefix("note: ") for line in lines if line.startswith("note: "))
             return version
-    except (subprocess.CalledProcessError, OSError, StopIteration):
-        return None
+    except (subprocess.CalledProcessError, OSError, StopIteration) as e:
+        return fail(reason_of(e))
 
 
 # Fixed words of the release PR body per OWNER_LANG (the notes themselves are written in that language by the developers).
@@ -203,14 +219,15 @@ def release_pr(run, version, notes, owner, lang="German"):
 
 def run_train(env, run=status.gh, releaser=None):
     repo = env["GH_REPO"]
-    notes = []
+    notes, why = [], []
     owner = env.get("OWNER", status.OWNER_DEFAULT)
     if releaser is None:
         def releaser():
-            return release_main(f"https://github.com/{repo}.git", env.get("GH_TOKEN", ""), notes=notes)
+            return release_main(f"https://github.com/{repo}.git", env.get("GH_TOKEN", ""), notes=notes, why=why)
     released = releaser()
     if released is None:
-        print("release: failed (see the fragment and the branch push); the next run retries")
+        cause = f" because: {why[0]}" if why else ""
+        print(f"release: failed{cause} (see the fragment and the branch push); the next run retries")
     else:
         try:
             line = release_pr(run, released, notes, owner, env.get("OWNER_LANG") or "German")
