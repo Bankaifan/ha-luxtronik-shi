@@ -278,6 +278,16 @@ def test_fetch_issue_has_no_diff(tmp_path):
     assert [p.rsplit("/", 1)[1] for p in u.fetch("issue", 5, str(tmp_path), run=run)] == ["item.txt", "comments.txt"]
 
 
+def test_fetch_cli_reports_rate_limit_without_traceback(monkeypatch, capsys, tmp_path):
+    def boom(*a, **k):
+        raise u.ghcall.GhError(1, ["gh", "pr", "diff", "7"], stderr="API rate limit exceeded")
+
+    monkeypatch.setattr(u, "fetch", boom)
+    assert u.main(["unblock.py", "fetch", "pr", "7", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert "::error::" in out and "rate limit" in out and "Traceback" not in out
+
+
 def test_apply_cli_rejects_unknown_kind():
     assert u.main(["unblock.py", "apply", "repo", "5", "f.json"]) == 2
 
