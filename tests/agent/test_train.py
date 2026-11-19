@@ -391,12 +391,31 @@ def test_release_main_refuses_a_commit_touching_other_paths(tmp_path, monkeypatc
     assert g(origin, "branch", "--list", "release/next") == ""
 
 
+def test_release_main_names_the_reason_of_a_failure(tmp_path):
+    origin, work = origin_repo(tmp_path)
+    merge_fragment(work, "10.md", "step: y\n")
+    errors = []
+    assert release_main(str(origin), errors=errors) is None
+    assert len(errors) == 1 and "release_fragments exited" in errors[0]
+    gone = []
+    assert release_main(str(tmp_path / "missing"), errors=gone) is None
+    assert len(gone) == 1 and gone[0].startswith("git fetch exited")
+
+
+def test_a_failed_release_prints_its_reason_and_the_run_is_red(capsys, monkeypatch):
+    monkeypatch.setattr(train, "release_main",
+                        lambda remote, token="", base="main", notes=None, errors=None: errors.append("push refused"))
+    assert train.run_train(ENV, Gh([])) == 1
+    assert "release: failed: push refused; the next run retries" in capsys.readouterr().out
+
+
 def test_fragments_on_main_open_one_release_pr_and_a_second_run_updates_it(tmp_path, capsys, monkeypatch):
     origin, work = origin_repo(tmp_path)
     merge_fragment(work, "10.md", "first change\n")
     main_before = g(origin, "rev-parse", "main")
     monkeypatch.setattr(train, "release_main",
-                        lambda remote, token="", base="main", notes=None: release_main(str(origin), notes=notes))
+                        lambda remote, token="", base="main", notes=None, errors=None:
+                        release_main(str(origin), notes=notes, errors=errors))
     run = Gh([])
     assert train.run_train(ENV, run) == 0
     creates = [c for c in run.calls if c[:2] == ("pr", "create")]
