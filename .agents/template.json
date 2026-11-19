@@ -43,10 +43,6 @@
       "why": "imports test_status as tests.test_status because the project's tests/ is a package"
     },
     {
-      "path": "tests/agent/test_orchestrator_events_docs.py",
-      "why": "skipped at module level: it checks the template's ADR 0012 and README, which this project does not have"
-    },
-    {
       "path": "tests/agent/test_scope_tests.py",
       "why": "NO_TEST_TOOLS lists the project's generator tools (no same-name test, full run)"
     },
