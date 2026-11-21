@@ -97,6 +97,14 @@
     {
       "path": ".github/workflows/template-sync.yml",
       "why": "sets up Python (PYTHON_VERSION or 3.13) before installing the pinned tools, as the project's install_tools.sh needs it (#193); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tools/agent_guard.py",
+      "why": "silent-run guard reads every page of the repo events before calling a run silent (#227); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/agent/test_agent_guard.py",
+      "why": "covers an action on a later events page counting for the silent-run guard (#227); to be proposed upstream in agent-template"
     }
   ]
 }
