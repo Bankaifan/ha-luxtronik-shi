@@ -423,6 +423,20 @@ def test_orchestrator_visible_action_is_fine(orch_env, kw):
     assert not r.made("issue", "comment")
 
 
+def test_orchestrator_action_on_a_later_events_page_is_fine(orch_env):
+    orch_env(startable=True)
+    other = [{"actor": {"login": "mallory"}, "created_at": "2026-11-09T09:00:00Z"}] * 100
+    mine = {"actor": {"login": BOT}, "created_at": "2026-11-09T10:05:00Z"}
+    r = OrchGh()
+
+    def run(*a):
+        if a[0] == "api" and "/issues/events" in a[-1]:
+            return json.dumps([other, [mine]])
+        return r(*a)
+    assert g.silent_orchestrator(T0, run) == 0
+    assert not r.made("issue", "comment")
+
+
 def test_orchestrator_nothing_to_do_is_quiet(orch_env):
     orch_env(startable=False)
     r = OrchGh()
