@@ -308,7 +308,8 @@ def silent_orchestrator(since, run=gh):
     startable = os.environ.get("STARTABLE") == "true"
     acted = False
     if denials == 0 and startable:
-        events = json.loads(run("api", f"repos/{repo}/issues/events?per_page=100"))
+        events = [e for p in json.loads(run("api", "--paginate", "--slurp", f"repos/{repo}/issues/events?per_page=100") or "[]")
+                  for e in (p if isinstance(p, list) else [p])]
         pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{repo}/issues/comments?since={since}&per_page=100"))
         prs = json.loads(run("pr", "list", "--state", "all", "--limit", "50", "--json", "author,createdAt"))
         issues = json.loads(run("issue", "list", "--state", "all", "--limit", "50", "--json", "author,createdAt"))
