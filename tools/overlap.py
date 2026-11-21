@@ -85,7 +85,7 @@ def waits_for_owner(pr):
 def collect(prs, issues, own_issue=None, authors=DEFAULT_TRUSTED):
     """Build (label, paths) from `gh pr list` and `gh issue list` JSON. Own issue is skipped.
     Only same-repo PRs and slips/comments by trusted authors count; others are ignored.
-    A PR waiting only for the owner (see waits_for_owner) and the slip of its issue do not count."""
+    A PR waiting only for the owner (see waits_for_owner) and the slip of its issue do not count, nor a parked issue."""
     others = []
     parked = set()
     for pr in prs:
@@ -101,8 +101,9 @@ def collect(prs, issues, own_issue=None, authors=DEFAULT_TRUSTED):
     for iss in issues:
         if own_issue is not None and iss["number"] == own_issue:
             continue
-        if iss["number"] in parked or not trusted(iss, authors):
-            continue
+        names = {(lb or {}).get("name") for lb in iss.get("labels") or []}
+        if iss["number"] in parked or "parked" in names or not trusted(iss, authors):
+            continue  # a parked issue does no work until its fresh start: it holds no files
         texts = [iss.get("body", "")] + [c.get("body", "") for c in iss.get("comments", []) if trusted(c, authors)]
         paths = []
         for t in texts:
@@ -128,7 +129,7 @@ def main(argv=None):
     try:
         prs = gh_json("pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName,files,author,isCrossRepository,labels,reviews,headRefOid")
         issues = gh_json("issue", "list", "--state", "open", "--label", "agent:dev", "--limit", "100",
-                         "--json", "number,body,comments,author")
+                         "--json", "number,body,comments,author,labels")
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         print(f"overlap: cannot read GitHub data ({type(e).__name__}), defer the slip", file=sys.stderr)
         return 2
