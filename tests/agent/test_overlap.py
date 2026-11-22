@@ -130,3 +130,11 @@ def test_parse_files_reads_a_one_line_prose_slip():
 
 def test_parse_files_ignores_files_inside_a_sentence():
     assert mod.parse_files("see the Files: line below") == []
+
+
+def test_a_parked_issue_holds_no_files():
+    me = {"login": "Bankaifan"}
+    issues = [{"number": 192, "body": "Files: src/a.luau", "comments": [], "author": me, "labels": [{"name": "parked"}]},
+              {"number": 193, "body": "Files: src/b.luau", "comments": [], "author": me, "labels": []}]
+    assert mod.find_overlaps(["src/a.luau"], mod.collect([], issues)) == []
+    assert mod.find_overlaps(["src/b.luau"], mod.collect([], issues))
