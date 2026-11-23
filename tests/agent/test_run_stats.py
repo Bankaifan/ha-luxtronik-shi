@@ -71,6 +71,24 @@ def test_failure_class_gives_none_for_source_echo_alone():
     assert s.failure_class(f"dev\tcheck\t{SOURCE}\n") is None
 
 
+def test_failure_class_skips_the_bare_exit_code_line():
+    exit_line = "dev\tstep\t2026-11-10T08:00:00Z ##[error]Process completed with exit code 1.\n"
+    assert s.failure_class(f"dev\tcheck\t{SOURCE}\n{exit_line}") is None
+
+
+def test_fetch_all_reads_jobs_and_logs_once_per_run():
+    calls = []
+
+    def fake(*a):
+        calls.append(a)
+        if a[:2] == ("run", "list"):
+            return json.dumps([{"databaseId": 7, "conclusion": "failure", "createdAt": "2026-11-10T08:00:00Z"}])
+        return "log" if a[:2] == ("run", "view") else json.dumps({"jobs": []})
+    _, jobs_of, log_of = s.fetch_all(["a.yml"], "2026-11-01", repo="o/r", run=fake)
+    jobs_of(7), jobs_of(7), log_of(7), log_of(7)
+    assert len(calls) == 3
+
+
 def test_failure_class_labels_tool_runtime_errors():
     log = "dev\tstep\t2026-11-10T08:00:00Z (\"internal error: directory mismatch for directory .../tsconfig.json\")\n"
     cls = s.failure_class(log)
