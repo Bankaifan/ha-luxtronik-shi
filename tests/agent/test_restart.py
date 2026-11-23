@@ -110,15 +110,37 @@ def test_issue_refs_keywords_and_order():
     assert r.issue_refs(None) == []
 
 
-def pr(number, body, head="agent/x", cross=False):
-    return {"number": number, "body": body, "headRefName": head, "isCrossRepository": cross}
+def pr(number, body, head="agent/x", cross=False, files=("src/a.py",)):
+    return {"number": number, "body": body, "headRefName": head, "isCrossRepository": cross,
+            "files": [{"path": f} for f in files]}
 
 
-def test_older_agent_pr_for_same_issue_is_closed_with_superseded_comment():
+def test_older_agent_pr_for_same_issue_and_the_same_files_is_closed_with_superseded_comment():
     f = Fake()
-    prs = [pr(64, "Closes #62"), pr(67, "Closes #62"), pr(66, "Closes #10", "agent/10-y")]
+    prs = [pr(64, "Closes #62"), pr(67, "Closes #62", files=("src/a.py", "src/b.py")), pr(66, "Closes #10", "agent/10-y")]
     assert r.close_superseded(prs, f) == [(64, 67)]
     assert f.calls == [("pr", "close", "64", "--comment", "Superseded by #67")]
+
+
+def test_two_prs_for_one_issue_with_different_work_both_stay_open():
+    """roblox_energy #327 and #331: one issue, two pieces of work. Only the shared changelog fragment overlaps."""
+    items = pr(327, "Closes #326", files=("src/Shop.luau", "tests/Shop.test.luau", "changelog.d/326.md"))
+    reset = pr(331, "Closes #326", files=("src/Prestige.luau", "src/PlotService.luau", "changelog.d/326.md"))
+    assert r.superseded([items, reset]) == [] and r.close_superseded([items, reset], Fake()) == []
+    partly = pr(332, "Closes #326", files=("src/Shop.luau", "changelog.d/326.md"))  # not every file of #327
+    assert r.superseded([items, reset, partly]) == []
+    assert r.superseded([pr(1, "Closes #2", files=("changelog.d/2.md",)), pr(3, "Closes #2", files=("changelog.d/2.md",))]) == []
+    assert r.superseded([pr(1, "Closes #2", files=()), pr(3, "Closes #2")]) == []  # unknown file list: nothing is closed
+    unknown = {"number": 1, "body": "Closes #2", "headRefName": "agent/x", "isCrossRepository": False}
+    assert r.superseded([unknown, pr(3, "Closes #2")]) == []
+
+
+def test_an_explicit_supersedes_line_replaces_whatever_the_files_are():
+    old, other = pr(349, "Closes #340", files=("src/a.py",)), pr(350, "Closes #341", files=("src/a.py",))
+    new = pr(352, "Second try.\nCloses #351\nSupersedes #349", files=("src/z.py",))
+    assert r.superseded([old, other, new]) == [(349, 352)]
+    assert r.superseded([old, pr(353, "Closes #340\nSupersedes #349", "feature/z")]) == []  # agent PRs only
+    assert r.superseded([pr(1, "Closes #2"), pr(3, "Closes #9")]) == []  # same files, another issue
 
 
 def test_superseded_ignores_non_agent_and_cross_repo_prs():

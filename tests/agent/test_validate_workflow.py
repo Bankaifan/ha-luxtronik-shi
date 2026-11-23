@@ -39,3 +39,17 @@ def test_agent_smoke_waits_for_changes_and_reports_on_skip():
 
 def test_validate_runs_make_check():
     assert "run: make check" in block("validate")
+
+
+def test_the_validate_time_limit_is_a_repo_variable_with_the_old_default():
+    """roblox_energy #353: `make check` there takes about 14 minutes, the fixed 15 minute limit cancelled the run, and a
+    cancelled run starts no review and no fix round."""
+    root = Path(__file__).resolve().parent.parent.parent
+    text = (root / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
+    assert "timeout-minutes: ${{ fromJSON(vars.VALIDATE_TIMEOUT || '15') }}" in text
+
+
+@pytest.mark.template_only  # docs/variables.md is not a managed path: a downstream project does not get it by sync
+def test_the_validate_time_limit_is_documented():
+    root = Path(__file__).resolve().parent.parent.parent
+    assert "`VALIDATE_TIMEOUT` | `15`" in (root / "docs" / "variables.md").read_text(encoding="utf-8")

@@ -14,12 +14,16 @@ ENV = {"GH_REPO": "Bankaifan/agent-template", "OWNER": "Bankaifan", "AUTHOR_BOT"
 ISSUE_URL = "https://github.com/Bankaifan/agent-template/issues/7\n"
 
 
-def fake_gh(added, log):
-    """Quiet repo: no runs, PRs or issues; never-run workflows return `added[file]` as their created_at."""
+def fake_gh(added, log, recent=None):
+    """Quiet repo: no runs, PRs or issues; never-run workflows return `added[file]` as their created_at.
+    `recent`: {workflow file: its newest run}, as `catch_up` reads it."""
     stored = {}
 
     def run(*args):
         log.append(args)
+        if args[:2] == ("run", "list") and args[-1] == "createdAt,status":
+            last = (recent or {}).get(args[args.index("--workflow") + 1])
+            return json.dumps([last] if last else [])
         if args[0] == "api" and "actions/workflows/" in args[1]:
             return f"{added[args[1].rsplit('/', 1)[-1]]}\n"
         if args[:2] == ("issue", "create"):
@@ -55,10 +59,45 @@ def test_status_run_flags_never_run_workflow_added_long_ago():
     added = {wf: "2026-11-09T10:00:39Z" for wf in st.liveness.SCHEDULED}
     added["scout.yml"] = "2026-09-10T10:00:00Z"
     added["watch.yml"] = "2026-11-10T11:30:00Z"
-    assert st.run_status(ENV, NOW, fake_gh(added, log)) == 0
+    ended = {"scout.yml": {"createdAt": "2026-11-10T09:00:00Z", "status": "completed"}}  # started 3 h ago, no success
+    assert st.run_status(ENV, NOW, fake_gh(added, log, ended)) == 0
     creates = overdue_creates(log)
     assert [a[a.index("--title") + 1] for a in creates] == ["Overdue scheduled run: scout"]
     assert creates[0][creates[0].index("--label") + 1] == "prio:1"
+    assert ("workflow", "run", "scout.yml") not in log
+
+
+def test_an_overdue_workflow_is_started_by_the_script_before_any_issue_is_opened():
+    """agent-template #741/#745: the weekly summary had no run to succeed in; the issue was closed as "nothing to do"
+    and opened again on every status tick. Starting the workflow is what makes it not overdue."""
+    added = {wf: "2026-11-09T10:00:39Z" for wf in st.liveness.SCHEDULED}
+    added["weekly-summary.yml"] = "2026-09-10T10:00:00Z"
+    added["watch.yml"] = "2026-11-10T11:30:00Z"
+    log = []
+    assert st.run_status(ENV, NOW, fake_gh(added, log)) == 0
+    assert ("workflow", "run", "weekly-summary.yml") in log and overdue_creates(log) == []
+    old = {"weekly-summary.yml": {"createdAt": "2026-11-03T06:17:00Z", "status": "completed"}}  # last week's cancelled run
+    log = []
+    assert st.run_status(ENV, NOW, fake_gh(added, log, old)) == 0
+    assert ("workflow", "run", "weekly-summary.yml") in log and overdue_creates(log) == []
+    running = {"weekly-summary.yml": {"createdAt": "2026-11-10T11:50:00Z", "status": "in_progress"}}
+    log = []
+    assert st.run_status(ENV, NOW, fake_gh(added, log, running)) == 0
+    assert ("workflow", "run", "weekly-summary.yml") not in log and overdue_creates(log) == []
+
+
+def test_catch_up_falls_back_to_the_issue_when_the_start_fails_and_respects_a_short_interval():
+    def refused(*args):
+        if args[:2] == ("workflow", "run"):
+            raise liveness.subprocess.CalledProcessError(1, "gh")
+        return "[]"
+
+    assert liveness.catch_up("scout.yml", 43200, NOW, refused) == ""
+    half_hour_ago = json.dumps([{"createdAt": "2026-11-10T11:30:00Z", "status": "completed"}])
+    two_hours_ago = json.dumps([{"createdAt": "2026-11-10T10:00:00Z", "status": "completed"}])
+    assert liveness.catch_up("watch.yml", 60, NOW, lambda *a: half_hour_ago if a[0] == "run" else "") == ""
+    assert liveness.catch_up("watch.yml", 60, NOW, lambda *a: two_hours_ago if a[0] == "run" else "") == "started"
+    assert liveness.catch_up("scout.yml", 43200, NOW, lambda *a: two_hours_ago if a[0] == "run" else "") == ""
 
 
 def test_dead_watcher_is_flagged_by_the_status_run():
@@ -71,7 +110,8 @@ def test_dead_watcher_is_flagged_by_the_status_run():
     log = []
     added = {wf: "2026-11-09T10:00:39Z" for wf in st.liveness.SCHEDULED}
     added["watch.yml"] = "2026-11-01T10:00:00Z"  # added long ago, never succeeded
-    assert st.run_status(ENV, NOW, fake_gh(added, log)) == 0
+    ended = {"watch.yml": {"createdAt": "2026-11-10T11:40:00Z", "status": "completed"}}  # ran 20 min ago, no success
+    assert st.run_status(ENV, NOW, fake_gh(added, log, ended)) == 0
     creates = overdue_creates(log)
     assert [a[a.index("--title") + 1] for a in creates] == ["Overdue scheduled run: actions watcher"]
     assert "GUARD" not in creates[0][creates[0].index("--body") + 1]

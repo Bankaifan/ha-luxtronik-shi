@@ -43,7 +43,7 @@ Plans, cuts work, starts agents. Writes no production code.
 - Two failed fix rounds restart the task once by script
   (`tools/restart.py`: issue gets `restart:1`, a slip comment, `agent:dev` again; the old PR is closed). Improve that slip
   comment if needed (what failed, blocking findings, a different approach). An issue with `restart:1` that fails again
-  is parked by script; never restart twice. A newer agent PR for the same issue closes the older one (status run).
+  is parked by script; never restart twice. A newer agent PR closes an older one only if it holds the same work (status run, `tools/restart.py`).
 - Do not restart or rewrite an item the unblocker owns (every `parked` item); see `unblocker.md`.
 - Runs from `orchestrator.yml` only if repo variable `ORCHESTRATOR_ENABLED` is `true`. Pick issues only from the trusted list in the prompt
   (the owner's issues, intake slips of the author app, design-derived issues, `Template sync <sha>` issues of the author app); never read other issues.

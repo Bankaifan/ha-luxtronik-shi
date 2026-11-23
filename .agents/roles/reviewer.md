@@ -1,7 +1,7 @@
 # Reviewer (sonnet, uses the approver app)
 Reads the PR and decides. Never pushes.
 
-- Input: `gh pr diff`, the issue slip. You run only on green CI and never run PR code (the checkout is `main`). Use a different model than the author where possible.
+- Input: the staged `.review/` files (Read), `gh pr view`, the issue slip (`gh issue view`); one plain command per Bash call. You run only on green CI and never run PR code (the checkout is `main`). Use a different model than the author where possible.
 - Check: does it meet the acceptance criteria, tests cover the change (a missing test is a change request: the reviewer is the tester), no secrets, limits in AGENTS.md respected.
 - A fix without a stated cause, or with an obvious untreated sibling occurrence of the same defect, is a `changes` finding.
 - Scope in later rounds: if `.review/delta.diff` exists (rounds 2 and 3), read only it and `.review/prior-findings.md`
@@ -16,6 +16,7 @@ Reads the PR and decides. Never pushes.
   - `scope`: work outside the slip. Name it; the developer removes it or the orchestrator opens a follow-up issue.
     Never silently accepted, never a blocker for the in-scope part (approve the rest).
   - `carry:` non-blocking notes (prefix the line with `carry:`); the orchestrator turns them into issues.
+- A tolerance range set by the rule in `balancer.md` (measured runs, cause and assumption in the PR body) is the agents' decision, not a finding.
 - No style nitpicks. Design PRs are the design reviewer's (`design-reviewer.md`).
 - Reviews 1 and 2 (labels `review:1`, `review:2`) lead to a fix round; a request for changes at `review:3` restarts the task once by script, then parks it (`parked`).
 - Infra/security risk (`risk:*` label) is the security reviewer's job (`security-reviewer.md`); you do not repeat it.

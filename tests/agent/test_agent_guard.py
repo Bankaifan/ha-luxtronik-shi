@@ -423,6 +423,25 @@ def test_orchestrator_visible_action_is_fine(orch_env, kw):
     assert not r.made("issue", "comment")
 
 
+def test_orchestrator_api_error_is_tolerated(tmp_path, monkeypatch, orch_env):
+    orch_env(startable=True)
+    f = tmp_path / "api.json"
+    f.write_text(json.dumps([{"type": "result", "subtype": "success", "is_error": True, "num_turns": 1}]))
+    monkeypatch.setenv("EXEC_FILE", str(f))
+    monkeypatch.setenv("CLAUDE_OUTCOME", "failure")
+    r = OrchGh()
+    assert g.silent_orchestrator(T0, r) == 0
+    assert not r.calls
+
+
+def test_orchestrator_failed_step_without_api_pattern_fails(orch_env, monkeypatch):
+    orch_env(startable=False)
+    monkeypatch.setenv("CLAUDE_OUTCOME", "failure")
+    r = OrchGh()
+    assert g.silent_orchestrator(T0, r) == 1
+    assert r.made("issue", "comment", "57")
+
+
 def test_orchestrator_action_on_a_later_events_page_is_fine(orch_env):
     orch_env(startable=True)
     other = [{"actor": {"login": "mallory"}, "created_at": "2026-11-09T09:00:00Z"}] * 100

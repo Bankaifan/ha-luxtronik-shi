@@ -705,3 +705,11 @@ def test_un_park_that_keeps_failing_on_the_pr_does_not_comment_on_the_issue_ever
         st.un_park([parked_pr], "o/r", ["app/author"], NOW, run)
     assert len([c for c in run.calls if c[:3] == ("issue", "comment", "8")]) <= 1
     assert all("reviewer" not in a and "assignee" not in a and "@" not in a for c in run.calls for a in c)
+
+
+def test_a_fresh_start_also_clears_the_silent_run_markers():
+    calls = []
+    item = {"number": 7, "labels": [{"name": n} for n in ("parked", "silent:abc1234", "review:2", "prio:1")]}
+    st.clear_labels("pr", item, lambda *a: calls.append(a))
+    assert calls == [("pr", "edit", "7", "--remove-label", "parked", "--remove-label", "review:2",
+                      "--remove-label", "silent:abc1234")]

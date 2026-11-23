@@ -5,7 +5,10 @@ The event types (issues opened/edited/closed, issue_comment, pull_request(_targe
 1. ORCHESTRATOR_EVENTS=on (unset or anything else: skip),
 2. a sender that is OWNER, the author app or the approver app,
 3. a live check: the object is re-read and its author login equals the sender (payload fields are not trusted),
-4. no author-app event inside an orchestrator run window (self-loop rule G: run start .. run end + LOOP_GRACE),
+4. no author-app event inside an orchestrator run window (self-loop rule G: run start .. run end + LOOP_GRACE).
+   Not an echo: an issue a guard script just opened and signed (`orchestrator_gate.py signed`, GUARD_KEY; the status
+   run and the failure watch write these under the author app, a model step has no key). Such an `opened` event
+   passes rule 4, or the issue waits for the next scheduled run (#745); rules 5 and 6 still hold,
 5. no newer pending orchestrator run (debounce rule E: a burst gives one run, on the last event),
 6. the brake: 3 runs in a row started by the author app, each at most BRAKE_GAP after the previous, refuse and
    comment once in the status issue (found by its title, agent_guard.status_issue).
@@ -14,7 +17,10 @@ Prints `true` or `false` on stdout, the reason on stderr.
 
 Needs the gh CLI (GH_TOKEN, GH_REPO). Environment: EVENT, EVENT_ACTION, SENDER, RUN_ID, OWNER (default
 Bankaifan), AUTHOR_BOT, APPROVER_BOT, NUMBER, COMMENT_ID, REVIEW_ID, EVENT_AT (ISO time),
-ORCHESTRATOR_EVENTS.
+ORCHESTRATOR_EVENTS, SIGNED ("true": the step before verified the guard signature of the opened issue).
+CLI: orchestrator_gate.py          the decision, as above
+     orchestrator_gate.py signed   prints `true` if EVENT/EVENT_ACTION is issues/opened and issue NUMBER carries a
+                                   valid guard signature (GUARD_KEY in the environment), else `false`; never fails
 """
 import json
 import os
@@ -24,6 +30,7 @@ from datetime import UTC, datetime
 from itertools import pairwise
 
 import budget
+import guard_mark
 from agent_guard import same_login, status_issue
 from ghcall import gh
 
@@ -64,15 +71,16 @@ def braking(run_id, runs, author_bot):
 
 
 def decide_event(sender, owner, run_id, runs, now, *, author_bot="", approver_bot="", live=None, event_at=None,
-                 enabled=False):
-    """Rules 1-6 for the non-label events. `live`: author login read live from the object, or None."""
+                 enabled=False, signed=False):
+    """Rules 1-6 for the non-label events. `live`: author login read live from the object, or None. `signed`: the
+    event is the opening of a guard-signed issue (a script wrote it, no orchestrator run did)."""
     if not enabled:
         return False, "ORCHESTRATOR_EVENTS is not on"
     if not any(same_login(sender, who) for who in (owner, author_bot, approver_bot)):
         return False, f"sender {sender!r} is not the owner or an agent app"
     if not live or not same_login(live, sender):
         return False, f"live check failed: object author {live!r}, sender {sender!r}"
-    if same_login(sender, author_bot) and in_run_window(event_at or now, run_id, runs):
+    if same_login(sender, author_bot) and not signed and in_run_window(event_at or now, run_id, runs):
         return False, "author app event inside an orchestrator run window (own echo)"
     if newer_pending(run_id, runs):
         return False, "a newer orchestrator run is pending and sees this event too"
@@ -111,6 +119,19 @@ def live_login(event, action, env, run=gh):
     return (obj.get(key) or {}).get("login")
 
 
+def signed_issue(env, run=gh):
+    """True if the event is `issues opened` and the issue, read live, verifies against GUARD_KEY. Anything else,
+    no key or an unreadable issue: False."""
+    key = guard_mark.key_from_env(env)
+    if env.get("EVENT") != "issues" or env.get("EVENT_ACTION") != "opened" or not key:
+        return False
+    try:
+        obj = json.loads(run("api", f"repos/{env.get('GH_REPO', '')}/issues/{env.get('NUMBER', '')}"))
+    except (subprocess.CalledProcessError, ValueError, OSError):
+        return False
+    return isinstance(obj, dict) and guard_mark.verify(obj.get("title"), obj.get("body"), key)
+
+
 def fetch_runs(repo, run=gh):
     out = run("api", f"repos/{repo}/actions/workflows/orchestrator.yml/runs?per_page=30", "--jq",
               "[.workflow_runs[] | {databaseId: .id, createdAt: .created_at, updatedAt: .updated_at, status,"
@@ -131,6 +152,9 @@ def announce_brake(issue, run=gh):
 
 def main() -> int:
     env = os.environ
+    if sys.argv[1:] == ["signed"]:
+        print("true" if signed_issue(env) else "false")
+        return 0
     event, action = env.get("EVENT", ""), env.get("EVENT_ACTION", "")
     run_id = int(env.get("RUN_ID", "0"))
     now = datetime.now(UTC)
@@ -141,11 +165,17 @@ def main() -> int:
     kw = {}
     runs = []
     if event in EVENTS:
-        runs = fetch_runs(env.get("GH_REPO", ""))
+        try:
+            runs = fetch_runs(env.get("GH_REPO", ""))
+        except (subprocess.CalledProcessError, ValueError, OSError) as e:
+            print(f"cannot read the orchestrator runs, event skipped: {e}", file=sys.stderr)
+            print("false")
+            return 0
         kw = {"author_bot": env.get("AUTHOR_BOT", ""), "approver_bot": env.get("APPROVER_BOT", ""),
               "enabled": env.get("ORCHESTRATOR_EVENTS") == "on",
               "event_at": parse(env["EVENT_AT"]) if env.get("EVENT_AT") else None,
-              "live": live_login(event, action, env)}
+              "live": live_login(event, action, env),
+              "signed": event == "issues" and action == "opened" and env.get("SIGNED") == "true"}
     run, reason = decide(event, env.get("SENDER", ""), env.get("OWNER", "Bankaifan"), run_id, runs, now, **kw)
     if reason.startswith("brake"):
         announce_brake(status_issue(gh, env.get("AUTHOR_BOT", "")))

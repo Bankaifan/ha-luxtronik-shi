@@ -3,7 +3,10 @@
 CLI (needs the gh CLI with GH_TOKEN and GH_REPO):
   restart.py limit PR        agent PR hit the round limit: first time restart the issue (label restart:1, slip comment,
                              agent:dev re-added, PR closed), otherwise the PR is parked (label `parked`, one comment)
-  restart.py supersede       close every open agent PR that a newer open agent PR for the same issue replaces
+  restart.py supersede       close every open agent PR that a newer open agent PR replaces
+A newer PR replaces an older one only when it carries the same work: its body says `Supersedes #<old>`, or both work
+on the same issue and the newer one changes every file the older one changes (changelog fragments aside). Two PRs
+for one issue with different files are two pieces of work: both stay open.
 """
 import json
 import os
@@ -20,6 +23,7 @@ from check_pr_form import BATCH_BRANCH
 RESTART = "restart:1"
 _REFS = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\s+#(\d+)", re.IGNORECASE)
 _CLOSING = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)", re.IGNORECASE)
+_SUPERSEDES = re.compile(r"\bsupersedes?\s+#(\d+)", re.IGNORECASE)
 _BLOCKING = 1500  # chars of review text per review in the slip
 
 def gh(*args):
@@ -48,21 +52,29 @@ def is_agent_branch(pr):
     return head.startswith("agent/") and head != BATCH_BRANCH and not pr.get("isCrossRepository")
 
 
+def work_files(pr):
+    """Paths a PR changes, without its changelog fragments (every PR of an issue adds the same one). Unknown: empty."""
+    paths = {f.get("path", "") for f in pr.get("files") or []}
+    return {p for p in paths if p and not p.startswith("changelog.d/")}
+
+
+def replaces(new, old):
+    """NEW carries the work of OLD: it says `Supersedes #<old>`, or both work on one issue and NEW changes every
+    file OLD changes. An unknown or empty file list replaces nothing."""
+    if old["number"] in {int(n) for n in _SUPERSEDES.findall(new.get("body") or "")}:
+        return True
+    files = work_files(old)
+    return bool(files) and files <= work_files(new) and bool(set(own_issues(old.get("body"))) & set(own_issues(new.get("body"))))
+
+
 def superseded(prs):
-    """[(old, new)] for open agent PRs whose issue is also referenced by a newer open agent PR."""
-    newest = {}
-    for p in prs:
-        if not is_agent_branch(p):
-            continue
-        for n in own_issues(p.get("body")):
-            newest[n] = max(newest.get(n, 0), p["number"])
+    """[(old, new)] for open agent PRs that a newer open agent PR replaces (`replaces`); the newest one wins."""
+    agent = sorted((p for p in prs if is_agent_branch(p)), key=lambda p: p["number"])
     out = {}
-    for p in prs:
-        if not is_agent_branch(p):
-            continue
-        newer = [newest[n] for n in own_issues(p.get("body")) if newest[n] > p["number"]]
+    for i, old in enumerate(agent):
+        newer = [new["number"] for new in agent[i + 1:] if replaces(new, old)]
         if newer:
-            out[p["number"]] = max(newer)
+            out[old["number"]] = max(newer)
     return sorted(out.items())
 
 
@@ -142,7 +154,7 @@ def main(argv):
         return 0
     if args == ["supersede"]:
         prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "100", "--json",
-                            "number,body,headRefName,isCrossRepository"))
+                            "number,body,headRefName,isCrossRepository,files"))
         for old, new in close_superseded(prs):
             print(f"closed #{old}: superseded by #{new}")
         return 0

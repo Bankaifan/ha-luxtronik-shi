@@ -117,6 +117,13 @@ def test_run_main_exits_nonzero_on_readback_failure(monkeypatch):
     assert mod.run_main() == 1
 
 
+def test_workflow_has_schedule_dispatch_and_long_timeout():
+    text = (pathlib.Path(__file__).parent.parent.parent / ".github" / "workflows" / "weekly-summary.yml").read_text()
+    assert "schedule:" in text and "workflow_dispatch:" in text
+    minutes = int(text.split("timeout-minutes:", 1)[1].split()[0])
+    assert minutes >= 30
+
+
 TODAY = datetime.date(2026, 11, 9)  # week window: 2026-11-02 .. 2026-11-09
 KEY = "test-guard-key"
 
