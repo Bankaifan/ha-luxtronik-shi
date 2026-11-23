@@ -71,9 +71,13 @@ def format_stats(result):
 def jobs_getter(repo, run):
     slug = repo or "{owner}/{repo}"
 
+    cache = {}
+
     def jobs_of(run_id):
-        return json.loads(run("api", f"repos/{slug}/actions/runs/{run_id}/jobs", "--paginate",
-                              "--jq", "{jobs: .jobs}")).get("jobs", [])
+        if run_id not in cache:
+            cache[run_id] = json.loads(run("api", f"repos/{slug}/actions/runs/{run_id}/jobs", "--paginate",
+                                           "--jq", "{jobs: .jobs}")).get("jobs", [])
+        return cache[run_id]
     return jobs_of
 
 
@@ -97,8 +101,12 @@ def fetch_all(files, since, repo=None, run=liveness.gh):
     runs = {f: json.loads(run("run", "list", "--workflow", f, *base, "--created", f">={since}",
                               "--limit", str(LIMIT), "--json", fields)) for f in files}
 
+    logs = {}
+
     def log_of(run_id):
-        return run("run", "view", str(run_id), *base, "--log-failed")
+        if run_id not in logs:
+            logs[run_id] = run("run", "view", str(run_id), *base, "--log-failed")
+        return logs[run_id]
     return runs, jobs_getter(repo, run), log_of
 
 
@@ -130,6 +138,7 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 # A script line echoed in the log (`echo "::error::..."` or an unexpanded `${!name}`), not the error text itself
 SOURCE_RE = re.compile(r'echo "::error::|\$\{!')
 ANNOTATION_RE = re.compile(r"^::error::")
+EXIT_LINE_RE = re.compile(r"^(##\[error\])?process completed with exit code \d+\.?$", re.IGNORECASE)
 # A standalone number (run id, count, duration) becomes #; a digit run that continues an identifier (MAX_DEV2) stays.
 # Applied to lowercased text, so the identifier characters are a-z and _.
 NUMBER_RE = re.compile(r"(?<![a-z_\d])\d+")
@@ -146,7 +155,7 @@ def failure_class(log):
         return None
     for line in log.splitlines():
         text = STAMP_RE.sub("", ANSI_RE.sub("", line.rsplit("\t", 1)[-1])).strip()
-        if not ERROR_RE.search(text) or SOURCE_RE.search(text):
+        if not ERROR_RE.search(text) or SOURCE_RE.search(text) or EXIT_LINE_RE.match(text):
             continue
         label = TOOL_LABEL if TOOL_RE.search(text) else ""
         return label + NUMBER_RE.sub("#", ANNOTATION_RE.sub("", text).lower())[:120]
