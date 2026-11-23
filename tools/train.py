@@ -7,7 +7,10 @@ Model-free. The workflow (a later PR) runs it on push to main, on a schedule and
 2. One in flight: if a candidate is CLEAN, UNSTABLE or HAS_HOOKS, or BLOCKED with a required check running, it is about
    to merge. "Running" counts only the checks that `.github/rulesets/main.json` requires (none listed: every check).
    The run does nothing; the push of that merge starts the next run.
-3. The oldest BEHIND candidate with auto-merge enabled is rebased (PUT pulls/N/update-branch, update_method=rebase).
+3. The oldest BEHIND candidate with auto-merge enabled is rebased by tools/branch_repair.py: a straight line on
+   main (a merge of main into the branch disappears), every subject `V<VERSION>-<NAME>: ` with main's VERSION, one
+   `--force-with-lease` push. If that script cannot do it, `gh pr update-branch --rebase` does; a rebase that
+   stops on a conflict goes to the conflict fix (step 4).
 4. The oldest DIRTY candidate gets status.handle_conflict at once, unless an agent-fix run is queued or running.
    PRs no longer edit VERSION or CHANGELOG.md, so those never conflict (issue #468).
 0. Before all of that, `release_main` is the one writer of VERSION and CHANGELOG.md: the changelog fragments on main
@@ -37,10 +40,13 @@ Model-free. The workflow (a later PR) runs it on push to main, on a schedule and
    - no open batch and no PR in flight: a new one is built, unless the newest batch was closed unmerged with the same
      member set (those PRs then go the serial way). TRAIN_BATCH=off builds none.
 
+8. Repair (`repair_step`, before the candidates): an open agent PR whose commit subjects fail the form check
+   (tools/task_ids.py) is red and would wait for a model. The same script sets them, at most REPAIR_MAX PRs per run.
+9. Issues (tools/landed.py, first of all): the open issue of a merged agent PR is closed, so no person closes one.
+
 CLI: train.py   do the run. Environment: GH_REPO, APPROVER_BOT (unset: nothing is approved, nothing happens),
      OWNER (default Bankaifan), TRAIN_BATCH. Needs the gh CLI with GH_TOKEN.
 """
-import base64
 import datetime
 import json
 import os
@@ -50,9 +56,14 @@ import tempfile
 from pathlib import Path
 
 import agent_guard
+import branch_repair
+import landed as landed_issues
 import reapprove
 import restart
 import status
+import task_ids
+from branch_repair import COMMITTER, git_env  # noqa: F401 - one definition; `train.git_env` stays the name callers use
+from release_fragments import FRAGMENT_NAME
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "check"))
 import check_pr_form
@@ -60,12 +71,12 @@ import check_pr_form
 RELEASE = Path(__file__).resolve().parent / "release_fragments.py"  # always main's copy
 RELEASE_PATHS = {"VERSION", "CHANGELOG.md"}  # plus changelog.d/: the only paths of the release commit
 RELEASE_BRANCH = "release/next"  # force-updated, at most one open release PR
-COMMITTER = ("Daniel", "476059+Bankaifan@users.noreply.github.com")
 
 IN_FLIGHT = {"CLEAN", "UNSTABLE", "HAS_HOOKS"}
 ACTIVE_RUN = {"in_progress", "queued", "waiting", "requested", "pending"}
 LIST_FIELDS = ("number,title,url,headRefName,headRefOid,labels,mergeStateStatus,statusCheckRollup,"
-               "isCrossRepository,files,autoMergeRequest,reviewRequests,body")
+               "isCrossRepository,files,autoMergeRequest,reviewRequests,body,commits")
+REPAIR_MAX = 3  # branches repaired per run (one scratch clone each)
 BATCH_BRANCH = check_pr_form.BATCH_BRANCH  # force-updated, at most one open batch PR
 BATCH_MAX = 8
 BATCH_WAIT_MIN = 30  # an open batch older than this (head commit) was refused or is stuck
@@ -131,14 +142,25 @@ def plan(cands, fix_busy, waiting=(), required=None):
     return None, rebase, conflict
 
 
-def git_env(token=""):
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_COMMITTER_NAME": COMMITTER[0],
-           "GIT_COMMITTER_EMAIL": COMMITTER[1], "GIT_AUTHOR_NAME": COMMITTER[0], "GIT_AUTHOR_EMAIL": COMMITTER[1]}
-    if token:  # through the environment, never argv
-        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.extraheader",
-                   GIT_CONFIG_VALUE_0=f"AUTHORIZATION: basic {basic}")
-    return env
+def needs_repair(pr):
+    """The NAME to set on an open agent PR whose commit subjects fail the form check, else None. A parked PR is
+    left alone; a PR without a `V<major>-<NAME>: ` title has no subject rule."""
+    if not status.is_agent_pr(pr) or "parked" in status.names(pr):
+        return None
+    subjects = [c.get("messageHeadline") or "" for c in pr.get("commits") or []]
+    return task_ids.name_of(pr.get("title")) if task_ids.commit_errors(pr.get("title"), subjects) else None
+
+
+def repair_step(prs, repairer):
+    """Step 8 of the module text. Returns the numbers of the PRs whose branch was pushed: their head moved, so the
+    rest of this run leaves them alone."""
+    pushed = set()
+    for p in [p for p in prs if needs_repair(p)][:REPAIR_MAX]:
+        how = repairer(p, needs_repair(p))
+        print(f"repair PR #{p['number']}: {how or 'failed'}")
+        if how == "pushed":
+            pushed.add(p["number"])
+    return pushed
 
 
 def release_main(remote, token="", base="main", notes=None):
@@ -157,7 +179,10 @@ def release_main(remote, token="", base="main", notes=None):
             git(tmp, "init", "-q")
             git(tmp, "fetch", "-q", remote, f"+refs/heads/{base}:refs/remotes/origin/{base}")
             git(tmp, "checkout", "-q", "--detach", f"origin/{base}")
-            if not list(Path(tmp, "changelog.d").glob("[0-9]*.md")) or not Path(tmp, "VERSION").is_file():
+            # The same name rule as tools/release_fragments.py (`<issue>.md`): a looser one took `288-weather.md` for a
+            # fragment, the script then released nothing and the run failed for ever (roblox_energy #367).
+            names = [p.name for p in Path(tmp, "changelog.d").glob("*.md")]
+            if not any(FRAGMENT_NAME.fullmatch(n) for n in names) or not Path(tmp, "VERSION").is_file():
                 return ""  # no fragments, or a project that keeps its version elsewhere: nothing to release by script
             old = Path(tmp, "VERSION").read_text(encoding="utf-8").strip()
             done = subprocess.run([sys.executable, "-I", str(RELEASE), tmp], check=False, env=env,
@@ -374,8 +399,17 @@ def release_pr(run, version, notes, owner, lang="German"):
     return f"updated release PR #{number}: {title}"
 
 
-def run_train(env, run=status.gh, releaser=None, now=None, builder=None):
+def run_train(env, run=status.gh, releaser=None, now=None, builder=None, repairer=None):
     repo = env["GH_REPO"]
+    try:
+        for line in landed_issues.close_landed(run):
+            print(line)
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError) as e:
+        print(f"issues: not checked ({type(e).__name__}); the next run retries")
+    if repairer is None:
+        def repairer(pr, name):
+            return branch_repair.repair(f"https://github.com/{repo}.git", pr["headRefName"], pr["headRefOid"], name,
+                                        env.get("GH_TOKEN", ""))
     notes = []
     owner = env.get("OWNER", status.OWNER_DEFAULT)
     if releaser is None:
@@ -404,6 +438,8 @@ def run_train(env, run=status.gh, releaser=None, now=None, builder=None):
             pages = jlist(run, "api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/reviews")
             return [r for page in pages for r in page]
 
+        moved = repair_step(prs, repairer)
+        prs = [p for p in prs if p["number"] not in moved]
         cands = candidates(prs, reviews_of, approver)
         waiting = {p["number"] for p in cands
                    if waiting_for_owner(p, reviews_of(p["number"]), approver, owner, required)}
@@ -422,8 +458,19 @@ def run_train(env, run=status.gh, releaser=None, now=None, builder=None):
             print(f"waiting: PR #{busy['number']} is about to merge; the train runs again after its push")
             return int(released is None)
         if rebase:
-            run("api", "-X", "PUT", f"repos/{repo}/pulls/{rebase['number']}/update-branch", "-f", "update_method=rebase")
-            print(f"rebased PR #{rebase['number']} onto main")
+            how = repairer(rebase, task_ids.name_of(rebase.get("title")))
+            if how == "conflict":  # GitHub calls it BEHIND, a rebase stops: the conflict fix owns it, once per head
+                if status.conflict_mark(rebase) not in status.names(rebase) and not fix_busy and not conflict:
+                    conflict = rebase
+                print(f"PR #{rebase['number']} cannot be rebased onto main without a conflict")
+            elif how in ("moved", "empty"):
+                print(f"PR #{rebase['number']} not rebased: {how}")
+            else:
+                if how != "pushed":  # the script could not: GitHub rebases, subjects stay as they are
+                    # `gh pr update-branch --rebase`: the REST update-branch call knows no rebase and always merged
+                    # main into the branch, which is where the `Merge branch 'main' into agent/...` commits came from
+                    run("pr", "update-branch", str(rebase["number"]), "--rebase")
+                print(f"rebased PR #{rebase['number']} onto main")
         if conflict:
             print(f"conflict PR #{conflict['number']}: {status.handle_conflict(conflict, owner, run)}")
         if not rebase and not conflict:

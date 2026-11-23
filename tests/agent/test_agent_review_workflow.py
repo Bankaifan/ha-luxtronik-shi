@@ -52,7 +52,10 @@ def test_checkout_is_the_default_branch_and_never_the_pr_head():
 
 def test_approver_token_scope_is_unchanged():
     assert "permission-pull-requests: write" in TEXT
-    assert len(re.findall(r"(?m)^\s+permission-[a-z-]+:", TEXT)) == 1  # token scopes, not --permission-mode
+    scopes = re.findall(r"(?m)^\s+(permission-[a-z-]+: \w+)", TEXT)  # token scopes, not --permission-mode
+    assert scopes == ["permission-pull-requests: write", "permission-actions: write"]
+    model = TEXT[step_index("id: claude"):step_index("id: again")]
+    assert "steps.app.outputs.token" in model and "ci-app" not in model  # the actions token is made after the model step
     assert "permissions:\n  contents: read\n  pull-requests: read\n" in TEXT
 
 
@@ -110,3 +113,23 @@ def test_review_round_is_counted_per_head_not_per_label_case():
     block = TEXT[step_index("id: round"):step_index("id: reapprove")]
     assert 'guard round "$num" "$SHA"' in block
     assert "guard label pr \"$num\" review:" not in block
+
+
+def test_a_run_without_a_review_is_repeated_once_per_head_before_the_guard_acts():
+    """First silent run on a head: label silent:<sha7> and validate starts again. The guard only acts when no second
+    run was started (the head already carries the label, or a step of the repeat failed)."""
+    assert step_index("id: claude") < step_index("id: again") < step_index("id: ci-app") < step_index("id: redo")
+    assert step_index("id: redo") < step_index("Escalate a run that left no review")
+    again = TEXT[step_index("id: again"):step_index("id: ci-app")]
+    assert 'guard reviewed "$PR" "$SHA"' in again and 'mark="silent:${SHA:0:7}"' in again
+    assert again.index("the guard takes over") < again.index('guard label pr "$PR" "$mark"') < again.index("retry=true")
+    redo = TEXT[step_index("id: ci-app"):step_index("Escalate a run that left no review")]
+    assert redo.count("steps.again.outputs.retry == 'true'") == 2
+    assert 'gh workflow run validate.yml --ref "$BRANCH"' in redo and "GH_TOKEN: ${{ steps.ci-app.outputs.token }}" in redo
+    escalate = TEXT[step_index("Escalate a run that left no review"):]
+    assert "steps.redo.outcome != 'success'" in escalate and "agent_guard.py silent review" in escalate
+
+
+def test_the_reviewer_is_told_to_use_single_commands_and_the_read_tools():
+    prompt = TEXT[step_index("id: claude"):step_index("id: again")]
+    assert "one per Bash call" in prompt and "no `cd`, `cat`," in prompt and "A denied call is no reason to stop" in prompt

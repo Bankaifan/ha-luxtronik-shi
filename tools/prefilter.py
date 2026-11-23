@@ -258,12 +258,33 @@ def handover_state():
     return (time.time() - int(ts)) / 86400, newer
 
 
+def slip_time(issue, authors):
+    """ISO time of the newest trusted slip of ISSUE: the newest trusted comment with a `Files:` line, else the body."""
+    times = [c.get("createdAt", "") for c in issue.get("comments", [])
+             if overlap.trusted(c, authors) and overlap.parse_files(c.get("body") or "")]
+    return max(times) if times else issue.get("createdAt", "")
+
+
+def step_landed(n, issue, authors, gh=None):
+    """True when a same-repo `agent/` PR naming issue N merged after its newest slip (issue #661): the slip's step is
+    done and a restart from it would only produce an empty run."""
+    run = gh or globals()["gh"]  # the module's gh at call time, so a test can replace it
+    out = run("pr", "list", "--state", "merged", "--search", f"#{n} in:body", "--limit", "20",
+              "--json", "body,headRefName,isCrossRepository,mergedAt")
+    since = slip_time(issue, authors)
+    return any(p.get("mergedAt", "") > since and n in closing_issues(p.get("body"))
+               for p in json.loads(out or "[]")
+               if p.get("headRefName", "").startswith("agent/") and not p.get("isCrossRepository"))
+
+
 def needs_slip(start, authors=overlap.DEFAULT_TRUSTED):
-    """The issues of START that carry no slip yet (`slip.py`): only the model can write it."""
+    """The issues of START only the model can move: they carry no slip yet (`slip.py`), or the step of their newest
+    slip is merged (`step_landed`) and the issue is still open. The dispatcher passes both kinds over; without the
+    second kind such an issue stayed in the start list for ever and every orchestrator run ended silently (#743)."""
     out = []
     for n in start:
-        issue = json.loads(gh("issue", "view", str(n), "--json", "body,author,comments"))
-        if not slip.has_slip(issue, authors):
+        issue = json.loads(gh("issue", "view", str(n), "--json", "body,author,comments,createdAt"))
+        if not slip.has_slip(issue, authors) or step_landed(n, issue, authors):
             out.append(n)
     return out
 
@@ -347,7 +368,10 @@ def main(mode) -> int:
         with open(out, "a") as f:
             f.write(f"work={str(work).lower()}\n")
             if mode == "orchestrator":
-                f.write(f"startable={str(bool(cands)).lower()}\nstart={','.join(map(str, cands))}\nreason={reason}\n")
+                # What the silent-run guard expects an action for. Dispatcher on: the model starts nothing, its only
+                # visible job is a slip comment, so an issue the dispatcher will start by itself is not "startable".
+                mine = cands if slipless is None else slipless
+                f.write(f"startable={str(bool(mine)).lower()}\nstart={','.join(map(str, cands))}\nreason={reason}\n")
                 f.write(f"needs_slip={','.join(map(str, slipless or []))}\nhandover_due={str(handover_due).lower()}\n")
                 f.write(f"free_dev={free_dev}\nfree_prs={free_prs}\nwaiting_prs={w_prs}\n")
     return 0

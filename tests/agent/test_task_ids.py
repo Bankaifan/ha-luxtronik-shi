@@ -21,3 +21,14 @@ def test_versioned_names_and_commit_subjects():
     bad = ["fix typo", "V1-HPO-FLOW: no version", "V1.101-OTHER: wrong name", "V1.101-HPO-FLOW:"]
     assert len(task_ids.commit_errors("V1-HPO-FLOW: summary", bad)) == 5  # four subjects and one repair hint
     assert task_ids.commit_errors("NAMES: old form", bad) == [] and task_ids.commit_errors("Release 1.102", bad) == []
+
+
+def test_a_merge_of_main_and_an_older_version_are_no_subject_errors():
+    title = "V0-NEON-OFF: glow off"
+    merges = ["Merge branch 'main' into agent/341-neon-off", "Merge remote-tracking branch 'origin/main' into agent/341-neon-off",
+              "Merge branch 'main' of https://github.com/o/r into agent/341-neon-off"]
+    assert task_ids.commit_errors(title, ["V0.14-NEON-OFF: before the release", "V0.15-NEON-OFF: after it", *merges]) == []
+    for other in ("Merge branch 'agent/1-x' into agent/341-neon-off", "Merge pull request #3 from o/b",
+                  "Merge branch 'main' into agent/341-neon-off and more"):
+        assert len(task_ids.commit_errors(title, [other])) == 2, other
+    assert task_ids.name_of(title) == "NEON-OFF" and task_ids.name_of("NAMES: old form") is None

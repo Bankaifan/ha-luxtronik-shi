@@ -2,7 +2,10 @@
 
 - post_comment / verify_body: a comment or issue body Daniel depends on is read back; a missing one raises ReadbackError.
 - overdue_runs / ensure_overdue_issue: a scheduled workflow whose last successful run is older than 2 intervals
-  gets exactly one open `prio:1` issue (found by its title, so the next tick creates no second one).
+  is started by the script first (`catch_up`: every one has a `workflow_dispatch` trigger). Only when that cannot
+  help (the start failed, or a run of the last hours already ended without success) it gets exactly one open
+  `prio:1` issue (found by its title, so the next tick creates no second one). An issue alone cannot make a weekly
+  run succeed: it was closed as "nothing to do" and opened again every status tick until the next schedule (#745).
 Needs the gh CLI (GH_TOKEN, GH_REPO). Prints numbers and titles, never tokens.
 """
 import datetime
@@ -26,6 +29,7 @@ SCHEDULED = {
 GATED = {"nightly.yml": "NIGHTLY_HEAVY_TESTS"}
 OVERDUE_FACTOR = 2
 OVERDUE_LABEL = "prio:1"
+CATCH_UP_MIN = 6 * 60  # an overdue workflow is started again at most this often (or once per interval, if shorter)
 STATUS_MAX_AGE_MIN = 180  # the weekly summary flags a status run older than 3 hours
 
 
@@ -159,10 +163,28 @@ if __name__ == "__main__":
     print(ensure_nightly_issue() or "open issue exists")
 
 
+def catch_up(workflow, interval_min, now, run=gh):
+    """Start an overdue scheduled workflow instead of reporting it. Returns "started", "waiting" (a run of the last
+    CATCH_UP_MIN minutes, or of the last interval if that is shorter, is still queued or running) or "" (such a run
+    already ended and brought no success, or the start failed: the issue is due)."""
+    try:
+        runs = json.loads(run("run", "list", "--workflow", workflow, "--limit", "1", "--json", "createdAt,status"))
+        last = runs[0] if runs else None
+        if last and (now - _ts(last["createdAt"])).total_seconds() / 60 < min(CATCH_UP_MIN, interval_min):
+            return "waiting" if last.get("status") != "completed" else ""
+        run("workflow", "run", workflow)
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError):
+        return ""
+    return "started"
+
+
 def flag_overdue(successes, now, run=gh, added=None):
-    """One issue per overdue run, none for runs that already have one. Returns (overdue labels, new issue numbers)."""
+    """Every overdue run is started (`catch_up`); one issue per overdue run that this cannot help, none for runs that
+    already have one. Returns (overdue labels, new issue numbers)."""
     late = overdue_runs(successes, now, added)
-    new = [n for n in (ensure_overdue_issue(label, run=run) for label in late) if n]
+    by_label = {label: (wf, interval) for wf, (label, interval) in SCHEDULED.items()}
+    due = [label for label in late if not catch_up(*by_label[label], now, run)]
+    new = [n for n in (ensure_overdue_issue(label, run=run) for label in due) if n]
     return late, new
 
 

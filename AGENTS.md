@@ -53,7 +53,7 @@ Project rules: `AGENTS.project.md` (optional, not managed); the Limits below win
 Developer -> CI -> reviewer (only on green CI) -> at most 2 fix rounds (started automatically on `CHANGES_REQUESTED`
 or on a red CI), each with a different approach than the last. A round counts only for a finding on the diff. Then the
 task restarts once (a new slip, the old PR closed as superseded), then the unblocker looks at it, then it is `parked`
-and gets a fresh start after a cool-down that doubles each time. A newer agent PR for the same issue closes the older one.
+and gets a fresh start after a cool-down that doubles each time. A newer agent PR closes an older one only if it holds the same work (its files, or `Supersedes #N`).
 A design study (`docs/design/`, see its README) only if the work changes who or what is trusted, token or app
 permissions, CODEOWNERS paths, or what leaves the repo. Other big work starts directly: the issue carries a split with
 `Depends on:` lines, one small PR with tests per step.

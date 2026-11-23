@@ -62,6 +62,16 @@ def count_denials(text):
     return sum(len([d for d in rec.get("permission_denials") or [] if isinstance(d, dict)]) for rec in _records(text))
 
 
+def api_error(text):
+    """True if the run ended with is_error, after at most one turn and without any tool use: the model call itself failed."""
+    results = [r for r in _records(text) if r.get("type") == "result"]
+    if not results or any(r.get("permission_denials") for r in results):
+        return False
+    last = results[-1]
+    turns = last.get("num_turns")
+    return last.get("is_error") is True and isinstance(turns, int) and turns <= 1
+
+
 def read_exec(path):
     try:
         with open(path, encoding="utf-8", errors="replace") as f:

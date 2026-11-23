@@ -1,0 +1,264 @@
+diff --git a/.github/workflows/agent-dev.yml b/.github/workflows/agent-dev.yml
+index 0601bfc..1db9533 100644
+--- a/.github/workflows/agent-dev.yml
++++ b/.github/workflows/agent-dev.yml
+@@ -305,4 +305,10 @@ jobs:
+         run: |
+           # Rule: the guard comes from main, this call from the PR branch. `silent` ignores extra trailing args and a
+           # usage error escalates ("guard error"); only ever append args, never reorder or remove them.
++          # An issue that was closed meanwhile has nothing left to build: a run without a PR on it is not silent (#751:
++          # the overdue run succeeded, the failure watch closed #745, the guard still opened a stuck issue for it).
++          # An unreadable state is not "closed": the guard then runs as before.
++          if [ "$(gh issue view "$ISSUE" --json state --jq .state || true)" = CLOSED ]; then
++            echo "Issue #$ISSUE is closed: nothing to escalate"; exit 0
++          fi
+           python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent dev "$ISSUE" "$STARTED"
+diff --git a/.github/workflows/agent-fix.yml b/.github/workflows/agent-fix.yml
+index 82f65bc..7851980 100644
+--- a/.github/workflows/agent-fix.yml
++++ b/.github/workflows/agent-fix.yml
+@@ -6,6 +6,8 @@ run-name: "${{ github.event_name == 'pull_request_review' && github.event.pull_r
+ # Both triggers run in the base repo context and get the repo secrets.
+ # Also started by `workflow_dispatch` with input `pr` (the status run, for a PR that conflicts with main): a conflict
+ # is no finding, so it starts a fix without reading or bumping the round labels.
++# A fix run that produces nothing is repeated once per head (label silent:<sha7>, dispatch with why=retry) before the
++# silent-run guard acts.
+ # Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else parked.
+ # A red CI bumps the label first; the first PR-form or VERSION/CHANGELOG failure of a PR gets an uncounted fix run (formfix).
+ on:
+@@ -20,6 +22,11 @@ on:
+         description: Number of the agent/* PR that conflicts with main
+         required: true
+         type: string
++      why:
++        description: conflict (the PR conflicts with main) or retry (a fix run on this head produced nothing)
++        type: choice
++        options: [conflict, retry]
++        default: conflict
+ permissions:
+   contents: read
+ jobs:
+@@ -190,6 +197,7 @@ jobs:
+       PR: ${{ needs.prepare.outputs.pr }}
+       BRANCH: ${{ needs.prepare.outputs.branch }}
+       MODEL: ${{ needs.prepare.outputs.model }}
++      WHY: ${{ inputs.why || 'conflict' }}
+     steps:
+       - name: Fail if a required repo variable is unset
+         env:
+@@ -287,8 +295,12 @@ jobs:
+             PR #${{ env.PR }} in ${{ github.repository }} (branch ${{ env.BRANCH }}, already checked out) needs a fix.
+             Trigger: ${{ env.EVENT }}.
+             - pull_request_review: a review requests changes. Read it with `gh pr view ${{ env.PR }} --comments --json reviews,comments`.
+-            - workflow_dispatch: the PR conflicts with main. Rebase the branch onto current origin/main, resolve
+-              the conflicts keeping the intent of the PR (rebase, never merge main into the branch).
++            - workflow_dispatch, reason `${{ env.WHY }}`. `conflict`: the PR conflicts with main. Rebase the branch
++              onto current origin/main, resolve the conflicts keeping the intent of the PR. `retry`: an earlier fix run
++              on this head ended without a commit. Read the reviews as above; fix what the newest one that requests
++              changes raises, else rebase onto origin/main and fix what `make check` reports.
++            Update the branch only with `git rebase origin/main`: never `git merge`, never `git pull` without
++            `--rebase`, never `gh pr update-branch` (a merge commit is not a commit of this task).
+             - workflow_run: the validate run ${{ env.RUN_ID }} failed. Its failing lines are in `ci-failure.log`
+               (read it with Read; never commit it). CI tests the PR merged with current main: rebase onto
+               origin/main first, then reproduce with `make check`.
+@@ -400,9 +412,42 @@ jobs:
+           done
+           gh workflow run validate.yml --ref "$BRANCH"
+           echo "triggered=true" >> "$GITHUB_OUTPUT"
+-      # Never end silently: no new commit on the PR head means the PR is parked (label and one comment).
+-      - name: Escalate a run that pushed no fix
++      # A run that produced nothing (same head, same body, not approved) is repeated once per head before the guard
++      # acts: the label marks the head and the next step dispatches this workflow again with why=retry (it queues
++      # behind this job). Any error in these two steps and the guard below acts as before.
++      - name: Repeat a run that produced no fix once
++        id: again
+         if: ${{ always() && steps.open.outputs.open == 'true' }}
++        env:
++          GH_TOKEN: ${{ steps.app.outputs.token }}
++          GH_REPO: ${{ github.repository }}
++          HEAD_BEFORE: ${{ steps.before.outputs.sha }}
++          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
++        run: |
++          set -euo pipefail
++          tools="$RUNNER_TEMP/guard/tools"
++          view=$(gh pr view "$PR" --json state,headRefOid,labels,body)
++          if [ -z "$HEAD_BEFORE" ] || [ "$(jq -r .state <<<"$view")" != OPEN ] || [ "$(jq -r .headRefOid <<<"$view")" != "$HEAD_BEFORE" ]; then exit 0; fi
++          if ! jq -r .body <<<"$view" | cmp -s - "$RUNNER_TEMP/body-before.txt"; then exit 0; fi
++          if [ "$(python3 "$tools/approval.py" check "$PR")" = approved ]; then exit 0; fi
++          mark="silent:${HEAD_BEFORE:0:7}"
++          if jq -e --arg m "$mark" '[.labels[].name] | index($m) != null' <<<"$view" > /dev/null; then
++            echo "Second run without a fix on $HEAD_BEFORE: the guard takes over"; exit 0
++          fi
++          python3 "$tools/agent_guard.py" label pr "$PR" "$mark"
++          echo "No fix on $HEAD_BEFORE: one more run"
++          echo "retry=true" >> "$GITHUB_OUTPUT"
++      - name: Start the repeated fix run
++        id: redo
++        if: ${{ always() && steps.open.outputs.open == 'true' && steps.again.outputs.retry == 'true' }}
++        env:
++          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
++          GH_REPO: ${{ github.repository }}
++        run: gh workflow run agent-fix.yml -f pr="$PR" -f why=retry
++      # Never end silently: no new commit on the PR head and no second run started (it was the second one, or starting
++      # it failed) means the guard acts (restart or park).
++      - name: Escalate a run that pushed no fix
++        if: ${{ always() && steps.open.outputs.open == 'true' && steps.redo.outcome != 'success' }}
+         env:
+           GH_TOKEN: ${{ steps.app.outputs.token }}
+           GH_REPO: ${{ github.repository }}
+diff --git a/.github/workflows/agent-review.yml b/.github/workflows/agent-review.yml
+index 1bee6fd..b5084ef 100644
+--- a/.github/workflows/agent-review.yml
++++ b/.github/workflows/agent-review.yml
+@@ -2,6 +2,8 @@ name: agent-review
+ run-name: "review: ${{ github.event.workflow_run.display_title || github.event.workflow_run.head_branch }}"
+ # Review only on green CI: runs when `validate` completed successfully on a same-repo agent/* branch.
+ # The reviewer never runs PR code: it checks out main and reads the change from staged files (.review/) and gh pr view.
++# A run that leaves no review is repeated once per head (label silent:<sha7>, validate is started again and its green
++# result starts this workflow once more); only the second one in a row reaches the silent-run guard.
+ on:
+   workflow_run:  # zizmor: ignore[dangerous-triggers] validate gate only; checks out main, never PR code, and the reviewer cannot push
+     workflows: [validate]
+@@ -144,6 +146,9 @@ jobs:
+             `.review/pr.diff` (full diff), `.review/files.txt` (changed paths) and `.review/files/<path>` (each changed
+             file at the PR head). Read them with Read (long files in parts with offset/limit). Use `gh pr view` for the
+             body and `gh issue view` for the linked issue.
++            Bash allows only plain `gh pr view`, `gh issue view` and `gh pr review` calls, one per Bash call: no `cd`, `cat`,
++            `ls`, pipes, `;` or `&&` (denied, and a command joined with them is denied as a whole). Read and list files
++            with Read, Glob and Grep. A denied call is no reason to stop: go on with those tools and submit the review.
+             If `.review/delta.diff` exists this is a later round: follow the scope rule for later rounds in the role
+             (read the delta and `.review/prior-findings.md`, not the full diff). Without it, review the full diff.
+             Use the verdict classes of the role: approve; changes (defects against the slip, AGENTS.md or CI only);
+@@ -176,9 +181,48 @@ jobs:
+           GH_TOKEN: ${{ steps.app.outputs.token }}
+           PR: ${{ steps.round.outputs.pr }}
+         run: python3 tools/agent_guard.py refund "$PR" "$SHA" || echo "refund failed"
+-      # Never end silently: the Claude step ran but the approver app left no review for this head SHA.
+-      - name: Escalate a run that left no review
++      # A run without a review is repeated once per head before anything is parked. The label marks the head; the
++      # steps below start validate again and its green result starts this workflow once more (the round is not
++      # counted twice: marker round:<sha7>). Any error in these three steps and the guard below acts as before.
++      - name: Repeat a run that left no review once
++        id: again
+         if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
++        env:
++          GH_TOKEN: ${{ steps.app.outputs.token }}
++          PR: ${{ steps.round.outputs.pr }}
++          BHASH: ${{ steps.round.outputs.bhash }}
++        run: |
++          set -euo pipefail
++          guard() { python3 tools/agent_guard.py "$@"; }
++          if guard reviewed "$PR" "$SHA" ${BHASH:+"$BHASH"}; then exit 0; fi
++          view=$(gh pr view "$PR" --json state,headRefOid,labels)
++          if [ "$(jq -r .state <<<"$view")" != OPEN ] || [ "$(jq -r .headRefOid <<<"$view")" != "$SHA" ]; then exit 0; fi
++          mark="silent:${SHA:0:7}"
++          if jq -e --arg m "$mark" '[.labels[].name] | index($m) != null' <<<"$view" > /dev/null; then
++            echo "Second run without a review on $SHA: the guard takes over"; exit 0
++          fi
++          guard label pr "$PR" "$mark"
++          echo "No review on $SHA: one more run"
++          echo "retry=true" >> "$GITHUB_OUTPUT"
++      # Author app, `actions` only, created after the model step: a run started with the job token would not start
++      # the review again. Used by the next step only.
++      - id: ci-app
++        if: ${{ !cancelled() && steps.again.outputs.retry == 'true' }}
++        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
++        with:
++          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
++          private-key: ${{ secrets.AUTHOR_APP_KEY }}
++          permission-actions: write
++      - name: Start validate on the branch again
++        id: redo
++        if: ${{ !cancelled() && steps.again.outputs.retry == 'true' }}
++        env:
++          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
++        run: gh workflow run validate.yml --ref "$BRANCH"
++      # Never end silently: no review for this head SHA and no second run started (it was the second one, or starting
++      # it failed).
++      - name: Escalate a run that left no review
++        if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' && steps.redo.outcome != 'success' }}
+         env:
+           GH_TOKEN: ${{ steps.app.outputs.token }}
+           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+diff --git a/.github/workflows/orchestrator.yml b/.github/workflows/orchestrator.yml
+index b36f0c4..2458f61 100644
+--- a/.github/workflows/orchestrator.yml
++++ b/.github/workflows/orchestrator.yml
+@@ -81,9 +81,23 @@ jobs:
+           fetch-depth: 0
+       # Checked-out main only (no PR code). Repo events: sender, live check and debounce (tools/orchestrator_gate.py).
+       # merges: skip when only HANDOVER.md changed. Schedule and dispatch always go on.
++      # A guard script (status run, failure watch) opens its issues under the author app. Without this the gate takes
++      # such an `opened` event for the orchestrator's own echo whenever any orchestrator run is near, and the issue
++      # waits for the next scheduled run. No git and no model here: the key only verifies the signature.
++      - name: Is the opened issue signed by a guard script
++        id: sig
++        if: github.event_name == 'issues' && github.event.action == 'opened'
++        env:
++          GH_TOKEN: ${{ steps.app.outputs.token }}
++          GH_REPO: ${{ github.repository }}
++          EVENT_ACTION: ${{ github.event.action }}
++          NUMBER: ${{ github.event.issue.number }}
++          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
++        run: echo "signed=$(python3 tools/orchestrator_gate.py signed)" >> "$GITHUB_OUTPUT"
+       - name: Gate (event sender and debounce; merges that only touch HANDOVER.md)
+         id: gate
+         env:
++          SIGNED: ${{ steps.sig.outputs.signed }}
+           GH_TOKEN: ${{ steps.app.outputs.token }}
+           GH_REPO: ${{ github.repository }}
+           CONTENTS_TOKEN: ${{ github.token }}  # read-only: the commit check of a merge (the app token has no contents scope)
+@@ -165,6 +179,7 @@ jobs:
+       - id: claude
+         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
++        continue-on-error: true  # a transient API error (is_error after one turn) is tolerated by `Fail a silent run`
+         env:
+           GH_TOKEN: ${{ steps.app.outputs.token }}
+         with:
+@@ -185,6 +200,9 @@ jobs:
+                script (tools/dispatch.py) starts the issues that hold a slip and removes agent:dev after a merge: you add no
+                label and remove no agent:dev, you start nothing. You only write the slip comment (goal, a `Files:` line,
+                a `Model: sonnet` or `Model: haiku` line, acceptance) for these issues without a slip: ${{ steps.pre.outputs.needs_slip }}
++               An issue in that list that already has a slip had its step merged and is still open: write the slip for
++               what is left of the issue; if nothing is left, write a slip whose goal is to confirm that (the
++               developer run then closes the issue).
+                (the script starts them once the comment lands). HANDOVER.md (step 3) only when the script says
+                handover due: ${{ steps.pre.outputs.handover_due }}. Everything in steps 1 to 3 about labels and starting
+                applies only when the dispatcher is off.
+@@ -328,6 +346,7 @@ jobs:
+           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+           EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+           STARTED: ${{ steps.started.outputs.at }}
++          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+           STARTABLE: ${{ steps.pre.outputs.startable }}
+           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
+           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+index 517c861..8273bcb 100644
+--- a/.github/workflows/validate.yml
++++ b/.github/workflows/validate.yml
+@@ -20,7 +20,9 @@ permissions:
+ jobs:
+   validate:
+     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+-    timeout-minutes: 15
++    # A run cut off by this limit is `cancelled`: no review starts (it needs success) and no fix round (it needs
++    # failure), so the PR just sits. A project whose `make check` takes longer sets VALIDATE_TIMEOUT (minutes).
++    timeout-minutes: ${{ fromJSON(vars.VALIDATE_TIMEOUT || '15') }}
+     steps:
+       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+         with:
+diff --git a/.github/workflows/weekly-summary.yml b/.github/workflows/weekly-summary.yml
+index 6530f97..226e4c6 100644
+--- a/.github/workflows/weekly-summary.yml
++++ b/.github/workflows/weekly-summary.yml
+@@ -12,7 +12,7 @@ concurrency:
+ jobs:
+   summary:
+     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+-    timeout-minutes: 10
++    timeout-minutes: 30
+     steps:
+       - name: Fail if a required repo variable is unset
+         env:

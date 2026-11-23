@@ -58,3 +58,16 @@ def test_orchestrator_leaves_unblocker_items_alone():
     text = read("orchestrator.md")
     assert "Do not restart or rewrite an item the unblocker owns" in text
     assert "unblocker.md" in text
+
+
+def test_balancer_decides_the_tolerance_itself_by_the_measured_runs():
+    text = read("balancer.md")
+    assert "No person decides and nobody is asked" in text
+    assert "lowest run minus 1" in text and "highest run plus 1" in text and "factor 2" in text
+    assert "Change the balance value in the config" in text and "`Balance: <rows>" in text
+    assert "`balancer.md`" in read("developer.md") and "`balancer.md`" in read("reviewer.md")
+
+
+def test_branches_are_only_ever_rebased():
+    line = next(x for x in read("developer.md").splitlines() if "git rebase origin/main" in x)
+    assert "never `git merge`" in line and "`gh pr update-branch`" in line

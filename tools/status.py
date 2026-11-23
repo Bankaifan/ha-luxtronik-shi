@@ -13,7 +13,7 @@
    idle head for more than 30 min was never handed over (the limit step failed): restart.py limit hands it over
    (issue restart once, else parked). A failure parks the PR.
 6. Red main: an own agent PR (one commit, author OWNER, behind main) whose last validate failed while main was red
-   is rebased onto main via the update-branch API once main is green again, so CI runs again. Never merges.
+   is rebased onto main (`gh pr update-branch --rebase`) once main is green again, so CI runs again. Never merges.
 Read-only except: the status issue, re-triggers, run approvals, the fix dispatch and these labels:
 agent:dev (re-add), status:retriggered, review:N, parked, restart:1 (via restart.py), stalled:1 (via stalled_dev.py). Needs the gh CLI (GH_TOKEN, GH_REPO).
 
@@ -415,7 +415,7 @@ def release_settled(prs, approver, owner, run=gh):
 # --- un-park ----------------------------------------------------------------------------------
 
 COOL_H, COOL_MAX_H = 24, 7 * 24
-COUNTER = re.compile(r"review:[123]|round:.*|formfix|conflict:.*|restart:1|stalled:1|status:retriggered")
+COUNTER = re.compile(r"review:[123]|round:.*|formfix|conflict:.*|silent:.*|restart:1|stalled:1|status:retriggered")
 
 
 def cool_down_hours(n):
@@ -650,7 +650,7 @@ def run_status(env, now, run=gh):
     runs = [r for r in runs if r["workflowName"] in AGENT_WORKFLOWS]
     prs = jlist(run, "pr", "list", "--state", "open", "--limit", str(PR_LIMIT), "--json",
                 "number,title,url,headRefName,headRefOid,labels,reviewDecision,reviewRequests,statusCheckRollup,"
-                "mergeStateStatus,isCrossRepository,author,commits,createdAt,body,comments")
+                "mergeStateStatus,isCrossRepository,author,commits,createdAt,body,comments,files")
     issues = jlist(run, "issue", "list", "--state", "open", "--label", "agent:dev", "--limit", "50",
                    "--json", "number,title,labels,createdAt")
     ideas = jlist(run, "issue", "list", "--state", "open", "--label", "idea", "--limit", "50",
@@ -672,12 +672,11 @@ def run_status(env, now, run=gh):
     main_runs = safe(jlist, run, "run", "list", "--workflow", "validate.yml", "--branch", "main", "--limit", "20",
                      "--json", "conclusion,createdAt") or []
     for p in rebase_candidates(prs, main_runs, pr_validate_runs, owner):
-        done = safe(run, "api", "-X", "PUT", f"repos/{repo}/pulls/{p['number']}/update-branch",
-                    "-f", "update_method=rebase")
+        done = safe(run, "pr", "update-branch", str(p["number"]), "--rebase")  # REST update-branch only merges
         actions.append(f"rebased PR #{p['number']} onto green main" if done is not None
                        else f"rebase of PR #{p['number']} failed")
 
-    for old, new in safe(close_superseded, prs, run) or []:  # a newer agent PR for the same issue replaces the older
+    for old, new in safe(close_superseded, prs, run) or []:  # a newer agent PR with the same work (restart.replaces)
         actions.append(f"closed PR #{old}: superseded by #{new}")
     prs = [p for p in prs if p["number"] not in {o for o, _ in superseded(prs)}]
 

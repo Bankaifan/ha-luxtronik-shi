@@ -52,26 +52,11 @@ def start(state, gh=prefilter.gh, overlap_main=overlap.main, authors=overlap.DEF
             print(f"#{n}: label call failed ({type(e).__name__}), skipped", file=sys.stderr)
             continue
         started.append(n)
-        print(f"#{n}: started ({model})")
+        print(f"#{n}: started")
     return started
 
 
-def slip_time(issue, authors):
-    """ISO time of the newest trusted slip of ISSUE: the newest trusted comment with a `Files:` line, else the body."""
-    times = [c.get("createdAt", "") for c in issue.get("comments", [])
-             if overlap.trusted(c, authors) and overlap.parse_files(c.get("body") or "")]
-    return max(times) if times else issue.get("createdAt", "")
-
-
-def step_landed(n, issue, authors, gh=prefilter.gh):
-    """True when a same-repo `agent/` PR naming issue N merged after its newest slip (issue #661): the slip's step is
-    done and a restart from it would only produce an empty run."""
-    out = gh("pr", "list", "--state", "merged", "--search", f"#{n} in:body", "--limit", "20",
-             "--json", "body,headRefName,isCrossRepository,mergedAt")
-    since = slip_time(issue, authors)
-    return any(p.get("mergedAt", "") > since and n in prefilter.closing_issues(p.get("body"))
-               for p in json.loads(out or "[]")
-               if p.get("headRefName", "").startswith("agent/") and not p.get("isCrossRepository"))
+slip_time, step_landed = prefilter.slip_time, prefilter.step_landed  # one definition: needs_slip uses it too
 
 
 def run_active(n, title, gh=prefilter.gh):

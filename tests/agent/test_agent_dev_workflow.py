@@ -38,3 +38,13 @@ def test_prompt_names_the_three_versions_of_a_conflicted_file():
     assert "<path>.ours" in WORKFLOW
     assert "<path>.base" in WORKFLOW
     assert "<path>.theirs" in WORKFLOW
+
+
+def test_a_run_without_a_pr_on_a_closed_issue_is_not_escalated():
+    """agent-template #751: #745 was closed while its developer run found nothing to change; the guard still counted
+    the run as silent and opened a stuck issue. Only a state read as CLOSED skips the guard."""
+    text = (ROOT / ".github" / "workflows" / "agent-dev.yml").read_text(encoding="utf-8")
+    step = text[text.index("Escalate a run that produced no PR"):]
+    closed = 'if [ "$(gh issue view "$ISSUE" --json state --jq .state || true)" = CLOSED ]; then'
+    assert closed in step and step.index(closed) < step.index("agent_guard.py\" silent dev")
+    assert "nothing to escalate\"; exit 0" in step

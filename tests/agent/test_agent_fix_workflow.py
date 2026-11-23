@@ -50,3 +50,23 @@ def test_a_failed_hand_over_parks_with_the_marker_comment_so_the_cool_down_grows
 def test_the_batch_pr_gets_no_fix_round_whatever_started_the_run():
     gate = TEXT.index('if [ "$branch" = agent/batch ]; then echo "Batch PR: no fix round"; echo "fix=false"')
     assert TEXT.index('branch="$RUN_BRANCH"') < gate < TEXT.index('echo "pr=$pr" >> "$GITHUB_OUTPUT"')  # before any label
+
+
+def test_a_run_without_a_fix_is_repeated_once_per_head_before_the_guard_acts():
+    """First run with the same head and body: label silent:<sha7> and one more run (why=retry). The guard only acts
+    when no second run was started (the head already carries the label, or a step of the repeat failed)."""
+    again = TEXT[TEXT.index("id: again"):TEXT.index("id: redo")]
+    assert '!= "$HEAD_BEFORE" ]; then exit 0; fi' in again and 'cmp -s - "$RUNNER_TEMP/body-before.txt"' in again
+    assert 'approval.py" check "$PR")" = approved ]; then exit 0; fi' in again  # nothing to fix is not silent
+    assert again.index("the guard takes over") < again.index('label pr "$PR" "$mark"') < again.index("retry=true")
+    assert "gh workflow run" not in again and "ci-app" not in again
+    redo = TEXT[TEXT.index("id: redo"):TEXT.index("Escalate a run that pushed no fix")]
+    assert "steps.again.outputs.retry == 'true'" in redo and 'gh workflow run agent-fix.yml -f pr="$PR" -f why=retry' in redo
+    escalate = TEXT[TEXT.index("Escalate a run that pushed no fix"):]
+    assert "steps.redo.outcome != 'success'" in escalate and "agent_guard.py\" silent fix" in escalate
+    assert "options: [conflict, retry]" in TEXT and "default: conflict" in TEXT  # the status run's dispatch stays a conflict
+
+
+def test_the_fix_prompt_allows_a_rebase_only_never_a_merge_of_main():
+    prompt = TEXT[TEXT.index("prompt: |"):TEXT.index("claude_args:")]
+    assert "never `git merge`" in prompt and "never `gh pr update-branch`" in prompt and "`retry`: an earlier fix run" in prompt

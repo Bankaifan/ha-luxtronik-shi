@@ -125,6 +125,18 @@ def test_live_login_for_edited_or_closed_items_needs_only_existence():
     assert g.live_login("pull_request", "closed", ENV, fake_gh(None)) is None
 
 
+def test_main_skips_softly_when_the_run_list_is_rate_limited(monkeypatch, capsys):
+    def limited(repo):
+        raise g.subprocess.CalledProcessError(1, "gh", stderr="API rate limit exceeded")
+
+    monkeypatch.setattr(g.budget, "low", lambda *a: "")
+    monkeypatch.setattr(g, "fetch_runs", limited)
+    for k, v in {"EVENT": "pull_request_review", "SENDER": "Bankaifan", "RUN_ID": "5", "GH_REPO": "o/r"}.items():
+        monkeypatch.setenv(k, v)
+    assert g.main() == 0
+    assert capsys.readouterr().out.strip() == "false"
+
+
 def test_brake_comments_once():
     calls = []
 
@@ -139,3 +151,55 @@ def test_brake_comments_once():
     g.announce_brake("3", run)
     assert all(c[:2] != ("issue", "comment") for c in calls)
     g.announce_brake("", run)
+
+
+def test_a_guard_signed_issue_opened_inside_a_run_window_is_no_echo():
+    """agent-template #745: the status run opened it under the author app while another orchestrator run was near; the
+    gate dropped the event as an echo and the issue waited for the next scheduled run."""
+    busy = [erun(99, T0 - timedelta(minutes=5), "in_progress")]
+    assert not ev("issues", sender=AUTHOR, live=AUTHOR, runs=busy)[0]
+    assert ev("issues", sender=AUTHOR, live=AUTHOR, runs=busy, signed=True)[0]
+    pending = [*busy, erun(101, T0, "queued")]
+    assert not ev("issues", sender=AUTHOR, live=AUTHOR, runs=pending, signed=True)[0]  # the debounce still holds
+    three = [erun(n, T0 + timedelta(seconds=60 * (n - 98)), sender=AUTHOR) for n in (98, 99, 100)]
+    assert ev("issues", sender=AUTHOR, live=AUTHOR, runs=three, signed=True)[1].startswith("brake")  # and the brake
+
+
+def test_signed_issue_needs_the_opened_event_the_key_and_a_signature_that_verifies():
+    title, key = "Overdue scheduled run: weekly summary", "k3y"
+    body = g.guard_mark.sign(title, "The scheduled run has no successful run.", key)
+    env = {"EVENT": "issues", "EVENT_ACTION": "opened", "GH_REPO": "o/r", "NUMBER": "745", "GUARD_KEY": key}
+
+    def issue(text):
+        return lambda *a: g.json.dumps({"number": 745, "title": title, "body": text})
+
+    assert g.signed_issue(env, issue(body))
+    assert not g.signed_issue(env, issue(body.replace("no successful", "one successful")))
+    assert not g.signed_issue(env, issue("plain text"))
+    assert not g.signed_issue({**env, "GUARD_KEY": ""}, issue(body))
+    assert not g.signed_issue({**env, "GUARD_KEY": "other"}, issue(body))
+    assert not g.signed_issue({**env, "EVENT_ACTION": "edited"}, issue(body))
+    assert not g.signed_issue({**env, "EVENT": "issue_comment"}, issue(body))
+
+    def gone(*a):
+        raise g.subprocess.CalledProcessError(1, "gh")
+
+    assert not g.signed_issue(env, gone)
+
+
+def test_main_reads_the_signed_flag_only_for_an_opened_issue(monkeypatch, capsys):
+    busy = [{"databaseId": 4, "createdAt": "2020-01-01T00:00:00Z", "updatedAt": "2020-01-01T00:00:00Z",
+             "status": "in_progress", "event": "issues", "sender": AUTHOR}]
+    monkeypatch.setattr(g.budget, "low", lambda *a: "")
+    monkeypatch.setattr(g, "fetch_runs", lambda repo: busy)
+    monkeypatch.setattr(g, "live_login", lambda *a: AUTHOR)
+    base = {"EVENT": "issues", "SENDER": AUTHOR, "AUTHOR_BOT": AUTHOR, "RUN_ID": "5", "GH_REPO": "o/r",
+            "ORCHESTRATOR_EVENTS": "on", "SIGNED": "true"}
+    for action, want in (("opened", "true"), ("edited", "false")):
+        for k, v in {**base, "EVENT_ACTION": action}.items():
+            monkeypatch.setenv(k, v)
+        assert g.main() == 0
+        assert capsys.readouterr().out.strip() == want, action
+    monkeypatch.setenv("EVENT_ACTION", "opened")
+    monkeypatch.setenv("SIGNED", "")
+    assert g.main() == 0 and capsys.readouterr().out.strip() == "false"

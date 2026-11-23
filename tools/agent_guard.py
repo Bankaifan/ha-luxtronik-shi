@@ -42,6 +42,7 @@ from exec_log import (  # noqa: F401
     TAIL_CHARS,
     TAIL_LINES,
     _records,
+    api_error,
     count_denials,
     denied_calls,
     read_exec,
@@ -304,7 +305,15 @@ def escalate_orchestrator(why, status_issue, repo, author_bot, run=gh, now=None)
 def silent_orchestrator(since, run=gh):
     """Check after the orchestrator model step. Returns 1 (run must fail) if it was silent."""
     repo, bot = os.environ["GH_REPO"], os.environ.get("AUTHOR_BOT", "")
-    denials = count_denials(read_exec(os.environ.get("EXEC_FILE", "")))
+    exec_text = read_exec(os.environ.get("EXEC_FILE", ""))
+    denials = count_denials(exec_text)
+    if api_error(exec_text):
+        print("the model call failed (is_error after one turn, no tool use): transient, tolerated; the next run retries")
+        return 0
+    if os.environ.get("CLAUDE_OUTCOME") == "failure" and denials == 0:
+        escalate_orchestrator("the model step failed without a tool call or an API error pattern",
+                              status_issue(run, bot), repo, bot, run)
+        return 1
     startable = os.environ.get("STARTABLE") == "true"
     acted = False
     if denials == 0 and startable:

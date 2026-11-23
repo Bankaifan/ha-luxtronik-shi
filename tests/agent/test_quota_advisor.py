@@ -101,6 +101,21 @@ def test_fetch_all_filters_by_date_and_reads_failed_log():
     assert rs.ran_model(jobs_of(7))
 
 
+def test_fetch_all_reads_jobs_and_logs_of_a_run_once():
+    calls = []
+
+    def fake(*a):
+        calls.append(a)
+        if a[:2] == ("run", "list"):
+            return json.dumps([run_(7)])
+        if a[:2] == ("run", "view"):
+            return "log text"
+        return json.dumps({"jobs": MODEL})
+    _, jobs_of, log_of = rs.fetch_all(["scout.yml"], "2026-11-02", repo="o/r", run=fake)
+    jobs_of(7), jobs_of(7), log_of(7), log_of(7)
+    assert len(calls) == 3
+
+
 def test_queue_numbers_counts_slots_waiting_and_human_age():
     issues = [
         {"number": 1, "labels": [{"name": "agent:dev"}]},
@@ -188,6 +203,19 @@ def test_failure_class_normalizes_and_skips_limit_and_empty_logs():
     assert rs.failure_class(f"job\tstep\t{SAME_FAILURE}\n") == "build failed: # tests in #.#s"
     assert rs.failure_class("job\tstep\t2026-11-08T08:01:00Z usage limit reached\n") is None
     assert rs.failure_class("job\tstep\t2026-11-08T08:01:00Z all good\n") is None
+
+
+def test_failure_class_skips_the_echoed_script_and_the_bare_exit_code_line():
+    """agent-template #749: the runner echoes the script of a step before running it. Its `echo "::error::..."` text
+    was taken as the first error line, so 21 unrelated failed runs counted as one class."""
+    echo = ('orchestrate\tFail if a required repo variable is unset\t2026-11-23T14:11:40Z \x1b[36;1m  [ -n "${!n}" ] || '
+            '{ echo "::error::Repo variable $n is not set"; exit 1; }\x1b[0m\n')
+    exit_line = "orchestrate\tFail a silent run\t2026-11-23T14:12:39Z ##[error]Process completed with exit code 1.\n"
+    assert rs.failure_class(echo + exit_line) is None
+    real = "dev\tChecks\t2026-11-23T14:12:39Z \x1b[31mFAILED tests/test_x.py::test_y - AssertionError\x1b[0m\n"
+    assert rs.failure_class(echo + real + exit_line) == "failed tests/test_x.py::test_y - assertionerror"
+    assert rs.failure_class("job\tstep\t2026-11-23T14:12:39Z ##[error]Repo variable AUTHOR_BOT is not set\n") == (
+        "##[error]repo variable author_bot is not set")
 
 
 def test_three_same_failures_open_one_role_proposal(monkeypatch):
