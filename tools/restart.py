@@ -92,7 +92,7 @@ def blocking_findings(reviews):
     return [t[:_BLOCKING].replace("```", "'''") for t in texts if t]
 
 
-def slip_comment(pr, findings, why="the developer and the reviewers did not converge in 3 reviews"):
+def slip_comment(pr, findings, why="the same finding stayed open after two fix rounds, or the 8-round brake was reached"):
     lines = [
         f"Restart 1/1: PR #{pr} is stuck. Start fresh on a new branch from main; do not patch #{pr}.",
         "",
@@ -136,7 +136,7 @@ def handle_limit(pr, run=gh):
         elif issue is None:
             issue = n
     if issue is None or restarted:
-        park("pr", pr, "review limit of 2 fix rounds reached" + (", the restart (restart:1) failed too" if restarted else ""), run)
+        park("pr", pr, "the same finding stayed open after two fix rounds, or the 8-round brake was reached" + (", the restart (restart:1) failed too" if restarted else ""), run)
         return "parked"
     pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{_repo()}/pulls/{pr}/reviews"))
     restart_issue(pr, issue, [r for page in pages for r in page], run)

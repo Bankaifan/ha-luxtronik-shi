@@ -43,22 +43,38 @@ def test_later_round_stages_delta_and_prior_findings(tmp_path):
     assert "fix x in a.py" in findings and OLD[:12] in findings
 
 
-def test_head_not_an_ancestor_falls_back_to_full_diff(tmp_path):
+def only_the_findings(outdir):
+    """No delta, but the earlier findings are staged, so the finding ids go on over a full review."""
+    assert [p.name for p in outdir.iterdir()] == ["prior-findings.md"]
+    return (outdir / "prior-findings.md").read_text()
+
+
+def test_head_not_an_ancestor_falls_back_to_full_diff_and_keeps_the_findings(tmp_path):
     for status in ("diverged", "behind", "identical"):
-        run = fake([review(OLD)], status=status)
-        assert review_delta.stage_delta(1, NEW, ENV, run, str(tmp_path)) == "full"
-    assert not list(tmp_path.iterdir())
+        out = tmp_path / status
+        run = fake([review(OLD, body="changes[F1]: a.py:3 x")], status=status)
+        assert review_delta.stage_delta(1, NEW, ENV, run, str(out)) == "full"
+        assert "changes[F1]: a.py:3 x" in only_the_findings(out)
 
 
-def test_compare_error_falls_back_to_full_diff(tmp_path):
-    run = fake([review(OLD)], fail_compare=True)
+def test_compare_error_falls_back_to_full_diff_and_keeps_the_findings(tmp_path):
+    run = fake([review(OLD, body="changes[F2]: b.py:1 y")], fail_compare=True)
     assert review_delta.stage_delta(1, NEW, ENV, run, str(tmp_path)) == "full"
+    assert "changes[F2]" in only_the_findings(tmp_path)
+
+
+def test_unreadable_reviews_stage_nothing_and_do_not_fail(tmp_path):
+    def broken(*args):
+        raise subprocess.CalledProcessError(1, "gh")
+
+    assert review_delta.stage_delta(1, NEW, ENV, broken, str(tmp_path)) == "full"
     assert not list(tmp_path.iterdir())
 
 
 def test_same_head_or_empty_delta_is_full(tmp_path):
     assert review_delta.stage_delta(1, NEW, ENV, fake([review(NEW)]), str(tmp_path)) == "full"
     assert review_delta.stage_delta(1, NEW, ENV, fake([review(OLD)], diff="\n"), str(tmp_path)) == "full"
+    only_the_findings(tmp_path)
 
 
 def test_latest_approver_review_sets_the_base(tmp_path):

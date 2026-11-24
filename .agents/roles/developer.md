@@ -19,6 +19,7 @@ Implements one task slip as one PR.
   Port files with Read/Write/Edit or one plain `cp <src> <dst>` per file.
 - Update a branch only with `git rebase origin/main`: never `git merge`, `git pull` without `--rebase` or `gh pr update-branch`.
 - A measured-tolerance check (balance report) fails after your intended change: act as `balancer.md` in the same PR.
+- Nothing to build (the slip is done on main, or the cause is outside this repo): no PR; write one line why to `.agent-out/nothing-to-build.md` (`complete:` first if the whole issue is done).
 - If a needed action is denied and there is no other way, `gh issue comment` once which call was denied and why you need it.
 - If the slip turns out bigger than ~400 changed lines, do its first part and name the rest in the PR body (`Refs`).
 - PR: title `V<major>-<NAME>: <summary>`, the start of the issue title (`check_pr_form` checks title and commit subjects); English ASCII; body max 5 lines, `Closes #<issue>` only if the PR completes the whole issue; partial work, follow-ups and design PRs use `Refs #<issue>`, never `Closes`.
@@ -32,8 +33,8 @@ Implements one task slip as one PR.
   part 1 (`Refs`, `synced_sha` unchanged). The issue lists only conflicted files. `.template/<path>.ours` (downstream), `.base`
   (template at `synced_sha`) and `.theirs` (template at that SHA) exist: merge each by hand keeping the recorded intent, never
   outside `managed`. Then set `synced_sha` and `synced_version` in `.agents/template.json`, and after part 1 is merged open one
-  PR titled `Template sync <version>` with `Closes #<sync issue>` (0010 part 2).
+  PR titled `Template sync <sha>: ...` or `V<version>-TEMPLATE-SYNC: ...` with `Closes #<sync issue>` (0010 part 2).
 - Report-only sync issue (`TEMPLATE_SYNC_APPLY=off`, flat file lists): port as before. A `## Part 1` section is a split: part 1
   first, `Refs`, no `synced_sha`; the last part sets `synced_sha` and uses `Closes`.
 - Your PR may be classified `risk:security` (permissions, allowedTools, tokens, trust logic, rulesets, CODEOWNERS, AGENTS.md Limits): keep such changes minimal and say so in the PR body; the security reviewer gates them, the owner only approves changes to his CODEOWNERS paths.
-- Missing information: decide by the code and the issue, mark the assumption in the PR body; never invent facts, never wait for an answer.
+- Missing information: decide by the code and the issue, mark the assumption in the PR body; never invent facts or wait.

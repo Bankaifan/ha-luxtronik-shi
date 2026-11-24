@@ -201,13 +201,6 @@ def test_nobody_fixes_the_batch_pr_but_its_held_runs_are_approved():
     assert st.held_run_ids([{"databaseId": 10, "headSha": "sha9"}], [b], "author[bot]") == [10]
 
 
-def test_fix_round_mirrors_agent_fix():
-    assert st.fix_round(set()) == ("review:1", False)
-    assert st.fix_round({"review:1"}) == ("review:2", False)
-    assert st.fix_round({"review:2"}) == ("review:3", True)
-    assert st.fix_round({"review:3"}) == (None, True)
-
-
 def test_conflict_dispatches_one_fix_per_head_and_counts_no_round():
     run = Recorder()
     dirty = pr(9, labels=["review:2"], mergeStateStatus="DIRTY")
@@ -219,12 +212,13 @@ def test_conflict_dispatches_one_fix_per_head_and_counts_no_round():
     assert st.conflict_prs([again]) == []
 
 
-def test_limit_prs_picks_only_unhandled_review3():
-    stuck = pr(1, labels=["review:3"])
-    others = [pr(2, labels=["review:3", "parked"]), pr(3, labels=["review:2"]),
-              pr(4, labels=["review:3"], reviewDecision="APPROVED"),
-              pr(5, labels=["review:3"], commits=[{"committedDate": ago(5)}]),
-              pr(6, labels=["review:3"], isCrossRepository=True)]
+@pytest.mark.parametrize("limit", [["review:2", "review:stop"], ["review:7", "review:8"]])
+def test_limit_prs_picks_only_unhandled_prs_at_the_round_limit(limit):
+    stuck = pr(1, labels=limit)
+    others = [pr(2, labels=[*limit, "parked"]), pr(3, labels=["review:2", "review:3", "review:7"]),
+              pr(4, labels=limit, reviewDecision="APPROVED"),
+              pr(5, labels=limit, commits=[{"committedDate": ago(5)}]),
+              pr(6, labels=limit, isCrossRepository=True)]
     assert st.limit_prs([stuck, *others], [], NOW) == [stuck]
     assert st.limit_prs([stuck], [{"workflowName": "agent-fix"}], NOW) == []
 
@@ -232,10 +226,10 @@ def test_limit_prs_picks_only_unhandled_review3():
 def test_limit_hand_over_when_code_approved_but_security_changes():
     sha = "abcdef1234567"
     verdict = [{"author": {"login": "approver"}, "body": f"security-review: changes {sha}"}]
-    masked = pr(1, labels=["review:3", "risk:security"], reviewDecision="APPROVED", headRefOid=sha, comments=verdict)
+    masked = pr(1, labels=["review:stop", "risk:security"], reviewDecision="APPROVED", headRefOid=sha, comments=verdict)
     assert st.limit_prs([masked], [], NOW, "app/approver") == [masked]
     # an approval of a risk:security head without a `changes` verdict still counts as approved
-    clean = pr(2, labels=["review:3", "risk:security"], reviewDecision="APPROVED", headRefOid=sha, comments=[])
+    clean = pr(2, labels=["review:stop", "risk:security"], reviewDecision="APPROVED", headRefOid=sha, comments=[])
     assert st.limit_prs([clean], [], NOW, "app/approver") == []
 
 
@@ -713,3 +707,10 @@ def test_a_fresh_start_also_clears_the_silent_run_markers():
     st.clear_labels("pr", item, lambda *a: calls.append(a))
     assert calls == [("pr", "edit", "7", "--remove-label", "parked", "--remove-label", "review:2",
                       "--remove-label", "silent:abc1234")]
+
+
+def test_a_fresh_start_also_clears_the_stop_and_red_streak_labels():
+    calls = []
+    labels = ("parked", "review:1", "review:10", "review:stop", "ci-red:1", "ci-red:2", "red:abc1234", "risk:infra", "prio:1")
+    st.clear_labels("pr", {"number": 7, "labels": [{"name": n} for n in labels]}, lambda *a: calls.append(a))
+    assert len(calls) == 1 and set(calls[0][4::2]) == set(labels) - {"risk:infra", "prio:1"}

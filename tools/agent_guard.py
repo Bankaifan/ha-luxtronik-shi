@@ -57,6 +57,9 @@ TOOL_RE = re.compile(r"[A-Za-z]{1,20}")  # only harness tool names reach an upst
 WORKFLOW_NAME = {"dev": "agent-dev", "fix": "agent-fix", "review": "agent-review"}  # fixed names of the workflow files
 UPSTREAM_CAP = 5  # open denied-command issues per workflow in the template repo
 REPO_RE = re.compile(r"[\w.-]+/[\w.-]+")
+MAX_ROUNDS = 8  # emergency brake; the progress rule (tools/review_rounds.py) normally stops earlier
+STOP = "review:stop"  # set at the round limit: no further round is counted
+_ROUND = re.compile(r"review:(\d+)")
 
 
 def norm_login(login):
@@ -92,17 +95,21 @@ def add_labels(kind, number, labels, run=gh):
         run(kind, "edit", str(number), *[a for name in labels for a in ("--add-label", name)])
 
 
+def round_no(labels):
+    """Highest N of the `review:N` labels (they accumulate); 0 without one."""
+    return max((int(m.group(1)) for m in map(_ROUND.fullmatch, labels) if m), default=0)
+
+
 def count_round(number, sha, run=gh):
     """One review round per head SHA, shared by both reviewers. Marker label `round:<sha7>` (older markers are removed).
-    Returns "already" (this head was counted), "limit" (review:3 is set, nothing bumped) or "counted" (review:N bumped)."""
+    Returns "already" (this head was counted), "limit" (`review:stop` or MAX_ROUNDS rounds, nothing bumped) or "counted" (review:N bumped)."""
     labels = set(run("pr", "view", str(number), "--json", "labels", "--jq", ".labels[].name").split())
     mark = f"round:{sha[:7]}"
     if mark in labels:
         return "already"
-    if "review:3" in labels:
+    if STOP in labels or round_no(labels) >= MAX_ROUNDS:
         return "limit"
-    nxt = "review:3" if "review:2" in labels else "review:2" if "review:1" in labels else "review:1"
-    add_labels("pr", number, [nxt, mark], run)
+    add_labels("pr", number, [f"review:{round_no(labels) + 1}", mark], run)
     for old in sorted(n for n in labels if n.startswith("round:")):
         try:
             run("pr", "edit", str(number), "--remove-label", old)
@@ -134,9 +141,9 @@ def refund_round(number, sha, approver, run=gh):
         pages = json.loads(run("api", "--paginate", "--slurp", f"repos/{os.environ['GH_REPO']}/issues/{number}/comments"))
         if approval.security_verdict([c for page in pages for c in page], sha, approver) != "approve":
             return "kept"
-    cur = next((n for n in ("review:3", "review:2", "review:1") if n in labels), None)
+    cur = round_no(labels)
     if cur:  # the labels accumulate (review:2 implies review:1): the highest one is this head's round
-        run("pr", "edit", str(number), "--remove-label", cur)
+        run("pr", "edit", str(number), "--remove-label", f"review:{cur}")
     run("pr", "edit", str(number), "--remove-label", mark)
     return "refunded"
 

@@ -60,6 +60,45 @@ def post_comment(kind, number, body, run=gh):
         raise ReadbackError(f"{kind} #{number}: comment missing after posting")
 
 
+def reports_off(env=None):
+    """Repo variable REPORT_ISSUES=off: the report issues (Agent status, Weekly summary, the two proposals) are not
+    written; their text goes to the run summary and an open one is closed. Work items (failing workflow, overdue
+    run, stuck run) stay issues."""
+    env = os.environ if env is None else env
+    return (env.get("REPORT_ISSUES") or "").strip().lower() == "off"
+
+
+def write_summary(title, body, env=None):
+    """Append a report to the run summary ($GITHUB_STEP_SUMMARY); without that file (a local run) print it."""
+    env = os.environ if env is None else env
+    text = f"# {title}\n\n{body}\n"
+    path = env.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        print(text)
+        return
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(text)
+
+
+RETIRED_NOTE = "Report issues are switched off (REPORT_ISSUES=off): this report is in the run summary now."
+
+
+def retire_issue(title, run=gh, bot="", note=RETIRED_NOTE):
+    """Close the open report issue with this exact title (written by BOT when a name is given). Returns its number
+    or None; a failure is not fatal, the next run tries again."""
+    try:
+        found = json.loads(run("issue", "list", "--state", "open", "--search", f'"{title}" in:title', "--json",
+                               "number,title,author"))
+        for i in found:
+            login = ((i.get("author") or {}).get("login") or "").removeprefix("app/").removesuffix("[bot]").lower()
+            if i.get("title") == title and (not bot or login == bot.removeprefix("app/").removesuffix("[bot]").lower()):
+                run("issue", "close", str(i["number"]), "--reason", "not planned", "--comment", note)
+                return i["number"]
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return None
+
+
 def _ts(s):
     return datetime.datetime.fromisoformat(s)
 

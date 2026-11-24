@@ -521,9 +521,51 @@ def test_round_is_counted_once_per_head():
     assert g.count_round(5, sha, run) == "counted"
     assert ("pr", "edit", "5", "--add-label", "review:2", "--add-label", "round:aaaaaaa") in calls
     assert ("pr", "edit", "5", "--remove-label", "round:bbbbbbb") in calls
-    calls, run = _pr_run("review:3\n")
-    assert g.count_round(5, sha, run) == "limit"
+    calls, run = _pr_run("review:1\nreview:2\nreview:3\n")  # three rounds are no limit any more
+    assert g.count_round(5, sha, run) == "counted"
+    assert ("pr", "edit", "5", "--add-label", "review:4", "--add-label", "round:aaaaaaa") in calls
+
+
+@pytest.mark.parametrize("labels", [f"review:{g.MAX_ROUNDS}\n", "review:2\nreview:stop\n", "review:stop\n"])
+def test_no_round_is_counted_at_the_brake_or_after_review_stop(labels):
+    calls, run = _pr_run(labels)
+    assert g.count_round(5, "a" * 40, run) == "limit"
     assert not any("--add-label" in c for c in calls)
+
+
+def test_rounds_count_up_to_the_brake_one_per_head():
+    labels = set()
+
+    def run(*a):
+        if a[:2] == ("pr", "view"):
+            return "\n".join(sorted(labels))
+        if a[:2] == ("pr", "edit"):
+            for flag, name in zip(a[3::2], a[4::2], strict=True):
+                (labels.add if flag == "--add-label" else labels.discard)(name)
+        return ""
+
+    results = [g.count_round(5, f"{i:x}" * 40, run) for i in range(1, g.MAX_ROUNDS + 2)]
+    assert results == ["counted"] * g.MAX_ROUNDS + ["limit"] and g.MAX_ROUNDS == 8
+    assert {n for n in labels if n.startswith("review:")} == {f"review:{i}" for i in range(1, 9)}
+    assert g.round_no(labels) == 8 and g.round_no({"review:stop", "round:abc1234"}) == 0
+    assert g.round_no({"review:2", "review:10"}) == 10  # numeric, not lexical
+
+
+def test_refund_removes_the_highest_round_label(monkeypatch):
+    monkeypatch.setenv("GH_REPO", "o/r")
+    sha = "a" * 40
+    reviews = [[{"commit_id": sha, "state": "APPROVED", "user": {"login": "ap[bot]"}}]]
+    calls = []
+
+    def run(*a):
+        calls.append(a)
+        if a[:2] == ("pr", "view"):
+            return "review:1\nreview:2\nreview:10\nround:aaaaaaa\n"
+        return json.dumps(reviews) if a[0] == "api" else ""
+
+    assert g.refund_round(5, sha, "ap[bot]", run) == "refunded"
+    removed = [c[-1] for c in calls if "--remove-label" in c]
+    assert removed == ["review:10", "round:aaaaaaa"]
 
 
 def test_stale_head_is_detected_and_fails_open():

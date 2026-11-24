@@ -36,7 +36,7 @@ def test_a_project_without_managed_json_still_gets_the_list(tmp_path):
     assert DESIGN in design_origin.template_internal(tmp_path)
 
 
-@pytest.mark.skipif((ROOT / ".agents" / "template.json").is_file(), reason="the template's own designs are not shipped to a project")
+@pytest.mark.template_only  # docs/design/ studies are the template's; a project has other ones, or none
 def test_every_design_of_the_template_is_listed():
     # a new design study of the template must be listed, or downstream projects split it (issue #674)
     shipped = {f"docs/design/{p.name}" for p in (ROOT / "docs" / "design").glob("[0-9][0-9][0-9][0-9]-*.md")}

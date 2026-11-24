@@ -57,7 +57,7 @@ def test_fetch_uses_gh_calls():
 
 SOURCE = ('2026-11-10T08:00:00.1Z \x1b[36;1m[ -n "${!n}" ] || { echo "::error::Repo variable $n is not set '
           '(Settings > Secrets and variables > Actions > Variables)."; exit 1; }\x1b[0m')
-EXPANDED = ("2026-11-10T08:00:01.2Z ::error::Repo variable MAX_DEV is not set "
+EXPANDED = ("2026-11-10T08:00:01.2Z ##[error]Repo variable MAX_DEV is not set "
             "(Settings > Secrets and variables > Actions > Variables).")
 
 
@@ -90,7 +90,7 @@ def test_fetch_all_reads_jobs_and_logs_once_per_run():
 
 
 def test_failure_class_labels_tool_runtime_errors():
-    log = "dev\tstep\t2026-11-10T08:00:00Z (\"internal error: directory mismatch for directory .../tsconfig.json\")\n"
+    log = "dev\tstep\t2026-11-10T08:00:00Z ##[error](\"internal error: directory mismatch for directory .../tsconfig.json\")\n"
     cls = s.failure_class(log)
     assert cls.startswith("tool environment, not repo code: ")
     assert "tsconfig.json" in cls
@@ -98,17 +98,17 @@ def test_failure_class_labels_tool_runtime_errors():
 
 def test_failure_class_keeps_limit_and_plain_errors():
     assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z usage limit reached\n") is None
-    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z build failed: 3 tests\n") == "build failed: # tests"
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z ##[error]build failed: 3 tests\n") == "build failed: # tests"
 
 
 def test_failure_class_keeps_digits_in_variable_names():
-    log = "dev\tcheck\t2026-11-10T08:00:01Z ::error::Repo variable MAX_DEV2 is not set\n"
+    log = "dev\tcheck\t2026-11-10T08:00:01Z ##[error]Repo variable MAX_DEV2 is not set\n"
     assert s.failure_class(log) == "repo variable max_dev2 is not set"
 
 
 def test_failure_class_normalizes_standalone_numbers_only():
-    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z failed after 42 attempts\n") == "failed after # attempts"
-    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z error in abc123 run 7\n") == "error in abc123 run #"
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z ##[error]failed after 42 attempts\n") == "failed after # attempts"
+    assert s.failure_class("dev\tstep\t2026-11-10T08:00:00Z ##[error]error in abc123 run 7\n") == "error in abc123 run #"
 def exec_file(denials):
     return json.dumps([{"type": "assistant"}, {"type": "result", "permission_denials": denials}])
 

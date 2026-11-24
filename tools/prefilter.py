@@ -245,6 +245,17 @@ def waiting_for_owner(owner, approver):
     return issues, n
 
 
+def pipeline_prs(owner=None):
+    """Open PRs that hold a slot of MAX_PRS: same-repo `agent/` PRs the agents opened. Not counted: the owner's own
+    PRs (also on an `agent/` branch), the train's batch and release PRs, template sync and dependabot PRs. Seven PRs
+    opened by hand filled the cap and the dispatcher started nothing for a night."""
+    owner = os.environ.get("OWNER", "Bankaifan") if owner is None else owner
+    prs = json.loads(gh("pr", "list", "--state", "open", "--limit", "200", "--json",
+                        "number,headRefName,isCrossRepository,author"))
+    return sum(1 for p in prs if train.status.is_agent_pr(p)
+               and not train.status.same_login((p.get("author") or {}).get("login"), owner))
+
+
 def count(*args):
     return len(json.loads(gh(*args, "--limit", "200", "--json", "number")))
 
@@ -265,9 +276,22 @@ def slip_time(issue, authors):
     return max(times) if times else issue.get("createdAt", "")
 
 
+NOTHING_MARK = "<!-- nothing-to-build -->"  # tools/no_build.py: a developer run found the slip already done
+
+
+def nothing_to_build(issue, authors):
+    """A trusted `nothing-to-build` comment is newer than the newest slip: that slip leads to an empty run."""
+    since = slip_time(issue, authors)
+    return any(NOTHING_MARK in (c.get("body") or "") and overlap.trusted(c, authors) and c.get("createdAt", "") > since
+               for c in issue.get("comments", []))
+
+
 def step_landed(n, issue, authors, gh=None):
-    """True when a same-repo `agent/` PR naming issue N merged after its newest slip (issue #661): the slip's step is
-    done and a restart from it would only produce an empty run."""
+    """True when a same-repo `agent/` PR naming issue N merged after its newest slip (issue #661), or a developer
+    run said after that slip that there is nothing to build (`nothing_to_build`): the slip's step is done and a
+    restart from it would only produce an empty run."""
+    if nothing_to_build(issue, authors):
+        return True
     run = gh or globals()["gh"]  # the module's gh at call time, so a test can replace it
     out = run("pr", "list", "--state", "merged", "--search", f"#{n} in:body", "--limit", "20",
               "--json", "body,headRefName,isCrossRepository,mergedAt")
@@ -315,8 +339,7 @@ def start_state():
     w_issues, w_prs = waiting_for_owner(os.environ.get("OWNER", "Bankaifan"), os.environ.get("APPROVER_BOT", ""))
     parked, restart = parked_waiting(dev)
     stuck = stuck_slots(dev) | parked  # an issue waiting for an open blocker holds no slot
-    free_dev, free_prs = free_slots({i["number"] for i in dev}, w_issues, stuck,
-                                    count("pr", "list", "--state", "open"), w_prs)
+    free_dev, free_prs = free_slots({i["number"] for i in dev}, w_issues, stuck, pipeline_prs(), w_prs)
     trusted = json.loads(os.environ.get("TRUSTED") or subprocess.run(
         [sys.executable, "tools/trusted_issues.py"], check=True, capture_output=True, text=True).stdout)
     issues = json.loads(gh("issue", "list", "--state", "open", "--limit", "200", "--json", "number,body,title,labels"))

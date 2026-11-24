@@ -55,8 +55,9 @@ def gh(*args):
 
 
 def bump_round(number, sha, run=gh):
-    """Count the round like agent-review does (review:1 -> 2 -> 3), once per head SHA: if the code reviewer already
-    counted this head, nothing is bumped. agent-fix starts a fix on review:1/2 and applies the round limit on review:3.
+    """Count the round like agent-review does (next review:N), once per head SHA: if the code reviewer already
+    counted this head, nothing is bumped. agent-fix starts a fix while rounds resolve findings and applies the round
+    limit otherwise (tools/review_rounds.py).
     Returns True when a `changes` review should be requested: the head is newly counted or was counted already
     (the round is open, the fix is still to be started); False at the limit (handled before)."""
     return agent_guard.count_round(number, sha, run) != "limit"

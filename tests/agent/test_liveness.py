@@ -164,3 +164,49 @@ def test_nightly_issue_is_signed_prio1_and_not_duplicated():
     calls.clear()
     assert liveness.ensure_nightly_issue("k", run) is None
     assert not any(a[:2] == ("issue", "create") for a in calls)
+
+
+def test_reports_off_puts_the_status_into_the_run_summary_and_closes_the_issue(tmp_path, capsys):
+    """REPORT_ISSUES=off: no status issue is written or created; an open one is closed once; the work goes on."""
+    added = {wf: "2026-11-10T11:30:00Z" for wf in st.liveness.SCHEDULED}
+    summary = tmp_path / "summary.md"
+    log = []
+    base = fake_gh(added, log)
+
+    def run(*args):
+        if args[:2] == ("issue", "list") and "author" in args[-1]:
+            log.append(args)
+            return json.dumps([{"number": 717, "title": st.TITLE, "author": {"login": "app/bot"}},
+                               {"number": 9, "title": "Agent status of something else", "author": {"login": "app/bot"}}])
+        return base(*args)
+
+    env = {**ENV, "AUTHOR_BOT": "bot[bot]", "REPORT_ISSUES": "off", "GITHUB_STEP_SUMMARY": str(summary)}
+    assert st.run_status(env, NOW, run) == 0
+    assert summary.read_text(encoding="utf-8").startswith(f"# {st.TITLE}\n\n")
+    assert not any(a[:2] in (("issue", "create"), ("issue", "edit"), ("issue", "pin")) for a in log)
+    closes = [a for a in log if a[:2] == ("issue", "close")]
+    assert closes == [("issue", "close", "717", "--reason", "not planned", "--comment", liveness.RETIRED_NOTE)]
+    assert "status in the run summary, closed issue #717" in capsys.readouterr().out
+
+
+def test_reports_on_is_the_default_and_other_peoples_issues_are_never_closed():
+    assert not liveness.reports_off({}) and not liveness.reports_off({"REPORT_ISSUES": "on"})
+    assert liveness.reports_off({"REPORT_ISSUES": " OFF "})
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        return json.dumps([{"number": 5, "title": "Agent status", "author": {"login": "someone"}}])
+
+    assert liveness.retire_issue("Agent status", run, "bot[bot]") is None and len(calls) == 1
+    assert liveness.retire_issue("Agent status", run) == 5  # no bot name given: the title decides
+
+
+def test_without_a_status_issue_the_failure_watch_anchors_on_the_last_successful_status_run():
+    def run(*args):
+        if args[:2] == ("run", "list") and "status.yml" in args:
+            return json.dumps([{"createdAt": "2026-11-10T11:30:00Z", "url": "u"}])
+        return "[]"
+
+    assert st.previous_since(run, NOW) == datetime.datetime(2026, 11, 10, 11, 30, tzinfo=datetime.UTC)
+    assert st.previous_since(lambda *a: "[]", NOW) == NOW - st.failure_watch.MAX_BACK

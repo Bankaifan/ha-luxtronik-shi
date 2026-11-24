@@ -2,6 +2,8 @@ import importlib.util
 import json
 import pathlib
 
+import pytest
+
 spec = importlib.util.spec_from_file_location(
     "post_verdict", pathlib.Path(__file__).resolve().parents[2] / "tools" / "ci" / "post_verdict.py")
 pv = importlib.util.module_from_spec(spec)
@@ -38,12 +40,13 @@ def test_changes_posts_comment_and_requests_changes(tmp_path):
     assert calls[-1][:3] == ("pr", "review", "5") and "--request-changes" in calls[-1]
 
 
-def test_changes_after_round_limit_requests_no_review(tmp_path):
+@pytest.mark.parametrize("labels", ["review:8\n", "review:3\nreview:stop\n"])
+def test_changes_after_round_limit_requests_no_review(tmp_path, labels):
     calls = []
 
     def run(*a):
         calls.append(a)
-        return pr_view(a, "review:3\n")
+        return pr_view(a, labels)
 
     assert pv.post(5, SHA, exec_file(f"security-review: changes {SHA}\n- x"), run, tmp_path) == 0
     assert not any(c[:2] in (("pr", "review"), ("pr", "edit")) for c in calls)

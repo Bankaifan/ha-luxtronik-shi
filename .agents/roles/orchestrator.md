@@ -40,7 +40,7 @@ Plans, cuts work, starts agents. Writes no production code.
 - Parking: `python3 tools/agent_guard.py park pr|issue <n> "<reason in a few words>"` (label `parked`, one comment). Never ask the owner,
   mention him or request his review: `tools/status.py` un-parks the item after a cool-down with a fresh start.
 - Pick the model: routine = haiku (default), core/security/architecture = label `model:sonnet`.
-- Two failed fix rounds restart the task once by script
+- A finding still open after two fix rounds in a row (or 8 rounds) restarts the task once by script
   (`tools/restart.py`: issue gets `restart:1`, a slip comment, `agent:dev` again; the old PR is closed). Improve that slip
   comment if needed (what failed, blocking findings, a different approach). An issue with `restart:1` that fails again
   is parked by script; never restart twice. A newer agent PR closes an older one only if it holds the same work (status run, `tools/restart.py`).

@@ -19,7 +19,7 @@ VERDICT_EDIT = "Edit(verdict.json)"  # the one write-named tool a judging step m
 
 # The --allowedTools entries of each judging model step, pinned. Any other entry fails the test.
 ALLOWED = {
-    "agent-review.yml": READ + ["Bash(gh pr view:*)", "Bash(gh pr review:*)", "Bash(gh issue view:*)"],
+    "agent-review.yml": READ + ["Agent", "Task", "Bash(gh pr view:*)", "Bash(gh pr review:*)", "Bash(gh issue view:*)"],
     "agent-security-review.yml": READ + ["Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh issue view:*)"],
     "scout.yml": READ + [
         "Bash(gh issue list:*)", "Bash(gh issue view:*)", "Bash(gh pr list:*)", "Bash(gh pr view:*)",

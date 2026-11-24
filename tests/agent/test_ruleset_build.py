@@ -49,7 +49,7 @@ def test_build_keeps_the_rest_of_the_template(tmp_path):
     assert [r["type"] for r in built["rules"]] == [r["type"] for r in original["rules"]]
     assert built["bypass_actors"] == original["bypass_actors"]
     strict = next(r for r in built["rules"] if r["type"] == "required_status_checks")
-    assert strict["parameters"]["strict_required_status_checks_policy"] is True
+    assert strict["parameters"]["strict_required_status_checks_policy"] is False  # decision 0020
 
 
 @pytest.mark.parametrize("name", ["Lint", "lint docs", "lint_docs", "lint.docs", "-lint", "", "a" * 64, "x;rm"])
