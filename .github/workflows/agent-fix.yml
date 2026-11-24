@@ -6,6 +6,8 @@ run-name: "${{ github.event_name == 'pull_request_review' && github.event.pull_r
 # Both triggers run in the base repo context and get the repo secrets.
 # Also started by `workflow_dispatch` with input `pr` (the status run, for a PR that conflicts with main): a conflict
 # is no finding, so it starts a fix without reading or bumping the round labels.
+# A fix run that produces nothing is repeated once per head (label silent:<sha7>, dispatch with why=retry) before the
+# silent-run guard acts.
 # Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else parked.
 # A red CI bumps the label first; the first PR-form or VERSION/CHANGELOG failure of a PR gets an uncounted fix run (formfix).
 on:
@@ -20,6 +22,11 @@ on:
         description: Number of the agent/* PR that conflicts with main
         required: true
         type: string
+      why:
+        description: conflict (the PR conflicts with main) or retry (a fix run on this head produced nothing)
+        type: choice
+        options: [conflict, retry]
+        default: conflict
 permissions:
   contents: read
 jobs:
@@ -190,6 +197,7 @@ jobs:
       PR: ${{ needs.prepare.outputs.pr }}
       BRANCH: ${{ needs.prepare.outputs.branch }}
       MODEL: ${{ needs.prepare.outputs.model }}
+      WHY: ${{ inputs.why || 'conflict' }}
     steps:
       - name: Fail if a required repo variable is unset
         env:
@@ -287,8 +295,12 @@ jobs:
             PR #${{ env.PR }} in ${{ github.repository }} (branch ${{ env.BRANCH }}, already checked out) needs a fix.
             Trigger: ${{ env.EVENT }}.
             - pull_request_review: a review requests changes. Read it with `gh pr view ${{ env.PR }} --comments --json reviews,comments`.
-            - workflow_dispatch: the PR conflicts with main. Rebase the branch onto current origin/main, resolve
-              the conflicts keeping the intent of the PR (rebase, never merge main into the branch).
+            - workflow_dispatch, reason `${{ env.WHY }}`. `conflict`: the PR conflicts with main. Rebase the branch
+              onto current origin/main, resolve the conflicts keeping the intent of the PR. `retry`: an earlier fix run
+              on this head ended without a commit. Read the reviews as above; fix what the newest one that requests
+              changes raises, else rebase onto origin/main and fix what `make check` reports.
+            Update the branch only with `git rebase origin/main`: never `git merge`, never `git pull` without
+            `--rebase`, never `gh pr update-branch` (a merge commit is not a commit of this task).
             - workflow_run: the validate run ${{ env.RUN_ID }} failed. Its failing lines are in `ci-failure.log`
               (read it with Read; never commit it). CI tests the PR merged with current main: rebase onto
               origin/main first, then reproduce with `make check`.
@@ -400,9 +412,42 @@ jobs:
           done
           gh workflow run validate.yml --ref "$BRANCH"
           echo "triggered=true" >> "$GITHUB_OUTPUT"
-      # Never end silently: no new commit on the PR head means the PR is parked (label and one comment).
-      - name: Escalate a run that pushed no fix
+      # A run that produced nothing (same head, same body, not approved) is repeated once per head before the guard
+      # acts: the label marks the head and the next step dispatches this workflow again with why=retry (it queues
+      # behind this job). Any error in these two steps and the guard below acts as before.
+      - name: Repeat a run that produced no fix once
+        id: again
         if: ${{ always() && steps.open.outputs.open == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_BEFORE: ${{ steps.before.outputs.sha }}
+          APPROVER_BOT: ${{ vars.APPROVER_BOT }}
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/guard/tools"
+          view=$(gh pr view "$PR" --json state,headRefOid,labels,body)
+          if [ -z "$HEAD_BEFORE" ] || [ "$(jq -r .state <<<"$view")" != OPEN ] || [ "$(jq -r .headRefOid <<<"$view")" != "$HEAD_BEFORE" ]; then exit 0; fi
+          if ! jq -r .body <<<"$view" | cmp -s - "$RUNNER_TEMP/body-before.txt"; then exit 0; fi
+          if [ "$(python3 "$tools/approval.py" check "$PR")" = approved ]; then exit 0; fi
+          mark="silent:${HEAD_BEFORE:0:7}"
+          if jq -e --arg m "$mark" '[.labels[].name] | index($m) != null' <<<"$view" > /dev/null; then
+            echo "Second run without a fix on $HEAD_BEFORE: the guard takes over"; exit 0
+          fi
+          python3 "$tools/agent_guard.py" label pr "$PR" "$mark"
+          echo "No fix on $HEAD_BEFORE: one more run"
+          echo "retry=true" >> "$GITHUB_OUTPUT"
+      - name: Start the repeated fix run
+        id: redo
+        if: ${{ always() && steps.open.outputs.open == 'true' && steps.again.outputs.retry == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run agent-fix.yml -f pr="$PR" -f why=retry
+      # Never end silently: no new commit on the PR head and no second run started (it was the second one, or starting
+      # it failed) means the guard acts (restart or park).
+      - name: Escalate a run that pushed no fix
+        if: ${{ always() && steps.open.outputs.open == 'true' && steps.redo.outcome != 'success' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
