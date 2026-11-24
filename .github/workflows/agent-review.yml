@@ -2,6 +2,8 @@ name: agent-review
 run-name: "review: ${{ github.event.workflow_run.display_title || github.event.workflow_run.head_branch }}"
 # Review only on green CI: runs when `validate` completed successfully on a same-repo agent/* branch.
 # The reviewer never runs PR code: it checks out main and reads the change from staged files (.review/) and gh pr view.
+# A run that leaves no review is repeated once per head (label silent:<sha7>, validate is started again and its green
+# result starts this workflow once more); only the second one in a row reaches the silent-run guard.
 on:
   workflow_run:  # zizmor: ignore[dangerous-triggers] validate gate only; checks out main, never PR code, and the reviewer cannot push
     workflows: [validate]
@@ -144,6 +146,9 @@ jobs:
             `.review/pr.diff` (full diff), `.review/files.txt` (changed paths) and `.review/files/<path>` (each changed
             file at the PR head). Read them with Read (long files in parts with offset/limit). Use `gh pr view` for the
             body and `gh issue view` for the linked issue.
+            Bash allows only plain `gh pr view`, `gh issue view` and `gh pr review` calls, one per Bash call: no `cd`, `cat`,
+            `ls`, pipes, `;` or `&&` (denied, and a command joined with them is denied as a whole). Read and list files
+            with Read, Glob and Grep. A denied call is no reason to stop: go on with those tools and submit the review.
             If `.review/delta.diff` exists this is a later round: follow the scope rule for later rounds in the role
             (read the delta and `.review/prior-findings.md`, not the full diff). Without it, review the full diff.
             Use the verdict classes of the role: approve; changes (defects against the slip, AGENTS.md or CI only);
@@ -176,9 +181,48 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.round.outputs.pr }}
         run: python3 tools/agent_guard.py refund "$PR" "$SHA" || echo "refund failed"
-      # Never end silently: the Claude step ran but the approver app left no review for this head SHA.
-      - name: Escalate a run that left no review
+      # A run without a review is repeated once per head before anything is parked. The label marks the head; the
+      # steps below start validate again and its green result starts this workflow once more (the round is not
+      # counted twice: marker round:<sha7>). Any error in these three steps and the guard below acts as before.
+      - name: Repeat a run that left no review once
+        id: again
         if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ steps.round.outputs.pr }}
+          BHASH: ${{ steps.round.outputs.bhash }}
+        run: |
+          set -euo pipefail
+          guard() { python3 tools/agent_guard.py "$@"; }
+          if guard reviewed "$PR" "$SHA" ${BHASH:+"$BHASH"}; then exit 0; fi
+          view=$(gh pr view "$PR" --json state,headRefOid,labels)
+          if [ "$(jq -r .state <<<"$view")" != OPEN ] || [ "$(jq -r .headRefOid <<<"$view")" != "$SHA" ]; then exit 0; fi
+          mark="silent:${SHA:0:7}"
+          if jq -e --arg m "$mark" '[.labels[].name] | index($m) != null' <<<"$view" > /dev/null; then
+            echo "Second run without a review on $SHA: the guard takes over"; exit 0
+          fi
+          guard label pr "$PR" "$mark"
+          echo "No review on $SHA: one more run"
+          echo "retry=true" >> "$GITHUB_OUTPUT"
+      # Author app, `actions` only, created after the model step: a run started with the job token would not start
+      # the review again. Used by the next step only.
+      - id: ci-app
+        if: ${{ !cancelled() && steps.again.outputs.retry == 'true' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTHOR_CLIENT_ID }}
+          private-key: ${{ secrets.AUTHOR_APP_KEY }}
+          permission-actions: write
+      - name: Start validate on the branch again
+        id: redo
+        if: ${{ !cancelled() && steps.again.outputs.retry == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.ci-app.outputs.token }}
+        run: gh workflow run validate.yml --ref "$BRANCH"
+      # Never end silently: no review for this head SHA and no second run started (it was the second one, or starting
+      # it failed).
+      - name: Escalate a run that left no review
+        if: ${{ !cancelled() && steps.claude.conclusion != 'skipped' && steps.redo.outcome != 'success' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

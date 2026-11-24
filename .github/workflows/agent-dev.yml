@@ -305,4 +305,10 @@ jobs:
         run: |
           # Rule: the guard comes from main, this call from the PR branch. `silent` ignores extra trailing args and a
           # usage error escalates ("guard error"); only ever append args, never reorder or remove them.
+          # An issue that was closed meanwhile has nothing left to build: a run without a PR on it is not silent (#751:
+          # the overdue run succeeded, the failure watch closed #745, the guard still opened a stuck issue for it).
+          # An unreadable state is not "closed": the guard then runs as before.
+          if [ "$(gh issue view "$ISSUE" --json state --jq .state || true)" = CLOSED ]; then
+            echo "Issue #$ISSUE is closed: nothing to escalate"; exit 0
+          fi
           python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent dev "$ISSUE" "$STARTED"

@@ -81,9 +81,23 @@ jobs:
           fetch-depth: 0
       # Checked-out main only (no PR code). Repo events: sender, live check and debounce (tools/orchestrator_gate.py).
       # merges: skip when only HANDOVER.md changed. Schedule and dispatch always go on.
+      # A guard script (status run, failure watch) opens its issues under the author app. Without this the gate takes
+      # such an `opened` event for the orchestrator's own echo whenever any orchestrator run is near, and the issue
+      # waits for the next scheduled run. No git and no model here: the key only verifies the signature.
+      - name: Is the opened issue signed by a guard script
+        id: sig
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_ACTION: ${{ github.event.action }}
+          NUMBER: ${{ github.event.issue.number }}
+          GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)
+        run: echo "signed=$(python3 tools/orchestrator_gate.py signed)" >> "$GITHUB_OUTPUT"
       - name: Gate (event sender and debounce; merges that only touch HANDOVER.md)
         id: gate
         env:
+          SIGNED: ${{ steps.sig.outputs.signed }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           CONTENTS_TOKEN: ${{ github.token }}  # read-only: the commit check of a merge (the app token has no contents scope)
@@ -165,6 +179,7 @@ jobs:
       - id: claude
         uses: anthropics/claude-code-action@c84e279f859e2591391e95bd309286eb111c345f # v1.0.284
         if: steps.gate.outputs.skip != 'true' && steps.pre.outputs.work == 'true'
+        continue-on-error: true  # a transient API error (is_error after one turn) is tolerated by `Fail a silent run`
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -185,6 +200,9 @@ jobs:
                script (tools/dispatch.py) starts the issues that hold a slip and removes agent:dev after a merge: you add no
                label and remove no agent:dev, you start nothing. You only write the slip comment (goal, a `Files:` line,
                a `Model: sonnet` or `Model: haiku` line, acceptance) for these issues without a slip: ${{ steps.pre.outputs.needs_slip }}
+               An issue in that list that already has a slip had its step merged and is still open: write the slip for
+               what is left of the issue; if nothing is left, write a slip whose goal is to confirm that (the
+               developer run then closes the issue).
                (the script starts them once the comment lands). HANDOVER.md (step 3) only when the script says
                handover due: ${{ steps.pre.outputs.handover_due }}. Everything in steps 1 to 3 about labels and starting
                applies only when the dispatcher is off.
@@ -328,6 +346,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
           STARTED: ${{ steps.started.outputs.at }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
           STARTABLE: ${{ steps.pre.outputs.startable }}
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # script step only, never a model step (tests/test_guard_mark.py)

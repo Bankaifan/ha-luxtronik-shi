@@ -20,7 +20,9 @@ permissions:
 jobs:
   validate:
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 15
+    # A run cut off by this limit is `cancelled`: no review starts (it needs success) and no fix round (it needs
+    # failure), so the PR just sits. A project whose `make check` takes longer sets VALIDATE_TIMEOUT (minutes).
+    timeout-minutes: ${{ fromJSON(vars.VALIDATE_TIMEOUT || '15') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
