@@ -125,7 +125,7 @@ jobs:
           python-version: "3.13"
       - run: bash tools/ci/install_tools.sh
       - run: ruff check .
-      - run: pytest --timeout=60
+      - run: pytest --ignore=tests/agent --timeout=60
       - name: Generators produce no drift, no tracked bytecode
         run: |
           python tools/check/check_no_bytecode.py
@@ -168,7 +168,7 @@ jobs:
           pip install -r requirements_test.txt pytest-timeout "homeassistant==$min_ha" "pycares<5" "pymodbus==3.9.2"
       - run: python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
       - run: python -c "import pymodbus; print('pymodbus', pymodbus.__version__)"
-      - run: pytest --timeout=60
+      - run: pytest --ignore=tests/agent --timeout=60
 
   # Same tests against the newest Home Assistant test harness (newer Python), to catch API changes early.
   # pymodbus is not installed by the test harness itself, so it is pinned here to the newest 3.x release line.
@@ -185,7 +185,7 @@ jobs:
       - run: pip install --upgrade pytest-homeassistant-custom-component "pymodbus>=3.9,<4" pytest-timeout
       - run: python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
       - run: python -c "import pymodbus; print('pymodbus', pymodbus.__version__)"
-      - run: pytest --timeout=120
+      - run: pytest --ignore=tests/agent --timeout=120
 
   # Decides whether agent-smoke is needed. A paths-filter step (not workflow-level `paths`),
   # so the required check `agent-smoke` always reports: skipped counts as success.
