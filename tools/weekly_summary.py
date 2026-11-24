@@ -7,6 +7,7 @@ Also appends one row per week to docs/metrics.csv (the workflow opens a PR for i
 """
 import csv
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -285,6 +286,11 @@ def queue_section(q):
 def capacity_sections(today, run=gh, max_dev=2, max_prs=3, now=None):
     """(model section, queue section, threshold reasons, roles section, role candidates). Role candidates: (failure
     class, count) for classes repeated ROLE_REPEATS times in 4 weeks. gh failures give 'unknown', never an abort."""
+    return capacity_report(today, run, max_dev, max_prs, now)[:5]
+
+
+def capacity_report(today, run=gh, max_dev=2, max_prs=3, now=None):
+    """capacity_sections plus {failure class: its failed runs}, which `repeat_issues` turns into work for the agents."""
     now = now or datetime.datetime.now(datetime.UTC)
     since7 = (today - datetime.timedelta(days=7)).isoformat() + "T00:00:00Z"
     since28 = (today - datetime.timedelta(days=28)).isoformat()
@@ -292,7 +298,8 @@ def capacity_sections(today, run=gh, max_dev=2, max_prs=3, now=None):
         files = run_stats.claude_workflows()
         runs, jobs_of, log_of = run_stats.fetch_all(files, since28, run=run)
         results = {f: run_stats.workflow_stats(runs[f], jobs_of, log_of, now=now) for f in files}
-        classes = run_stats.failure_classes(runs, jobs_of, log_of, now=now)
+        class_runs = run_stats.failure_class_runs(runs, jobs_of, log_of, now=now)
+        classes = {cls: len(hit) for cls, hit in class_runs.items()}
         issues = json.loads(run("issue", "list", "--state", "open", "--limit", "200",
                                 "--json", "number,title,labels,updatedAt"))
         prs = json.loads(run("pr", "list", "--state", "open", "--limit", "100",
@@ -302,7 +309,7 @@ def capacity_sections(today, run=gh, max_dev=2, max_prs=3, now=None):
         queue = queue_numbers(issues, prs, max_dev, max_prs, now)
     except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError):
         return ("## Model runs, last 7 days\n- unknown", "## Queue\n- unknown", [],
-                "## Roles, last 7 days\n- unknown", [])
+                "## Roles, last 7 days\n- unknown", [], {})
     review_rounds = sum(1 for p in reviewed if p["headRefName"].startswith("agent/")
                         for rv in p.get("reviews", [])
                         if rv.get("state") == "CHANGES_REQUESTED" and rv.get("submittedAt", "") >= since7)
@@ -316,7 +323,7 @@ def capacity_sections(today, run=gh, max_dev=2, max_prs=3, now=None):
         reasons.append(f"{queue['waiting']} queued issues wait while no agent:dev slot is free")
     candidates = [(cls, n) for cls, n in sorted(classes.items()) if n >= ROLE_REPEATS]
     return (model_section(results), queue_section(queue), reasons,
-            roles_section(results, review_rounds, restarts), candidates)
+            roles_section(results, review_rounds, restarts), candidates, class_runs)
 
 
 def proposal_body(reasons, model, queue_text, today, roles_text=""):
@@ -341,14 +348,73 @@ def role_proposal_body(candidates, roles_text, today):
     parts = [f"Updated {today}. Written by the weekly summary (design 0015). It proposes only; no role, workflow or variable is changed.",
              "## Repeated failure classes (4 weeks, limit errors excluded)\n" + "\n".join(rows),
              roles_text,
-             ("## Next step (Daniel decides)\n"
-              "- First check whether a script in `tools/` can catch the class (AGENTS.md: script first, then haiku, then sonnet).\n"
-              "- Only if no script can, a new role or a model change is a design decision (`docs/design/`).")]
+             ("## Next step\n"
+              "- No agent can take this: the repo secret `GUARD_KEY` is not set, so no signed work issue was written "
+              "(`repeat_issues`). With the key, each class above becomes an issue `Repeated failure: <id>` the agents work on.\n"
+              "- The work itself: first a script in `tools/` (AGENTS.md: script first, then haiku, then sonnet); "
+              "only if no script can catch the class, a design note in `docs/design/`.")]
     return "\n\n".join(parts) + "\n"
 
 
+REPEAT_PREFIX = "Repeated failure: "  # a guard title (tools/trusted_issues.py): the agents work on it, nobody decides
+REPEAT_LABEL = "prio:2"
+REPEAT_URLS = 5
+ROLE_RETIRED = ("A failure class that repeats is a signed work issue for the agents now (`Repeated failure: <id>`), "
+                "not a proposal that waits for a decision.")
+
+
+def repeat_title(cls):
+    """Title of the work issue of a failure class: a short hash, never the log text itself."""
+    return REPEAT_PREFIX + hashlib.sha256(cls.encode("utf-8")).hexdigest()[:8]
+
+
+def repeat_body(count, urls):
+    """Fixed script text (it is signed): the count and the run links come from the run list, nothing from a log."""
+    return (f"The same failure was seen in {count} failed model runs within 4 weeks (same first error line of the "
+            f"runner; limit and rate errors are not counted). Runs: {' '.join(urls)}\n\n"
+            "Goal: read the failed logs of these runs, name the common cause in the PR and remove it. First with a "
+            "script or a check in `tools/` (AGENTS.md: script first, then haiku, then sonnet). Only if no script can "
+            "catch it, write a design note in `docs/design/` for a role or model change. Nobody decides this for you.")
+
+
+def repeat_issues(class_runs, key, run=gh, repo=None):
+    """One signed work issue per failure class that repeats (ROLE_REPEATS failed model runs). An open issue of the
+    class is left alone; after a closed one only runs newer than its closing count, so a fixed class is not opened
+    again by the old runs of the 4-week window. Returns the titles created; no key or a gh error creates none."""
+    repo = os.environ.get("GH_REPO", "") if repo is None else repo
+    created = []
+    if not key:
+        return created
+    for cls, hit in sorted(class_runs.items()):
+        if len(hit) < ROLE_REPEATS:
+            continue
+        title = repeat_title(cls)
+        try:
+            known = [i for i in json.loads(run("issue", "list", "--state", "all", "--search", f'"{title}" in:title',
+                                               "--json", "number,title,state,closedAt")) if i.get("title") == title]
+            if any((i.get("state") or "").upper() == "OPEN" for i in known):
+                continue
+            since = max((i.get("closedAt") or "" for i in known), default="")
+            fresh = sorted((r for r in hit if r.get("createdAt", "") > since), key=lambda r: r.get("createdAt", ""))
+            if len(fresh) < ROLE_REPEATS:
+                continue
+            urls = [f"https://github.com/{repo}/actions/runs/{r['databaseId']}" for r in fresh[-REPEAT_URLS:]]
+            run("label", "create", REPEAT_LABEL, "--force")
+            run("issue", "create", "--title", title, "--label", REPEAT_LABEL, "--body",
+                guard_mark.sign(title, repeat_body(len(fresh), urls), key))
+            created.append(title)
+        except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError):
+            continue
+    return created
+
+
 def upsert_proposal(body, run=gh, title=PROPOSAL_TITLE):
-    """One open issue with `title`: updated if it exists, created otherwise."""
+    """One open issue with `title`: updated if it exists, created otherwise. REPORT_ISSUES=off: the text goes to the
+    run summary and an open issue with that title is closed."""
+    if liveness.reports_off():
+        liveness.write_summary(title, body)
+        liveness.retire_issue(title, run)
+        return
     found = json.loads(run("issue", "list", "--state", "open", "--search", f'"{title}" in:title',
                            "--json", "number,title"))
     found = [i for i in found if i["title"] == title]
@@ -377,27 +443,23 @@ def main() -> int:
         print(f"appended a row to {METRICS}")
     for title in friction_issues():
         print(f"created friction issue: {title}")
-    model, queue_text, reasons, roles_text, role_candidates = capacity_sections(
+    model, queue_text, reasons, roles_text, role_candidates, class_runs = capacity_report(
         today, gh, env_int("MAX_DEV", 4), env_int("MAX_PRS", 5))
     body = build_body(merged, human, keeper, ideas, today.isoformat(), status_stale_safe(),
                       failures=failure_watch_summary(gh, today, guard_mark.key_from_env()),
                       capacity=[model, queue_text, roles_text])
-    found = json.loads(gh("issue", "list", "--state", "open", "--search", f'"{TITLE}" in:title',
-                          "--json", "number,title"))
-    found = [i for i in found if i["title"] == TITLE]
-    if found:
-        number = str(found[0]["number"])
-        gh("issue", "edit", number, "--body", body)
-        print(f"updated #{number}")
-    else:
-        url = gh("issue", "create", "--title", TITLE, "--body", body).strip()
-        print(url)
-        number = url.rsplit("/", 1)[-1]
-    liveness.verify_body("issue", number, body, gh)
+    upsert_proposal(body, gh, TITLE)  # the summary itself: one issue updated in place, or the run summary
     if reasons:
         upsert_proposal(proposal_body(reasons, model, queue_text, today.isoformat(), roles_text))
-    if role_candidates:
+    elif liveness.reports_off():
+        liveness.retire_issue(PROPOSAL_TITLE, gh)
+    key = guard_mark.key_from_env()
+    for title in repeat_issues(class_runs, key):
+        print(f"created work issue: {title}")
+    if role_candidates and not key:  # nobody can sign a work issue: the report is all there is
         upsert_proposal(role_proposal_body(role_candidates, roles_text, today.isoformat()), gh, ROLE_PROPOSAL_TITLE)
+    else:  # with the key a repeated class is work for the agents, not a report that waits for a decision
+        liveness.retire_issue(ROLE_PROPOSAL_TITLE, gh, note=ROLE_RETIRED)
     return 0
 
 

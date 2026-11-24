@@ -8,6 +8,7 @@ Denied tool calls (design 0017, step 1): run_stats.py denied [DAYS (default 7)] 
 DIR holds execution files named `<workflow file>__<createdAt>.json`, e.g. `agent-dev.yml__2026-11-10T08:00:00Z.json`.
 """
 import datetime
+import functools
 import json
 import pathlib
 import re
@@ -71,13 +72,10 @@ def format_stats(result):
 def jobs_getter(repo, run):
     slug = repo or "{owner}/{repo}"
 
-    cache = {}
-
+    @functools.cache
     def jobs_of(run_id):
-        if run_id not in cache:
-            cache[run_id] = json.loads(run("api", f"repos/{slug}/actions/runs/{run_id}/jobs", "--paginate",
-                                           "--jq", "{jobs: .jobs}")).get("jobs", [])
-        return cache[run_id]
+        return json.loads(run("api", f"repos/{slug}/actions/runs/{run_id}/jobs", "--paginate",
+                              "--jq", "{jobs: .jobs}")).get("jobs", [])
     return jobs_of
 
 
@@ -101,12 +99,9 @@ def fetch_all(files, since, repo=None, run=liveness.gh):
     runs = {f: json.loads(run("run", "list", "--workflow", f, *base, "--created", f">={since}",
                               "--limit", str(LIMIT), "--json", fields)) for f in files}
 
-    logs = {}
-
+    @functools.cache
     def log_of(run_id):
-        if run_id not in logs:
-            logs[run_id] = run("run", "view", str(run_id), *base, "--log-failed")
-        return logs[run_id]
+        return run("run", "view", str(run_id), *base, "--log-failed")
     return runs, jobs_getter(repo, run), log_of
 
 
@@ -132,41 +127,39 @@ def workflow_stats(runs, jobs_of, log_of, days=7, now=None):
             "median_min": round(statistics.median(durations) / 60, 1) if durations else None}
 
 
-ERROR_RE = re.compile(r"error|exception|failed", re.IGNORECASE)
-STAMP_RE = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z\s*")
-ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-# A script line echoed in the log (`echo "::error::..."` or an unexpanded `${!name}`), not the error text itself
-SOURCE_RE = re.compile(r'echo "::error::|\$\{!')
-ANNOTATION_RE = re.compile(r"^::error::")
-EXIT_LINE_RE = re.compile(r"^(##\[error\])?process completed with exit code \d+\.?$", re.IGNORECASE)
-# A standalone number (run id, count, duration) becomes #; a digit run that continues an identifier (MAX_DEV2) stays.
-# Applied to lowercased text, so the identifier characters are a-z and _.
-NUMBER_RE = re.compile(r"(?<![a-z_\d])\d+")
-# Runtime message of the agent tool, not repo code: the repo has no tsconfig.json (design 0015)
-TOOL_RE = re.compile(r"\binternal error:", re.IGNORECASE)
+STAMP_RE = re.compile(r"^\ufeff?\d{4}-\d\d-\d\dT[\d:.]+Z\s*")
+ANSI_RE = re.compile(r"(?:\x1b|\^\[)\[[0-9;]*m")  # the escape itself, or its caret form in a captured log
+ERROR_MARK = "##[error]"
+GENERIC_RE = re.compile(r"^Process completed with exit code \d+\.?$")
+NUMBER_RE = re.compile(r"(?<![a-z_\d])\d+")  # a standalone number becomes #; a digit run in an identifier (MAX_DEV2) stays
+TOOL_RE = re.compile(r"\binternal error:", re.IGNORECASE)  # runtime message of the agent tool, not repo code
 TOOL_LABEL = "tool environment, not repo code: "
 
 
 def failure_class(log):
-    """Normalized first error line of a failed model run (standalone numbers become #), or None. Limit or rate errors
-    are not a role failure and give None. Script source lines echoed in the log are skipped, so the expanded message
-    wins. Digits inside identifiers (MAX_DEV2) are kept. Heuristic (design 0015): same text = same class."""
+    """Normalized first error annotation of a failed model run (digits become #), or None. Limit or rate errors are
+    not a role failure and give None. Heuristic (design 0015): same text = same class.
+    Only a line the runner marks `##[error]` counts. `gh run view --log-failed` returns the whole job log, with every
+    step script and the model prompt echoed in it; any line that merely contains "error" or "failed" made unrelated
+    failures one class (#749, #762). The bare `Process completed with exit code N` is no class either."""
     if LIMIT_RE.search(log):
         return None
     for line in log.splitlines():
-        text = STAMP_RE.sub("", ANSI_RE.sub("", line.rsplit("\t", 1)[-1])).strip()
-        if not ERROR_RE.search(text) or SOURCE_RE.search(text) or EXIT_LINE_RE.match(text):
+        text = ANSI_RE.sub("", STAMP_RE.sub("", line.rsplit("\t", 1)[-1])).strip()
+        if not text.startswith(ERROR_MARK):
             continue
-        label = TOOL_LABEL if TOOL_RE.search(text) else ""
-        return label + NUMBER_RE.sub("#", ANNOTATION_RE.sub("", text).lower())[:120]
+        text = text[len(ERROR_MARK):].strip()
+        if text and not GENERIC_RE.match(text):
+            label = TOOL_LABEL if TOOL_RE.search(text) else ""
+            return label + NUMBER_RE.sub("#", text.lower())[:120]
     return None
 
 
-def failure_classes(runs, jobs_of, log_of, days=28, now=None):
-    """{failure class: number of failed model runs in the last `days` days}; runs: {workflow file: run list}."""
+def failure_class_runs(runs, jobs_of, log_of, days=28, now=None):
+    """{failure class: [failed model runs of the last `days` days, as listed]}; runs: {workflow file: run list}."""
     now = now or datetime.datetime.now(datetime.UTC)
     cutoff = now - datetime.timedelta(days=days)
-    counts = {}
+    found = {}
     for file_runs in runs.values():
         for run in file_runs:
             if parse_time(run["createdAt"]) < cutoff or run.get("conclusion") != "failure":
@@ -175,8 +168,13 @@ def failure_classes(runs, jobs_of, log_of, days=28, now=None):
                 continue
             cls = failure_class(log_of(run["databaseId"]))
             if cls:
-                counts[cls] = counts.get(cls, 0) + 1
-    return counts
+                found.setdefault(cls, []).append(run)
+    return found
+
+
+def failure_classes(runs, jobs_of, log_of, days=28, now=None):
+    """{failure class: number of failed model runs in the last `days` days}; runs: {workflow file: run list}."""
+    return {cls: len(hit) for cls, hit in failure_class_runs(runs, jobs_of, log_of, days, now).items()}
 
 
 def execution_entries(directory):

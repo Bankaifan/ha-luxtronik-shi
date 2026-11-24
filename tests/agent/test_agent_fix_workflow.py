@@ -70,3 +70,13 @@ def test_a_run_without_a_fix_is_repeated_once_per_head_before_the_guard_acts():
 def test_the_fix_prompt_allows_a_rebase_only_never_a_merge_of_main():
     prompt = TEXT[TEXT.index("prompt: |"):TEXT.index("claude_args:")]
     assert "never `git merge`" in prompt and "never `gh pr update-branch`" in prompt and "`retry`: an earlier fix run" in prompt
+
+
+def test_a_fix_run_on_a_pr_that_was_merged_or_closed_meanwhile_is_not_escalated():
+    """roblox_energy #387: PR 386 merged at 19:58:20, the repeated fix run ended at 19:59 with nothing to fix and the
+    guard opened a stuck issue. Only a state read as MERGED or CLOSED skips the guard."""
+    step = TEXT[TEXT.index("Escalate a run that pushed no fix"):]
+    check = 'if [ "$state" = MERGED ] || [ "$state" = CLOSED ]; then'
+    assert 'state="$(gh pr view "$PR" --json state --jq .state || true)"' in step
+    assert check in step and step.index(check) < step.index('agent_guard.py" silent fix')
+    assert 'nothing to escalate"; exit 0' in step

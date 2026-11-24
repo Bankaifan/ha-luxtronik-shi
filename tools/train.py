@@ -40,7 +40,8 @@ Model-free. The workflow (a later PR) runs it on push to main, on a schedule and
    - no open batch and no PR in flight: a new one is built, unless the newest batch was closed unmerged with the same
      member set (those PRs then go the serial way). TRAIN_BATCH=off builds none.
 
-8. Repair (`repair_step`, before the candidates): an open agent PR whose commit subjects fail the form check
+8. Repair (`repair_step`, before the candidates): an open agent PR whose title lacks the task ID of its issue gets
+   it (tools/pr_title.py); an open agent PR whose commit subjects fail the form check
    (tools/task_ids.py) is red and would wait for a model. The same script sets them, at most REPAIR_MAX PRs per run.
 9. Issues (tools/landed.py, first of all): the open issue of a merged agent PR is closed, so no person closes one.
 
@@ -58,6 +59,7 @@ from pathlib import Path
 import agent_guard
 import branch_repair
 import landed as landed_issues
+import pr_title
 import reapprove
 import restart
 import status
@@ -151,10 +153,17 @@ def needs_repair(pr):
     return task_ids.name_of(pr.get("title")) if task_ids.commit_errors(pr.get("title"), subjects) else None
 
 
-def repair_step(prs, repairer):
+def repair_step(prs, repairer, run=None):
     """Step 8 of the module text. Returns the numbers of the PRs whose branch was pushed: their head moved, so the
-    rest of this run leaves them alone."""
+    rest of this run leaves them alone. With `run`, an agent PR whose title lacks the task ID of its issue gets it
+    first (tools/pr_title.py), so its commit subjects are then set to that NAME."""
     pushed = set()
+    for p in prs if run else []:
+        if status.is_agent_pr(p) and "parked" not in status.names(p):
+            new = pr_title.fix(p, run)
+            if new:
+                p["title"] = new
+                print(f"title of PR #{p['number']} set to the task ID of its issue")
     for p in [p for p in prs if needs_repair(p)][:REPAIR_MAX]:
         how = repairer(p, needs_repair(p))
         print(f"repair PR #{p['number']}: {how or 'failed'}")
@@ -438,7 +447,7 @@ def run_train(env, run=status.gh, releaser=None, now=None, builder=None, repaire
             pages = jlist(run, "api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/reviews")
             return [r for page in pages for r in page]
 
-        moved = repair_step(prs, repairer)
+        moved = repair_step(prs, repairer, run)
         prs = [p for p in prs if p["number"] not in moved]
         cands = candidates(prs, reviews_of, approver)
         waiting = {p["number"] for p in cands

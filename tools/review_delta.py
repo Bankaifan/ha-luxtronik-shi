@@ -2,9 +2,10 @@
 
 CLI: review_delta.py PR SHA   (env GH_TOKEN of the approver app, GH_REPO, APPROVER_BOT)
 Round 1 (no earlier approver review): nothing is staged, the reviewer reads the full diff.
-Round 2 and 3: `.review/delta.diff` (compare <last reviewed head>...SHA) and `.review/prior-findings.md` (the approver's
-own earlier reviews). If the last reviewed head is not an ancestor of SHA (rebase, squash), is SHA itself, or the compare
-fails, nothing is staged and the full diff stays the input. Never fails the job: exit 0 always. Data only, nothing is run.
+Later rounds: `.review/prior-findings.md` (the approver's own earlier reviews, so finding ids continue) and
+`.review/delta.diff` (compare <last reviewed head>...SHA). If the last reviewed head is not an ancestor of SHA (rebase,
+squash), is SHA itself, or the compare fails, no delta is staged and the full diff stays the input; the earlier
+findings are staged all the same. Never fails the job: exit 0 always. Data only, nothing is run.
 """
 import json
 import os
@@ -40,13 +41,22 @@ def prior_findings(mine):
 
 
 def stage_delta(pr_no, sha, env, run=gh, outdir=".review"):
-    """Return 'delta' if the delta files were written, else 'full' (reason printed)."""
+    """Return 'delta' if the delta was written, else 'full' (reason printed). The earlier findings are written
+    whenever earlier approver reviews exist, with or without a delta."""
     repo, approver = env["GH_REPO"], env.get("APPROVER_BOT", "")
     try:
         mine = approver_reviews(paged(run, f"repos/{repo}/pulls/{pr_no}/reviews"), approver)
         if not mine:
             print("round 1: full diff")
             return "full"
+        os.makedirs(outdir, exist_ok=True)
+        with open(os.path.join(outdir, "prior-findings.md"), "w", encoding="utf-8") as f:
+            f.write(prior_findings(mine))
+        print(f"earlier findings staged ({len(mine)} reviews)")
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError) as e:
+        print(f"earlier reviews unavailable ({type(e).__name__}): full diff, no earlier findings")
+        return "full"
+    try:
         old = mine[-1]["commit_id"]
         if old == sha:
             print("last reviewed head is the current head: full diff")
@@ -62,11 +72,8 @@ def stage_delta(pr_no, sha, env, run=gh, outdir=".review"):
     if not delta.strip():
         print("empty delta: full diff")
         return "full"
-    os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "delta.diff"), "w", encoding="utf-8") as f:
         f.write(delta)
-    with open(os.path.join(outdir, "prior-findings.md"), "w", encoding="utf-8") as f:
-        f.write(prior_findings(mine))
     print(f"delta since {old[:12]} staged")
     return "delta"
 

@@ -33,6 +33,7 @@ def has_slip(issue, authors=overlap.DEFAULT_TRUSTED):
 SONNET_PATHS = (".github/workflows/", "tools/ci/", "tools/trusted_issues.py", "tools/agent_guard.py",
                 "tools/dispatch.py", "tools/slip.py", ".github/CODEOWNERS", "CODEOWNERS", "docs/design/")
 FAILED_ROUND_LABELS = ("restart:1", "stalled:1")  # a previous round failed: escalate instead of a second identical try
+MANY_FILES = 3  # a slip over this many files is not routine work: haiku runs on such slips ended silently and were restarted
 
 
 def needs_sonnet(paths):
@@ -41,10 +42,11 @@ def needs_sonnet(paths):
 
 
 def model_of(issue, authors=overlap.DEFAULT_TRUSTED):
-    """`sonnet` or `haiku`, decided by the table: sonnet when the slip files are core (`SONNET_PATHS`) or a previous
-    round failed (`FAILED_ROUND_LABELS`), else `haiku`. A `Model:` line or `model:` label is only a hint and is
+    """`sonnet` or `haiku`, decided by the table: sonnet when the slip files are core (`SONNET_PATHS`), the slip names
+    MANY_FILES files or more, or a previous round failed (`FAILED_ROUND_LABELS`), else `haiku`. A `Model:` line or `model:` label is only a hint and is
     ignored. `opus` is never set by script (it needs the owner's OK)."""
     labels = {lab["name"] for lab in issue.get("labels", [])}
-    if labels & set(FAILED_ROUND_LABELS) or needs_sonnet(slip_files(issue, authors)):
+    files = slip_files(issue, authors)
+    if labels & set(FAILED_ROUND_LABELS) or needs_sonnet(files) or len(files) >= MANY_FILES:
         return "sonnet"
     return "haiku"

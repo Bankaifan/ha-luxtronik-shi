@@ -348,3 +348,17 @@ def test_a_failure_issue_waits_for_its_second_failure():
     assert not mod.first_failure(issue("The workflow x.yml failed in job j, step s.\nFailures: 2\nLast run: u\n"))
     assert not mod.first_failure(issue("Failures: 1", labels=("prio:1",)))  # red main: no second run may ever come
     assert not mod.first_failure(issue("Goal: x\nFailures: 1\nFiles: a.py", title="V1-X: owner issue"))
+
+
+def test_only_prs_the_agents_opened_hold_a_slot_of_max_prs(monkeypatch):
+    """roblox_energy: seven PRs opened by hand on agent/ branches filled MAX_PRS and nothing new was started."""
+    def pr(n, head, login, cross=False):
+        return {"number": n, "headRefName": head, "isCrossRepository": cross, "author": {"login": login}}
+
+    prs = [pr(1, "agent/308-themes", "app/bankaifan-agent-author"), pr(2, "agent/GLOW-PATTERN", "Bankaifan"),
+           pr(3, "release/next", "app/bankaifan-agent-author"), pr(4, "agent/batch", "app/bankaifan-agent-author"),
+           pr(5, "template-sync/1.109", "app/bankaifan-agent-author"), pr(6, "dependabot/x", "app/dependabot"),
+           pr(7, "agent/9-fork", "stranger", cross=True), pr(8, "agent/metrics-2026-11-23", "bankaifan-agent-author[bot]")]
+    monkeypatch.setattr(mod, "gh", lambda *a: json.dumps(prs))
+    assert mod.pipeline_prs("Bankaifan") == 2  # 1 and 8
+    assert mod.pipeline_prs("someone-else") == 3  # the owner's own PR counts only when he is not the owner

@@ -1,8 +1,14 @@
 """Guards for agent-review.yml: the script re-approval sits before the model and runs only from the default branch."""
+import json
 import re
+import shlex
 from pathlib import Path
 
-WORKFLOW = Path(__file__).resolve().parent.parent.parent / ".github" / "workflows" / "agent-review.yml"
+import pytest
+import review_select
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+WORKFLOW = ROOT / ".github" / "workflows" / "agent-review.yml"
 TEXT = WORKFLOW.read_text(encoding="utf-8")
 
 
@@ -21,7 +27,7 @@ def test_model_step_is_skipped_after_a_script_approval():
 
 def test_a_refused_batch_is_never_reviewed_by_the_model():
     after = TEXT[step_index("id: reapprove"):step_index("Request the code owner's review")]
-    assert after.count("&& env.BRANCH != 'agent/batch'\n") == after.count("\n        if: ") - 1 == 3
+    assert after.count("&& env.BRANCH != 'agent/batch'\n") == after.count("\n        if: ") - 1 == 4
 
 
 def test_the_batch_pr_counts_no_review_round_and_is_never_parked():
@@ -133,3 +139,48 @@ def test_a_run_without_a_review_is_repeated_once_per_head_before_the_guard_acts(
 def test_the_reviewer_is_told_to_use_single_commands_and_the_read_tools():
     prompt = TEXT[step_index("id: claude"):step_index("id: again")]
     assert "one per Bash call" in prompt and "no `cd`, `cat`," in prompt and "A denied call is no reason to stop" in prompt
+
+
+def claude_args():
+    """The model step's arguments as the action sees them: YAML fold first, then a shell-style split."""
+    yaml = pytest.importorskip("yaml")  # installed by tools/ci/install_tools.sh
+    steps = yaml.safe_load(TEXT)["jobs"]["review"]["steps"]
+    step = next(s for s in steps if s.get("id") == "claude")
+    return shlex.split(step["with"]["claude_args"])
+
+
+def test_specialists_are_defined_inline_read_only_on_haiku():
+    args = claude_args()
+    assert args.count("--agents") == 1
+    agents = json.loads(args[args.index("--agents") + 1])
+    assert sorted(agents) == sorted(review_select.SPECIALISTS) and len(agents) == 3
+    for name, agent in agents.items():
+        assert agent["tools"] == ["Read", "Glob", "Grep"] and agent["model"] == "haiku"
+        assert agent["description"].strip()
+        role = f".agents/roles/{name}.md"
+        assert role in agent["prompt"] and (ROOT / role).is_file()
+
+
+def test_the_lead_may_start_subagents_and_keeps_its_other_arguments():
+    args = claude_args()
+    allowed = args[args.index("--allowedTools") + 1].split(",")
+    assert {"Agent", "Task"} <= set(allowed)
+    assert args[args.index("--model") + 1] == "sonnet" and args[args.index("--max-turns") + 1] == "30"
+    assert args[args.index("--settings") + 1] == ".github/claude-judge-settings.json"  # the --agents JSON swallowed nothing
+
+
+def test_specialists_are_picked_by_script_between_the_delta_and_the_model():
+    pick = step_index("python3 tools/review_select.py .review")
+    assert step_index("Stage the delta since") < pick < step_index("id: claude")
+    step = TEXT[TEXT.rindex("\n      - ", 0, pick):pick]
+    assert "steps.round.outputs.skip != 'true' && steps.reapprove.outputs.approved != 'true' && env.BRANCH != 'agent/batch'" in step
+    assert "continue-on-error" not in step and "||" not in step  # a missing diff fails the job, no empty selection
+
+
+def test_a_reviewed_head_ends_the_red_streak_and_a_failure_fails_the_step():
+    block = TEXT[step_index("id: round"):step_index("id: reapprove")]
+    green = block.index('python3 tools/review_rounds.py green "$num"')
+    assert block.index('guard round "$num" "$SHA"') < green < block.index('echo "pr=$num"')
+    line = block[green:block.index("\n", green)]
+    assert line == 'python3 tools/review_rounds.py green "$num"'  # no `||`: a stale streak would park the PR wrongly
+    assert "set -euo pipefail" in block[:green] or "set -e" in block[:green]

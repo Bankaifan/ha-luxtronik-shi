@@ -730,6 +730,27 @@ def test_a_pr_with_wrong_commit_subjects_is_repaired_by_script_and_left_alone_fo
     assert "repair PR #2: pushed" in capsys.readouterr().out
 
 
+def test_a_pr_title_without_the_task_id_of_its_issue_is_set_and_its_subjects_follow(capsys):
+    """roblox_energy PR 382: titled V1-OTHER on the branch of an issue titled V1-FOO. Title first, then the subjects."""
+    class Titles(Gh):
+        def __call__(self, *args):
+            if args[:2] == ("issue", "view"):
+                self.calls.append(args)
+                return json.dumps({"title": "V1-FOO: the issue"})
+            return super().__call__(*args)
+
+    wrong = {**named(2, ["V1.103-OTHER: a change"], merge="BLOCKED"), "title": "V1-OTHER: summary"}
+    fix, run = Repairer("pushed"), Titles([wrong])
+    assert train.run_train(ENV, run, repairer=fix) == 0
+    assert ("pr", "edit", "2", "--title", "V1-FOO: summary") in run.calls
+    assert fix.calls == [(2, "FOO")]  # the subjects are set to the NAME of the new title
+    assert "title of PR #2 set to the task ID of its issue" in capsys.readouterr().out
+    parked = {**wrong, "labels": [{"name": "parked"}]}
+    run = Titles([parked])
+    assert train.run_train(ENV, run, repairer=Repairer(None)) == 0
+    assert not any(c[:2] == ("pr", "edit") for c in run.calls)
+
+
 def test_repairs_are_capped_per_run_and_a_failed_one_changes_nothing(capsys):
     prs = [named(n, ["fix typo"], merge="BLOCKED") for n in range(1, 7)]
     fix, run = Repairer(None), Gh(prs)

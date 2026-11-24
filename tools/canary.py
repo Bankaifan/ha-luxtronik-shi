@@ -1,5 +1,7 @@
 """Pipeline canary (issue #423, no model): prove issue -> slip -> developer -> CI -> review -> train -> merge still works.
 
+The issue body is a complete slip (it has the `Files:` line), so the dispatcher starts it at once; no model writes a
+slip for a fixed text first (that took 3 of the 8 minutes of canary #767).
 create: after a merge that touched .github/workflows/ or tools/ (and after a template sync), open one signed issue
   `Canary: <UTC timestamp>` with a fixed slip (append one line to docs/canary.md, model haiku). At most one per 6 h.
 check: for the newest canary issue that is 45 min to 2 h old: a merged PR and a closed issue = pass. Otherwise one signed
@@ -34,7 +36,8 @@ STAGE_NAMES = (*flow.STAGES, "close")  # close: PR merged, issue still open
 def slip(stamp):
     return (f"Fixed canary slip. Append exactly one line `canary {stamp}` to {FILE} (create the file with a one-line "
             f"title if it is missing). Change nothing else: no changelog fragment, no VERSION or CHANGELOG edit. "
-            f"Model: haiku.\n\nAcceptance:\n- {FILE} has the new line\n- the PR is merged and this issue is closed")
+            f"Model: haiku.\n\nFiles: {FILE}\n\nAcceptance:\n- {FILE} has the new line\n- the PR is merged and this "
+            "issue is closed")
 
 
 def _ts(text):

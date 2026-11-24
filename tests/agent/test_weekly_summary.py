@@ -204,3 +204,26 @@ def test_failure_section_prints_unknown_without_key_or_when_gh_fails():
     assert mod.failure_watch_summary(fake_issue_list([failure_issue(1, "OPEN")]), TODAY, "") is None
     body = mod.build_body([], [], [], [], "2026-11-09", failures=None)
     assert "## Failure watch\n- unknown" in body
+
+
+def test_reports_off_writes_no_summary_or_proposal_issue(monkeypatch, tmp_path):
+    """REPORT_ISSUES=off: upsert_proposal puts the text into the run summary and closes an open issue of that title."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("REPORT_ISSUES", "off")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        if args[:2] == ("issue", "list"):
+            return json.dumps([{"number": 747, "title": "Weekly summary", "author": {"login": "app/bot"}}])
+        return ""
+
+    mod.upsert_proposal("the text", run, "Weekly summary")
+    assert summary.read_text(encoding="utf-8") == "# Weekly summary\n\nthe text\n"
+    assert [c[:2] for c in calls] == [("issue", "list"), ("issue", "close")] and calls[1][2] == "747"
+    monkeypatch.setenv("REPORT_ISSUES", "on")
+    calls.clear()
+    mod.upsert_proposal("the text", lambda *a: calls.append(a) or json.dumps(
+        [{"number": 747, "title": "Weekly summary"}] if a[:2] == ("issue", "list") else {"body": "the text"}), "Weekly summary")
+    assert ("issue", "edit", "747", "--body", "the text") in calls

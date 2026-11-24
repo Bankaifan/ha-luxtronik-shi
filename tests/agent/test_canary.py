@@ -208,3 +208,14 @@ def test_canary_file_is_not_managed_and_needs_no_fragment():
     managed = [".github/workflows/", "tools/", "AGENTS.md"]
     assert not is_managed(canary.FILE, managed)
     assert errors([canary.FILE], managed, read=lambda p: None) == []
+
+
+def test_the_canary_body_is_a_complete_slip_so_the_dispatcher_starts_it_without_a_model():
+    """Canary #767 waited 3 of its 8 minutes for a model to write a slip for a fixed text."""
+    import slip
+
+    bot = "bankaifan-agent-author[bot]"
+    issue = {"body": guard_mark.sign("Canary: x", canary.slip("2026-11-23T23:55Z"), KEY), "author": {"login": bot},
+             "comments": [], "labels": []}
+    assert slip.slip_files(issue, frozenset({bot})) == [canary.FILE]
+    assert slip.has_slip(issue, frozenset({bot})) and slip.model_of(issue, frozenset({bot})) == "haiku"

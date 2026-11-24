@@ -67,3 +67,16 @@ def test_model_line_and_label_are_only_hints():
 def test_opus_is_never_chosen_and_stranger_model_ignored():
     assert slip.model_of(issue("Files: a.py\nModel: opus")) == "haiku"
     assert slip.model_of(issue("Model: sonnet", author=STRANGER)) == "haiku"
+
+
+def test_a_slip_over_three_or_more_files_gets_sonnet_from_the_start():
+    """roblox_energy #308: two haiku runs on a multi-file step ended silently before the restart moved it to sonnet."""
+    def issue(files):
+        return {"body": f"Task slip\nFiles: {files}\nModel: haiku", "author": {"login": "Bankaifan"}, "comments": [],
+                "labels": []}
+
+    authors = frozenset({"Bankaifan"})
+    assert slip.MANY_FILES == 3
+    assert slip.model_of(issue("src/a.luau, src/b.luau"), authors) == "haiku"
+    assert slip.model_of(issue("src/a.luau, src/b.luau, tests/a.test.luau"), authors) == "sonnet"
+    assert slip.model_of(issue("docs/canary.md"), authors) == "haiku"

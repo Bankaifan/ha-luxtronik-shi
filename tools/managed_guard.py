@@ -27,6 +27,7 @@ from template_sync import CONFIG, ConfigError, is_managed, parse_config
 MANAGED_FILE = pathlib.Path(".agents/managed.json")
 SYNC_TITLE = "Template sync"
 PART_TITLE = re.compile(r"Template sync [0-9a-f]{7,40} part [0-9][0-9a-z-]*(?![\w-])", re.IGNORECASE)
+ID_SYNC_TITLE = re.compile(r"V[0-9]+(\.[0-9]+)*-TEMPLATE-SYNC:")
 FILES_LINE =re.compile(r"^\s*Files touched:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 PATH_RE = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_./-]*")
 
@@ -69,7 +70,9 @@ def is_sync_pr(title, files):
     """Normal sync PR (title + config change) or a part of a split sync (title only, synced_sha stays)."""
     if PART_TITLE.match(title.strip()):
         return True
-    return title.strip().lower().startswith(SYNC_TITLE.lower()) and CONFIG.as_posix() in files
+    if CONFIG.as_posix() not in files:
+        return False
+    return title.strip().lower().startswith(SYNC_TITLE.lower()) or bool(ID_SYNC_TITLE.match(title.strip()))
 
 
 def pr_errors(cfg, project, title, files):

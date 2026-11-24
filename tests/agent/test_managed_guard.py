@@ -63,6 +63,12 @@ def test_sync_pr_is_exempt_only_with_title_and_config_change():
     assert mod.pr_errors(CFG, PROJ, "Fix", files)
 
 
+def test_task_id_sync_title_is_exempt_only_with_config_change():
+    title = "V0.0-TEMPLATE-SYNC: record the synced template version"
+    assert mod.pr_errors(CFG, PROJ, title, ["tools/a.py", ".agents/template.json"]) == []
+    assert mod.pr_errors(CFG, PROJ, title, ["tools/a.py"])
+
+
 def test_split_sync_parts_are_exempt_without_config_change():
     files = ["tools/a.py", "AGENTS.md"]
     for title in ["Template sync abc1234 part 1", "Template sync abc1234 part 1: reviewer pipeline",

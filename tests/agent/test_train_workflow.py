@@ -20,17 +20,26 @@ def _on_block() -> str:
     return code.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
 
 
-def test_triggers_are_push_to_main_schedule_and_dispatch_only():
+def test_triggers_are_push_to_main_a_finished_review_schedule_and_dispatch_only():
     block = _on_block()
     top = re.findall(r"^  (\w+):", block, flags=re.MULTILINE)
-    assert top == ["push", "schedule", "workflow_dispatch"]
+    assert top == ["push", "workflow_run", "schedule", "workflow_dispatch"]
     assert "branches: [main]" in block
     assert "cron:" in block
+    assert "workflows: [agent-review, agent-security-review]" in block and "types: [completed]" in block
+
+
+def test_a_finished_review_starts_the_train_only_when_it_succeeded_and_gives_it_no_pr_data():
+    """A PR approved while behind main waited for the next half hour; the train now runs when a review run ends.
+    Only the event name and the conclusion are read: no branch, SHA or PR of the review run reaches a step."""
+    code = _code()
+    assert "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'" in code
+    assert code.count("github.event.workflow_run") == 1
 
 
 def test_no_pull_request_triggers_anywhere():
     code = _code()
-    for bad in ("pull_request", "workflow_run", "issue_comment"):
+    for bad in ("pull_request", "issue_comment"):
         assert bad not in code, bad
 
 
@@ -67,7 +76,7 @@ def test_runs_are_serialised_without_cancelling():
 
 def test_kill_switch_and_script_call():
     code = _code()
-    assert "if: (vars.TRAIN || 'on') != 'off'" in code
+    assert "(vars.TRAIN || 'on') != 'off' &&" in code
     assert "run: python3 tools/train.py" in code
 
 

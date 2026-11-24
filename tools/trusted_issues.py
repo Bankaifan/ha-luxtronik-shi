@@ -50,7 +50,7 @@ def is_sync_issue(issue, author_bot):
 
 
 GUARD_TITLES = ("Overdue scheduled run: ", "Denied command in ", "Failing workflow: ",
-                "Unstarted run: ", "Canary: ")
+                "Unstarted run: ", "Canary: ", "Repeated failure: ")
 
 
 def is_guard_issue(issue, author_bot, key):

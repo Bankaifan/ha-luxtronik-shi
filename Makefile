@@ -28,6 +28,14 @@ check:
 	@$(MAKE) --no-print-directory test-evidence
 	@$(MAKE) --no-print-directory project-check
 
+# The checks that read the PR title or body. validate.yml runs only these when a PR's text was edited and its head
+# commit already has a green full run (the code did not change).
+.PHONY: check-text
+check-text:
+	python3 tools/check/check_pr_form.py
+	python3 tools/managed_guard.py check
+	@$(MAKE) --no-print-directory test-evidence
+
 # Empty template default: project.mk adds recipes with `project-check::` (double-colon rules run in order).
 .PHONY: project-check
 project-check::
