@@ -51,12 +51,8 @@
       "why": "the temporary test repo gets a pytest.ini with asyncio_mode = auto: the Home Assistant pytest plugin (latest) errors on sync tests without it"
     },
     {
-      "path": "tools/run_stats.py",
-      "why": "weekly failure classes name the missing repo variable instead of the echoed script line and label agent-tool internal errors (#125); to be proposed upstream in agent-template"
-    },
-    {
-      "path": "tests/agent/test_run_stats.py",
-      "why": "covers the failure class text changes of tools/run_stats.py (#125)"
+      "path": "tests/agent/test_validate_workflow.py",
+      "why": "reads the project's own validate.yml (override above), which has no scope job; the template test expects one"
     },
     {
       "path": "Makefile",
