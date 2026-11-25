@@ -173,9 +173,12 @@ jobs:
           echo "dir=.template" >> "$GITHUB_OUTPUT"
           echo "Template $tpl at $sha in .template/"
       - id: started
-        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          # Nothing from an earlier run may be read as this run's note; the folder is kept out of git.
+          rm -rf .agent-out && mkdir .agent-out && echo ".agent-out/" >> .git/info/exclude
       - id: claude
-        uses: anthropics/claude-code-action@c84e279f859e2591391e95bd309286eb111c345f # v1.0.284
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -204,6 +207,9 @@ jobs:
             output lands in a file you may not read.
             Use Read/Glob/Grep to read files, not shell reads. If a needed action is denied,
             comment on the issue/PR saying which one instead of stopping silently.
+            Nothing to build (the slip is already done on main, or the cause is not in this repo): open no PR and write
+            one line saying why to .agent-out/nothing-to-build.md (Write tool; plain ASCII, at most 3 lines). Start it
+            with `complete:` only if the whole issue is done. A script reads that file; never end without a PR or that file.
             Template sync issue: the template files at the issue's `Template-Sync` SHA are in .template/
             (${{ steps.template.outputs.dir || 'not present: this is no sync issue' }}). Read them from there, never commit .template/.
             For each conflicted file the issue lists, its three versions are .template/<path>.ours (downstream),
@@ -266,6 +272,15 @@ jobs:
             echo "branch=$(jq -r .headRefName <<<"$pr")"
             echo "sha=$(jq -r .headRefOid <<<"$pr")"
           } >> "$GITHUB_OUTPUT"
+      # The developer sometimes invents its own name for the PR; no agent may edit a title, and the form check then
+      # fails until the rounds run out. A script sets the task ID of the issue (tools/pr_title.py, from main).
+      - name: Give the PR the task ID of its issue (no model)
+        if: ${{ !cancelled() && steps.pr.outputs.num != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.num }}
+        run: python3 "$RUNNER_TEMP/guard/tools/pr_title.py" fix "$PR" || echo "title not checked"
       # The CI trigger needs `actions: write`, which the model token no longer has: this short-lived token goes to that step only.
       - id: ci-app
         if: ${{ !cancelled() && steps.pr.outputs.num != '' }}
@@ -290,9 +305,23 @@ jobs:
           done
           gh workflow run validate.yml --ref "$BRANCH"
           echo "triggered=true" >> "$GITHUB_OUTPUT"
+      # A run that says it had nothing to build is not silent: one comment with the reason, agent:dev removed, the
+      # issue closed when it is complete and a merged agent PR names it (tools/no_build.py, from main). Exit 1 (no
+      # valid note) leaves `settled` unset and the guard below decides as before.
+      - name: Settle a run that had nothing to build (no model)
+        id: nobuild
+        if: ${{ always() && steps.pr.outputs.num == '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if python3 "$RUNNER_TEMP/guard/tools/no_build.py" settle "$ISSUE" .agent-out/nothing-to-build.md; then
+            echo "settled=true" >> "$GITHUB_OUTPUT"
+          fi
       # Never end silently: no PR for the branch means a retry, then the issue is parked (label and one comment).
       - name: Escalate a run that produced no PR
-        if: ${{ always() }}
+        if: ${{ always() && steps.nobuild.outputs.settled != 'true' }}
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}

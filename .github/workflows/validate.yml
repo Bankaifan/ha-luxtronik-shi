@@ -19,6 +19,9 @@ permissions:
   pull-requests: read
 jobs:
   validate:
+    needs: scope
+    # `scope` is skipped for every event but a text edit; a skipped or failed `scope` means the full run.
+    if: ${{ !cancelled() }}
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     # A run cut off by this limit is `cancelled`: no review starts (it needs success) and no fix round (it needs
     # failure), so the PR just sits. A project whose `make check` takes longer sets VALIDATE_TIMEOUT (minutes).
@@ -50,7 +53,20 @@ jobs:
             git apply --index "$p" || { echo "::error::$p does not apply"; exit 1; }
             echo "applied $p for the checks"
           done
+      # Title or body edited and the head commit already has a green run: only the checks that read that text.
+      - name: Text checks only (PR form, managed guard, test evidence)
+        if: needs.scope.outputs.text_only == 'true'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: make check-text
       - name: Checks (ruff, pytest, actionlint, zizmor, repo checks)
+        if: needs.scope.outputs.text_only != 'true'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -64,6 +80,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: make check
+
+  # A PR whose title or body was edited (scripts do that: attribution strip, task ID in the title) started the whole
+  # suite again although the code did not change. When the head commit already has a green validate run, `validate`
+  # runs only the checks that read the PR text. Any other event, a changed base branch, no green run yet or an error
+  # here: the full run. No checkout and no PR code in this job; only its token may read runs, the token of the job that
+  # runs PR code may not.
+  scope:
+    if: github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      text_only: ${{ steps.green.outputs.text_only }}
+    steps:
+      - id: green
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          n=$(gh api "repos/$GH_REPO/actions/workflows/validate.yml/runs?head_sha=$SHA&status=success&per_page=1" --jq .total_count || echo 0)
+          if [ "${n:-0}" -gt 0 ]; then echo "text_only=true" >> "$GITHUB_OUTPUT"; fi
+          echo "green validate runs on $SHA: ${n:-0}"
 
   hassfest:
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}

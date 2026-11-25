@@ -1,11 +1,16 @@
 name: train
 # No model: tools/train.py rebases the oldest approved agent PR that is BEHIND main and starts the conflict fix round
-# (design docs/design/0003-merge-train.md, 4.3). Runs right after every push to main, every 30 min as a fallback, and by hand.
+# (design docs/design/0003-merge-train.md, 4.3). Runs right after every push to main, right after a review run ends
+# (a PR that was just approved while behind main is rebased at once, not at the next half hour), every 30 min as a
+# fallback, and by hand.
 # Two or more ready PRs land as one batch PR on agent/batch (decision 0018; TRAIN_BATCH=off keeps the serial train).
 # Repo variable TRAIN=off disables it. Checkout is main only; PR data is read through gh as data, never executed.
 on:
   push:
     branches: [main]
+  workflow_run:  # zizmor: ignore[dangerous-triggers] only the fact that a review run ended is used; the checkout is main, PR code is never checked out or run
+    workflows: [agent-review, agent-security-review]
+    types: [completed]
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
@@ -16,7 +21,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   train:
-    if: (vars.TRAIN || 'on') != 'off'
+    if: >-
+      (vars.TRAIN || 'on') != 'off' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:

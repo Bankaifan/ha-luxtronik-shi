@@ -8,7 +8,9 @@ run-name: "${{ github.event_name == 'pull_request_review' && github.event.pull_r
 # is no finding, so it starts a fix without reading or bumping the round labels.
 # A fix run that produces nothing is repeated once per head (label silent:<sha7>, dispatch with why=retry) before the
 # silent-run guard acts.
-# Rounds: labels review:1, review:2 -> fix; review:3 -> restart the issue once (restart:1), else parked.
+# Rounds (labels review:N, tools/review_rounds.py): a fix follows while rounds resolve findings. The same finding still
+# open after two fix rounds in a row, a third red head in a row or 8 rounds -> label review:stop, the issue restarts
+# once (restart:1), else parked.
 # A red CI bumps the label first; the first PR-form or VERSION/CHANGELOG failure of a PR gets an uncounted fix run (formfix).
 on:
   pull_request_review:
@@ -97,8 +99,12 @@ jobs:
           limit() {
             # First limit of an issue: restart the task once (restart:1) and close this PR. Second: the PR is parked,
             # see tools/restart.py. Never silent: if the hand-over fails, the PR is still parked.
+            # A failing review:stop never skips the hand-over: it fails the step afterwards.
+            stop_ok=true
+            python3 tools/review_rounds.py stop "$pr" || stop_ok=false
             python3 tools/restart.py limit "$pr" || guard park pr "$pr" "review limit reached, the hand-over failed"
             echo "fix=false" >> "$GITHUB_OUTPUT"
+            if [ "$stop_ok" != true ]; then echo "::error::label review:stop not set on PR $pr"; exit 1; fi
           }
           if [ "$EVENT" = pull_request_review ]; then
             pr="$REVIEW_PR"; branch="$REVIEW_BRANCH"
@@ -165,22 +171,25 @@ jobs:
                   echo "fix=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
               esac
             fi
-            # Any other red CI is a round: bump the counter like the reviewer does.
-            case "$labels" in
-              *,review:3,*) limit; exit 0 ;;
-              *,review:2,*) guard label pr "$pr" review:3; limit; exit 0 ;;
-              *,review:1,*) guard label pr "$pr" review:2 ;;
-              *) guard label pr "$pr" review:1 ;;
+            # Any other red CI is a round: the script bumps the counter like the reviewer does, unless the limit is
+            # reached or this is the third red head in a row; a head counts once (marker red:<sha7>). Assigned first, so a failing script fails the step.
+            verdict=$(python3 tools/review_rounds.py red "$pr" "$RUN_SHA")
+            echo "Red CI: $verdict"
+            case "$verdict" in
+              fix) ;;
+              *) limit; exit 0 ;;
             esac
             echo "fix=true" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT" = workflow_dispatch ]; then
             echo "fix=true" >> "$GITHUB_OUTPUT"  # conflict with main: no round
           else
-            # The reviewer already bumped the counter before reviewing.
-            case "$labels" in
-              *,review:3,*) limit ;;
-              *,review:1,*|*,review:2,*) echo "fix=true" >> "$GITHUB_OUTPUT" ;;
-              *) echo "fix=false" >> "$GITHUB_OUTPUT" ;;
+            # The reviewer already bumped the counter before reviewing. Assigned first, so a failing script fails the step.
+            verdict=$(python3 tools/review_rounds.py verdict "$pr")
+            echo "Review: $verdict"
+            case "$verdict" in
+              fix) echo "fix=true" >> "$GITHUB_OUTPUT" ;;
+              none) echo "fix=false" >> "$GITHUB_OUTPUT" ;;
+              *) limit ;;
             esac
           fi
   fix:
@@ -278,7 +287,7 @@ jobs:
           gh run view "$RUN_ID" --log-failed | tail -n 400 > ci-failure.log || echo "log not available" > ci-failure.log
       - id: claude
         if: steps.open.outputs.open == 'true'
-        uses: anthropics/claude-code-action@c84e279f859e2591391e95bd309286eb111c345f # v1.0.284
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         with:
@@ -306,8 +315,9 @@ jobs:
               origin/main first, then reproduce with `make check`.
             Fix exactly what is raised in new small commits (subject `V<VERSION>-<NAME>: <change>` like the others on the
             branch; never squash), run `make check` and the tests, run `python3 tools/commit_names.py <NAME>` once (it sets the
-            subject prefix on every commit, also on wrong older ones) and `git push --force-with-lease`. If the same finding
-            came back, try a different approach than the last commit. A denied tool call is no reason to stop.
+            subject prefix on every commit, also on wrong older ones) and `git push --force-with-lease`. The review lists
+            its findings as `changes[F<n>]`: fix every one; if an id was open before, use a different approach than the
+            last commit. A denied tool call is no reason to stop.
             No tool or AI attribution in commits, PR bodies or comments (no "Generated with", session link, Co-Authored-By, Claude-Session).
             The tools for `make check` (and the test dependencies) are already installed: run plain `make check`,
             never `pip install`. Use one simple command per Bash call (a pipe may end in head, tail, grep, sort, wc or jq); no `&&`, `;`, `$(...)` or redirects
@@ -461,4 +471,11 @@ jobs:
         run: |
           # Rule: the guard comes from main, this call from the PR branch. `silent` ignores extra trailing args and a
           # usage error escalates ("guard error"); only ever append args, never reorder or remove them.
+          # A PR that was merged or closed while this run worked has nothing left to fix: not a silent run
+          # (roblox_energy #387: merged a minute before the repeated run ended, the guard still opened a stuck issue).
+          # An unreadable state is not "closed": the guard then runs as before.
+          state="$(gh pr view "$PR" --json state --jq .state || true)"
+          if [ "$state" = MERGED ] || [ "$state" = CLOSED ]; then
+            echo "PR #$PR is $state: nothing to escalate"; exit 0
+          fi
           python3 "$RUNNER_TEMP/guard/tools/agent_guard.py" silent fix "$PR" "$HEAD_BEFORE" "$RUNNER_TEMP/body-before.txt"

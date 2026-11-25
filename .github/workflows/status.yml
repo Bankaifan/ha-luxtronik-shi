@@ -59,6 +59,7 @@ jobs:
           AUTHOR_BOT: ${{ vars.AUTHOR_BOT }}
           APPROVER_BOT: ${{ vars.APPROVER_BOT }}  # reads the security verdict comment for the head
           FAILURE_WATCH: ${{ vars.FAILURE_WATCH }}  # "off" skips the failure watch
+          REPORT_ISSUES: ${{ vars.REPORT_ISSUES }}  # "off": no status issue, the text goes to the run summary
           GUARD_KEY: ${{ secrets.GUARD_KEY }}  # signs the overdue-run and failure issues; script step only, never a model step
           FLOW_CSV: ${{ runner.temp }}/flow.csv  # one row per merged PR (tools/flow.py), uploaded below, never committed
         run: python3 tools/status.py
