@@ -212,6 +212,61 @@ def test_conflict_dispatches_one_fix_per_head_and_counts_no_round():
     assert st.conflict_prs([again]) == []
 
 
+class SilentGh:
+    def __init__(self, workflow_at, parked_at):
+        self.workflow_at, self.parked_at, self.calls = workflow_at, parked_at, []
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        if args[0] == "api" and "commits?path=" in args[-1]:
+            return json.dumps([{"commit": {"committer": {"date": self.workflow_at}}}])
+        if args[0] == "api" and args[-1].endswith("/events"):
+            times = self.parked_at if isinstance(self.parked_at, list) else [self.parked_at]
+            return json.dumps([[{"event": "labeled", "label": {"name": "parked"}, "created_at": t} for t in times]])
+        return ""
+
+    def changed(self):
+        return [c for c in self.calls if c[0] in ("pr", "workflow")]
+
+
+def silent_pr(labels=("parked", "silent:sha1"), **kw):
+    return pr(1, labels=labels, **kw)
+
+
+def test_silent_parked_pr_is_unparked_when_the_review_workflow_changed():
+    run = SilentGh("2026-11-25T09:30:51Z", "2026-11-25T08:35:59Z")
+    p = silent_pr(labels=("parked", "silent:sha1", "review:2"))
+    out = st.unpark_silent([p], "o/r", run)
+    assert len(out) == 1
+    assert ("pr", "edit", "1", "--remove-label", "parked", "--remove-label", "silent:sha1") in run.calls
+    assert ("workflow", "run", "validate.yml", "--ref", "agent/1-x") in run.calls
+    assert [lab["name"] for lab in p["labels"]] == ["review:2"]
+
+
+@pytest.mark.parametrize("case", ["no newer commit", "second silent park", "equal timestamps", "other reason",
+                                  "head moved", "not parked", "foreign branch"])
+def test_silent_unpark_leaves_everything_else_alone(case):
+    workflow_at, parked_at = "2026-11-25T09:30:51Z", "2026-11-25T08:35:59Z"
+    p = silent_pr()
+    if case == "no newer commit":
+        parked_at = "2026-11-25T10:00:00Z"
+    if case == "second silent park":  # one park before the workflow commit, a newer one after it: max() decides
+        parked_at = ["2026-11-25T08:35:59Z", "2026-11-25T10:00:00Z"]
+    if case == "equal timestamps":
+        parked_at = workflow_at
+    if case == "other reason":
+        p = silent_pr(labels=("parked", "review:stop"))
+    if case == "head moved":
+        p = silent_pr(labels=("parked", "silent:old1234"))
+    if case == "not parked":
+        p = silent_pr(labels=("silent:sha1",))
+    if case == "foreign branch":
+        p = silent_pr(branch="template-sync/1.2")
+    run = SilentGh(workflow_at, parked_at)
+    assert st.unpark_silent([p], "o/r", run) == []
+    assert run.changed() == []
+
+
 @pytest.mark.parametrize("limit", [["review:2", "review:stop"], ["review:7", "review:8"]])
 def test_limit_prs_picks_only_unhandled_prs_at_the_round_limit(limit):
     stuck = pr(1, labels=limit)

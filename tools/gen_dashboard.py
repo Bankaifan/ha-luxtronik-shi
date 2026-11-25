@@ -79,9 +79,11 @@ def _status_bits() -> tuple[tuple, frozenset]:
     for node in tree.body:
         if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
             continue
+        if node.value is None:
+            continue
         if node.target.id == "STATUS_BITS":
             bits = ast.literal_eval(node.value)
-        elif node.target.id == "_DISABLED_BY_DEFAULT":
+        elif node.target.id == "_DISABLED_BY_DEFAULT" and isinstance(node.value, ast.Call):
             disabled = frozenset(ast.literal_eval(node.value.args[0]))
     return bits, disabled
 

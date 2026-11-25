@@ -30,6 +30,14 @@ def test_a_refused_batch_is_never_reviewed_by_the_model():
     assert after.count("&& env.BRANCH != 'agent/batch'\n") == after.count("\n        if: ") - 1 == 4
 
 
+def test_specialists_run_in_the_foreground_and_the_execution_file_is_uploaded():
+    claude = TEXT[step_index("id: claude"):]
+    assert "`run_in_background: false`" in claude
+    assert "Wait for every result" in claude
+    upload = TEXT[step_index("Upload the execution file"):step_index("Give the round back")]
+    assert "steps.claude.outputs.execution_file" in upload and "retention-days: 3" in upload
+
+
 def test_the_batch_pr_counts_no_review_round_and_is_never_parked():
     block = TEXT[step_index("id: round"):step_index("id: reapprove")]
     gate = block.index('if [ "$BRANCH" = agent/batch ] && guard same "$author" "$AUTHOR_BOT"; then')

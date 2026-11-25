@@ -52,7 +52,7 @@ def parse(text: str):
         return None
     major, minor, patch, pre = int(m[1]), int(m[2]), int(m[3] or 0), m[4]
     if pre is None:
-        rank = (1,)
+        rank: tuple = (1,)
     else:
         rank = (0, *((0, int(p)) if p.isdigit() else (1, p) for p in re.findall(r"\d+|[A-Za-z]+", pre)))
     return (major, minor, patch, rank)
@@ -139,8 +139,8 @@ def main(argv=()) -> int:
     except (OSError, subprocess.CalledProcessError) as e:
         print(f"check_version: cannot run: {e}", file=sys.stderr)
         return 2
-    for e in errs:
-        print(f"check_version: {e}")
+    for err in errs:
+        print(f"check_version: {err}")
     if errs:
         return 1
     print(f"check_version: ok ({version})")

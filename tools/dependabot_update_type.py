@@ -40,7 +40,7 @@ def classify_title(title: str) -> str:
         return "major"
     steps = [s for s in map(_step, old, new) if s]
     # Identical numbers (pre-release or tag change): do not guess.
-    return max(steps, key=ORDER.get) if steps else "major"
+    return max(steps, key=lambda s: ORDER[s]) if steps else "major"
 
 
 def classify_metadata(raw: str) -> str:
@@ -52,7 +52,7 @@ def classify_metadata(raw: str) -> str:
     if not isinstance(deps, list) or not deps:
         return "major"
     kinds = [_META.get(d.get("updateType", ""), "major") if isinstance(d, dict) else "major" for d in deps]
-    return max(kinds, key=ORDER.get)
+    return max(kinds, key=lambda s: ORDER[s])
 
 
 def classify(title: str, metadata: str = "") -> str:

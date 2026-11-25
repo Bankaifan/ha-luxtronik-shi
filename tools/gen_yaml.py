@@ -7,6 +7,7 @@ For people who deliberately prefer YAML over the integration (recommended: use t
 import json
 import pathlib
 import sys
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "custom_components" / "luxtronik_shi"))
@@ -150,7 +151,7 @@ def template() -> str:
         if reg.platform not in ("number", "select") or not reg.enabled_default:
             continue
         sensor = sensor_id(reg)
-        write = [
+        write: list[dict[str, Any]] = [
             {
                 "action": "modbus.write_register",
                 "data": {"hub": HUB, "slave": SLAVE, "address": reg.address, "value": None},

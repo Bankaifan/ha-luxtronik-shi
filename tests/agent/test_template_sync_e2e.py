@@ -208,6 +208,7 @@ def test_acceptance_3_fresh_downstream_passes_make_check_and_needs_the_marker(tm
         tar.extractall(dst)
     (dst / "VERSION").unlink()
     (dst / ".agents" / "managed.json").unlink()
+    (dst / "docs" / "coverage.json").unlink(missing_ok=True)  # the template's own coverage floor: a downstream has none
     # project-owned extension points (design 0016): a downstream project.mk runs its own recipes (e.g. Luau checks that
     # need its tests/), so the scratch copy is the template's files only
     (dst / "project.mk").unlink(missing_ok=True)

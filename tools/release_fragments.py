@@ -117,7 +117,7 @@ def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
     root = pathlib.Path(args[0]) if args else pathlib.Path(".")
     try:
-        notes = []
+        notes: list[str] = []
         done = release(root, datetime.datetime.now(datetime.UTC).date().isoformat(), notes)
     except (Refused, OSError) as e:
         print(f"release_fragments: refused: {e}")

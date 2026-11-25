@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the pinned tools that `make check` and CI use. Used by validate, agent-dev and agent-fix.
-# ruff and zizmor are pinned in requirements-lint.txt (Dependabot's pip ecosystem reads it). actionlint is pinned here
+# ruff, mypy and zizmor are pinned in requirements-lint.txt (Dependabot's pip ecosystem reads it). actionlint is pinned here
 # together with its SHA-256; bump both (the checksum is in the release's actionlint_<version>_checksums.txt).
 #   install_tools.sh        everything: ruff, zizmor, pytest-timeout, requirements_test.txt, actionlint
 #   install_tools.sh lint   only the lint tools (ruff, zizmor, actionlint; no test dependencies)
@@ -12,7 +12,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [ "${1:-}" = lint ]; then
   pip install -r "$root/requirements-lint.txt"
 else
-  pip install -r "$root/requirements-lint.txt" pytest-timeout
+  pip install -r "$root/requirements-lint.txt" pytest-timeout "coverage==7.6.10"
   for f in requirements.txt requirements_test.txt; do
     if [ -f "$root/$f" ]; then pip install -r "$root/$f"; fi
   done

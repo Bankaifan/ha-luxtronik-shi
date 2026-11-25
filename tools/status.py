@@ -455,6 +455,38 @@ def fresh_start(kind, item, run=gh):
     add_labels("issue", issue["number"], ["agent:dev"], run)
 
 
+REVIEW_WORKFLOW = ".github/workflows/agent-review.yml"
+
+
+def unpark_silent(prs, repo, run=gh):
+    """An agent PR parked as silent (label silent:<sha7> of its current head) gets `parked` and that label removed and
+    validate dispatched once agent-review.yml on main has a commit newer than the newest `parked` event. A second
+    silent park on the same head has a newer event, so the normal cool-down applies. Other labels stay."""
+    out, workflow_at = [], None
+    for p in prs:
+        mark = f"silent:{(p.get('headRefOid') or '')[:7]}"
+        if PARKED not in names(p) or mark not in names(p) or p.get("isCrossRepository") or not is_agent_pr(p):
+            continue
+        try:
+            if workflow_at is None:
+                commits = jlist(run, "api", f"repos/{repo}/commits?path={REVIEW_WORKFLOW}&sha=main&per_page=1")
+                workflow_at = commits[0]["commit"]["committer"]["date"] if commits else ""
+            if not workflow_at:
+                continue
+            pages = jlist(run, "api", "--paginate", "--slurp", f"repos/{repo}/issues/{p['number']}/events")
+            since = max(e["created_at"] for page in pages for e in page
+                        if e.get("event") == "labeled" and (e.get("label") or {}).get("name") == PARKED)
+            if parse_ts(workflow_at) <= parse_ts(since):
+                continue
+            run("pr", "edit", str(p["number"]), "--remove-label", PARKED, "--remove-label", mark)
+            p["labels"] = [lab for lab in p["labels"] if lab["name"] not in (PARKED, mark)]
+            run("workflow", "run", "validate.yml", "--ref", p["headRefName"])
+            out.append(f"un-parked pr #{p['number']}: silent review, {REVIEW_WORKFLOW} changed on main")
+        except (subprocess.CalledProcessError, OSError, ValueError, KeyError, IndexError, TypeError) as e:
+            out.append(f"silent un-park of pr #{p['number']} failed ({type(e).__name__})")
+    return out
+
+
 def un_park(prs, repo, bots, now, run=gh):
     """Fresh start for every open issue and agent PR whose newest `parked` label event is older than its cool-down;
     a parked PR of this repo on another branch (template-sync/x.y) only loses its labels, nothing is closed.
@@ -702,6 +734,7 @@ def run_status(env, now, run=gh):
     for p in limit_prs(prs, runs, now, env.get("APPROVER_BOT", "")):
         actions.append(f"round limit PR #{p['number']}: {handle_stuck_limit(p, run)}")
     actions += release_settled(prs, env.get("APPROVER_BOT", ""), owner, run)
+    actions += safe(unpark_silent, prs, repo, run) or []
     actions += safe(un_park, prs, repo, [b for b in (bot, env.get("APPROVER_BOT", "")) if b], now, run) or []
     if not any(r["workflowName"] == "agent-fix" for r in runs):  # one fix job at a time
         for p in conflict_prs(prs)[:1]:
