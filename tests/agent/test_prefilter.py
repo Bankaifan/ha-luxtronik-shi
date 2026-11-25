@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import pathlib
+import subprocess
 
 import pytest
 
@@ -362,3 +363,61 @@ def test_only_prs_the_agents_opened_hold_a_slot_of_max_prs(monkeypatch):
     monkeypatch.setattr(mod, "gh", lambda *a: json.dumps(prs))
     assert mod.pipeline_prs("Bankaifan") == 2  # 1 and 8
     assert mod.pipeline_prs("someone-else") == 3  # the owner's own PR counts only when he is not the owner
+
+
+def failing_gh(*args):
+    raise subprocess.CalledProcessError(1, ["gh", *args], stderr="HTTP 502: Bad Gateway")
+
+
+def test_a_failed_read_is_no_work_not_a_crash(monkeypatch, tmp_path, capsys):
+    """#616: `Count work` failed the run when a gh read failed. The step now writes work=false and the reason."""
+    fresh = load_with_env(monkeypatch, MAX_DEV="4")
+    out = tmp_path / "out"
+    monkeypatch.setattr(fresh, "gh", failing_gh)
+    monkeypatch.setenv("TRUSTED", "[]")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.delenv("EVENT", raising=False)
+    assert fresh.run("orchestrator") == 0
+    lines = dict(line.split("=", 1) for line in out.read_text().splitlines())
+    assert (lines["work"], lines["reason"]) == ("false", "read-error")
+    assert "HTTP 502" in capsys.readouterr().err
+
+
+def test_a_non_json_read_is_no_work_not_a_crash(monkeypatch, tmp_path, capsys):
+    """#616: gh returning something that is not JSON ends the step with work=false, startable=false, reason=read-error."""
+    fresh = load_with_env(monkeypatch, MAX_DEV="4")
+    out = tmp_path / "out"
+    monkeypatch.setattr(fresh, "gh", lambda *args: "<html>502 Bad Gateway</html>")
+    monkeypatch.setenv("TRUSTED", "[]")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.delenv("EVENT", raising=False)
+    assert fresh.run("orchestrator") == 0
+    lines = dict(line.split("=", 1) for line in out.read_text().splitlines())
+    assert (lines["work"], lines["startable"], lines["reason"]) == ("false", "false", "read-error")
+    assert "unexpected output" in capsys.readouterr().err
+
+
+def test_a_failed_event_lookup_is_no_work(monkeypatch, tmp_path):
+    """An issue_comment whose issue lookup fails (e.g. a payload the gh CLI cannot resolve) ends with work=false."""
+    fresh = load_with_env(monkeypatch, MAX_DEV="4")
+    out = tmp_path / "out"
+
+    def gh(*args):
+        if args[:2] == ("issue", "view"):
+            return failing_gh(*args)
+        if args[:2] == ("issue", "list"):
+            return json.dumps([])
+        return "[]"
+
+    monkeypatch.setattr(fresh, "gh", gh)
+    monkeypatch.setattr(fresh, "waiting_for_owner", lambda owner, approver: (set(), 0))
+    monkeypatch.setattr(fresh, "handover_state", lambda: (0, 0))
+    monkeypatch.setenv("TRUSTED", json.dumps([item(20)]))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.setenv("EVENT", "issue_comment")
+    monkeypatch.setenv("EVENT_ACTION", "created")
+    monkeypatch.setenv("EVENT_NUMBER", "616")
+    monkeypatch.setenv("EVENT_SENDER", "Bankaifan")
+    assert fresh.run("orchestrator") == 0
+    assert "work=false" in out.read_text().splitlines()
+    assert "reason=read-error" in out.read_text().splitlines()

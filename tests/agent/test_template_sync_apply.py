@@ -211,3 +211,14 @@ def test_cli_materialize_excludes_the_out_dir_once_across_runs(tmp_path, monkeyp
     assert (root / ".template" / "tools" / "over_conflict.py.theirs").read_text() == "theirs\n"
     assert (root / ".git" / "info" / "exclude").read_text().splitlines().count("/.template/") == 1
     assert _git(root, "status", "--porcelain") == ""  # the three versions never show up as untracked files
+
+
+def test_apply_writes_the_files_of_a_prefix_that_is_new_in_this_sync(tmp_path):
+    root = _project(tmp_path)
+    compare = {"files": [*_without("tools/over_conflict.py")["files"], {"filename": "mypy.ini", "status": "added"}]}
+    extra = {(MAIN, ".agents/managed.json"): '{"managed": ["tools/", "mypy.ini"]}', (MAIN, "mypy.ini"): "[mypy]\n"}
+    result = ts.apply_sync(root, _cfg(root), compare, MAIN, "1.1", _reader(extra), issue=477)
+    assert result["managed_added"] == ["mypy.ini"] and "mypy.ini" in result["written"]
+    assert (root / "mypy.ini").read_text() == "[mypy]\n"
+    assert "mypy.ini" in _committed(root)
+    assert json.loads((root / ".agents" / "template.json").read_text())["managed"] == ["tools/", "AGENTS.md", "mypy.ini"]

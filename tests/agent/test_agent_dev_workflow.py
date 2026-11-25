@@ -67,3 +67,12 @@ def test_a_run_that_says_it_had_nothing_to_build_is_settled_before_the_guard():
     assert "GUARD_KEY" not in step
     escalate = text[text.index("Escalate a run that produced no PR"):]
     assert "steps.nobuild.outputs.settled != 'true'" in escalate.split("env:")[0]
+
+
+def test_only_a_template_sync_issue_gets_the_wider_turn_cap():
+    # a sync issue ports files one by one and ran 110 to 126 turns: 60 marked every such run red after the work was done
+    assert "--max-turns ${{ steps.template.outputs.dir && '150' || '60' }}" in WORKFLOW
+    assert WORKFLOW.count("--max-turns") == 1
+    assert WORKFLOW.count('echo "dir=.template" >> "$GITHUB_OUTPUT"') == 1  # the only writer of that output
+    assert WORKFLOW.index("id: template") < WORKFLOW.index("--max-turns")
+

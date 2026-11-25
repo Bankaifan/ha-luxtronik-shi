@@ -1,10 +1,12 @@
 """Failure watch module (design 0008, sections 4.1-4.5), driven by a stateful fake gh."""
 import datetime
 import json
+import pathlib
 from urllib.parse import parse_qs, urlparse
 
 import failure_watch as fw
 import guard_mark
+import pytest
 
 KEY = "k" * 32
 NOW = datetime.datetime(2026, 11, 10, 12, 0, tzinfo=datetime.UTC)
@@ -629,3 +631,50 @@ def test_failure_with_a_job_by_a_foreign_bot_is_still_reported():
     failing(f, 1)
     f.runs[0]["triggering_actor"] = {"login": "github-advanced-security[bot]"}
     assert tick(f)[0] == ["opened failure issue #1"]
+
+
+SYNC_STEP = "Checks on the result (no token in this step)"
+
+
+def sync_run(f, rid, step=SYNC_STEP, report="success", extra=()):
+    f.runs.append(mkrun(rid, "template-sync.yml"))
+    jobs = [{"name": "build", "conclusion": "failure", "steps": [{"name": step, "conclusion": "failure"}]},
+            {"name": "publish", "conclusion": "skipped", "steps": []}, *extra]
+    if report:
+        jobs.append({"name": "report", "conclusion": report, "steps": [{"name": "Report", "conclusion": report}]})
+    f.jobs[rid] = {"jobs": jobs}
+
+
+def test_template_sync_with_red_checks_and_a_sync_issue_opens_no_failure_issue():
+    f = Fake()
+    sync_run(f, 1)
+    actions, since = tick(f)
+    assert f.creates() == []
+    assert actions == ["run 1: template sync checks red, handed to the developer by its sync issue: no failure issue"]
+    assert since == datetime.datetime.fromisoformat("2026-11-10T11:30:00+00:00")
+
+
+def test_template_sync_failure_is_reported_when_nothing_took_it_over():
+    for kwargs in ({"report": "failure"}, {"report": None}, {"report": "skipped"},
+                   {"step": "Apply the template changes"},
+                   {"extra": ({"name": "other", "conclusion": "failure", "steps": []},)}):
+        f = Fake()
+        sync_run(f, 1, **kwargs)
+        tick(f)
+        assert len(f.creates()) == 1, kwargs
+
+
+def test_red_checks_step_of_another_workflow_is_still_reported():
+    f = Fake()
+    failing(f, 1, wf="ci.yml", step=SYNC_STEP)
+    f.jobs[1]["jobs"].append({"name": "report", "conclusion": "success", "steps": []})
+    tick(f)
+    assert len(f.creates()) == 1
+
+
+def test_handed_over_names_match_the_template_sync_workflow():
+    yaml = pytest.importorskip("yaml")  # installed by tools/ci/install_tools.sh
+    wf, job, step, taker = fw.HANDED_OVER
+    jobs = yaml.safe_load((pathlib.Path(__file__).parents[2] / ".github/workflows" / wf).read_text())["jobs"]
+    assert taker in jobs and "needs.build.result == 'failure'" in jobs[taker]["if"]
+    assert [s["name"] for s in jobs[job]["steps"] if s.get("name", "").startswith(step)] == [SYNC_STEP]
