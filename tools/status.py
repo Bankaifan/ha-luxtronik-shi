@@ -461,7 +461,8 @@ REVIEW_WORKFLOW = ".github/workflows/agent-review.yml"
 def unpark_silent(prs, repo, run=gh):
     """An agent PR parked as silent (label silent:<sha7> of its current head) gets `parked` and that label removed and
     validate dispatched once agent-review.yml on main has a commit newer than the newest `parked` event. A second
-    silent park on the same head has a newer event, so the normal cool-down applies. Other labels stay."""
+    silent park on the same head has a newer event, so the normal cool-down applies. Other labels stay. Validate is
+    dispatched before the labels go: if either call fails the PR stays parked and silent and the next tick tries again."""
     out, workflow_at = [], None
     for p in prs:
         mark = f"silent:{(p.get('headRefOid') or '')[:7]}"
@@ -478,9 +479,9 @@ def unpark_silent(prs, repo, run=gh):
                         if e.get("event") == "labeled" and (e.get("label") or {}).get("name") == PARKED)
             if parse_ts(workflow_at) <= parse_ts(since):
                 continue
+            run("workflow", "run", "validate.yml", "--ref", p["headRefName"])  # first: a failed dispatch keeps the labels
             run("pr", "edit", str(p["number"]), "--remove-label", PARKED, "--remove-label", mark)
             p["labels"] = [lab for lab in p["labels"] if lab["name"] not in (PARKED, mark)]
-            run("workflow", "run", "validate.yml", "--ref", p["headRefName"])
             out.append(f"un-parked pr #{p['number']}: silent review, {REVIEW_WORKFLOW} changed on main")
         except (subprocess.CalledProcessError, OSError, ValueError, KeyError, IndexError, TypeError) as e:
             out.append(f"silent un-park of pr #{p['number']} failed ({type(e).__name__})")

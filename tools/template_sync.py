@@ -359,6 +359,72 @@ def cmd_materialize(argv):
     return 0
 
 
+PIN_NAMES = ("RUFF", "MYPY", "ZIZMOR", "ACTIONLINT")
+_PIN_ASSIGN = re.compile(r"^([A-Z]+)=([0-9][0-9A-Za-z.]*)$")
+_PIP_LINE = re.compile(r"^pip install\b(.*)$", re.MULTILINE)
+_REQUIREMENT = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*)(==[0-9][0-9A-Za-z.]*)?$")
+# The only packages the synced script may make the workflow install (lower case, as pip normalizes them).
+ALLOWED_PACKAGES = frozenset({"ruff", "mypy", "types-pyyaml", "zizmor", "pytest", "pytest-timeout", "coverage", "pyyaml"})
+
+
+def tool_requirements(script_text, own_pins_text=""):
+    """pip requirements of the template's install_tools.sh, read as data (the script is never run).
+
+    Pin assignments and the first `pip install` line are parsed; own pins (the project's tool-pins.env) override
+    the four allowed names. Every token must be an allowlisted package, `name` or `name==version`, with its pins
+    resolved; anything else raises ValueError, so the sync stops instead of continuing without the tools.
+    """
+    pins = {}
+    for line in script_text.splitlines():
+        m = _PIN_ASSIGN.match(line)
+        if m:
+            pins[m.group(1)] = m.group(2)
+    for line in own_pins_text.splitlines():
+        if not line.strip():
+            continue
+        m = _PIN_ASSIGN.match(line)
+        if not m or m.group(1) not in PIN_NAMES:
+            raise ValueError(f"invalid line in .agents/tool-pins.env: {line!r}")
+        pins[m.group(1)] = m.group(2)
+    found = _PIP_LINE.findall(script_text)
+    if not found:
+        raise ValueError("no `pip install` line in the template's tools/ci/install_tools.sh")
+    if len(found) > 1:
+        raise ValueError(f"{len(found)} `pip install` lines in install_tools.sh, expected exactly one")
+    if not found[0].strip():
+        raise ValueError("empty `pip install` line in install_tools.sh")
+    out = []
+    for raw in found[0].split():
+        token = re.sub(r"\$([A-Z]+)", lambda m: pins.get(m.group(1), m.group(0)), raw.strip('"'))
+        m = _REQUIREMENT.match(token)
+        if not m:
+            raise ValueError(f"unusable requirement in install_tools.sh: {raw!r}")
+        if m.group(1).lower() not in ALLOWED_PACKAGES:
+            raise ValueError(f"package not allowed in install_tools.sh: {m.group(1)!r}")
+        out.append(token)
+    return out
+
+
+def cmd_tool_pins(argv):
+    ap = argparse.ArgumentParser(prog="template_sync.py tool-pins")
+    ap.add_argument("--root", default=".")
+    ap.add_argument("--sha", required=True)
+    ap.add_argument("--out", required=True, help="requirements file to write")
+    args = ap.parse_args(argv)
+    try:
+        cfg = parse_config(pathlib.Path(args.root, CONFIG).read_text())
+        script = template_reader(cfg["template"])(args.sha, "tools/ci/install_tools.sh")
+        if not script:
+            raise ValueError("tools/ci/install_tools.sh unreadable at the synced template SHA")
+        own = pathlib.Path(args.root, ".agents/tool-pins.env")
+        reqs = tool_requirements(script, own.read_text() if own.is_file() else "")
+        pathlib.Path(args.out).write_text("".join(f"{r}\n" for r in reqs))
+    except (ConfigError, OSError, ValueError, subprocess.CalledProcessError) as exc:
+        return _fail(f"tool-pins: {exc}")
+    print(f"template-sync: {len(reqs)} tool requirements")
+    return 0
+
+
 def gh(*args):
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
 
@@ -428,4 +494,6 @@ if __name__ == "__main__":
         sys.exit(cmd_apply(sys.argv[2:]))
     if sys.argv[1:2] == ["materialize"]:
         sys.exit(cmd_materialize(sys.argv[2:]))
+    if sys.argv[1:2] == ["tool-pins"]:
+        sys.exit(cmd_tool_pins(sys.argv[2:]))
     sys.exit(main())

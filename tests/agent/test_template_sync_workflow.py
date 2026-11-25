@@ -134,3 +134,17 @@ def test_tools_are_installed_from_the_base_checkout_so_project_requirements_are_
 def test_only_the_model_free_publish_job_may_push_workflow_files():
     assert "permission-workflows: write" in JOBS["publish"] and "claude-code-action" not in JOBS["publish"]
     assert all("permission-workflows" not in body for name, body in JOBS.items() if name != "publish")
+
+
+def test_synced_tool_pins_are_read_as_data_and_the_synced_install_script_never_runs():
+    step = TEXT.split("- name: Read the tool pins of the synced template")[1].split("\n      - name:")[0]
+    install = TEXT.split("- name: Install the allowlisted tool pins")[1].split("\n      - name:")[0]
+    assert "python3 base/tools/template_sync.py tool-pins --root work" in step
+    assert "pip install --only-binary=:all: -r out/tool-reqs.txt" in install
+    assert "GH_TOKEN" not in install and "secrets." not in install and "steps.app" not in install
+    for body in (step, install):
+        assert "if: steps.gate.outputs.run == 'true'" in body and "set -euo pipefail" in body
+        assert "install_tools" not in body and "work/tools" not in body
+    assert TEXT.index("tool-pins --root work") < TEXT.index("template_sync.py apply --root work")
+    assert TEXT.index("tool-pins --root work") > TEXT.index("bash tools/ci/install_tools.sh")
+    assert "work/tools/ci/install_tools.sh" not in TEXT and "bash work/" not in TEXT

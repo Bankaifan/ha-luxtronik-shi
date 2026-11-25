@@ -267,6 +267,56 @@ def test_silent_unpark_leaves_everything_else_alone(case):
     assert run.changed() == []
 
 
+class FailingSilentGh(SilentGh):
+    """SilentGh whose call starting with `fail_on` raises, as gh does on a refused request."""
+    def __init__(self, fail_on):
+        super().__init__("2026-11-25T09:30:51Z", "2026-11-25T08:35:59Z")
+        self.fail_on = fail_on
+
+    def __call__(self, *args):
+        if args[:len(self.fail_on)] == self.fail_on:
+            self.calls.append(args)
+            raise subprocess.CalledProcessError(1, ["gh", *args])
+        return super().__call__(*args)
+
+
+def test_silent_unpark_keeps_the_labels_when_the_validate_dispatch_fails():
+    run = FailingSilentGh(("workflow", "run"))
+    p = silent_pr()
+    assert st.unpark_silent([p], "o/r", run) == ["silent un-park of pr #1 failed (CalledProcessError)"]
+    assert not any(c[:2] == ("pr", "edit") for c in run.calls)  # still parked and silent: the next tick retries
+    assert sorted(lab["name"] for lab in p["labels"]) == ["parked", "silent:sha1"]
+
+
+def test_silent_unpark_dispatches_validate_before_it_removes_the_labels():
+    run = SilentGh("2026-11-25T09:30:51Z", "2026-11-25T08:35:59Z")
+    st.unpark_silent([silent_pr()], "o/r", run)
+    assert [c[0] for c in run.changed()] == ["workflow", "pr"]
+
+
+def test_silent_unpark_reports_a_failed_label_removal_and_goes_on_with_the_next_pr():
+    run = FailingSilentGh(("pr", "edit", "1"))
+    first, second = silent_pr(), pr(2, labels=["parked", "silent:sha2"])
+    out = st.unpark_silent([first, second], "o/r", run)
+    assert out[0] == "silent un-park of pr #1 failed (CalledProcessError)" and out[1].startswith("un-parked pr #2")
+    assert sorted(lab["name"] for lab in first["labels"]) == ["parked", "silent:sha1"]
+
+
+def test_silent_unpark_skips_a_fork_pr_and_a_repo_without_review_workflow_commits():
+    fork = SilentGh("2026-11-25T09:30:51Z", "2026-11-25T08:35:59Z")
+    assert st.unpark_silent([silent_pr(isCrossRepository=True)], "o/r", fork) == [] and fork.calls == []
+
+    class NoCommits(SilentGh):
+        def __call__(self, *args):
+            if args[0] == "api" and "commits?path=" in args[-1]:
+                self.calls.append(args)
+                return "[]"
+            return super().__call__(*args)
+
+    run = NoCommits("", "2026-11-25T08:35:59Z")
+    assert st.unpark_silent([silent_pr()], "o/r", run) == [] and run.changed() == []
+
+
 @pytest.mark.parametrize("limit", [["review:2", "review:stop"], ["review:7", "review:8"]])
 def test_limit_prs_picks_only_unhandled_prs_at_the_round_limit(limit):
     stuck = pr(1, labels=limit)

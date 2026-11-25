@@ -87,6 +87,20 @@ jobs:
         # In base/: install_tools.sh installs the project's requirements*.txt from its working directory (main's copy).
         working-directory: base
         run: bash tools/ci/install_tools.sh
+      - name: Read the tool pins of the synced template (data only, the synced script never runs)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SYNC_SHA: ${{ steps.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python3 base/tools/template_sync.py tool-pins --root work --sha "$SYNC_SHA" --out out/tool-reqs.txt
+      - name: Install the allowlisted tool pins (no token in this step)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          pip install --only-binary=:all: -r out/tool-reqs.txt
       - name: Apply the template changes (template reads, script from base/)
         if: steps.gate.outputs.run == 'true'
         env:
