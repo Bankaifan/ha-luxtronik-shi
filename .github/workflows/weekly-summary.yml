@@ -41,6 +41,7 @@ jobs:
           # same defaults as orchestrator.yml (queue section and proposal thresholds); read-only use
           MAX_DEV: ${{ vars.MAX_DEV || '4' }}
           MAX_PRS: ${{ vars.MAX_PRS || '5' }}
+          REPORT_ISSUES: ${{ vars.REPORT_ISSUES }}  # "off": no summary or proposal issue, the text goes to the run summary
         run: python3 tools/weekly_summary.py
       - name: Open a PR for the new metrics row
         env:

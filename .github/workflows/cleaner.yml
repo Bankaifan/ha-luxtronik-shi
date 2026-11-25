@@ -60,7 +60,7 @@ jobs:
         env:
           EXTRA_INSTALL: ${{ vars.EXTRA_INSTALL }}
         run: bash tools/ci/install_tools.sh
-      - uses: anthropics/claude-code-action@c84e279f859e2591391e95bd309286eb111c345f # v1.0.284
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         if: steps.branch.outputs.go == 'true'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
