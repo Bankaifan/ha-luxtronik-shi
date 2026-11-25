@@ -135,8 +135,8 @@ def main() -> int:
         issue_titles = [t for t in map(gh_issue_title, linked_issues(body, head_ref)) if t is not None]
         errors += id_errors(title, issue_titles)
     errors += task_ids.commit_errors(title, subjects)
-    for e in errors:
-        print(f"check_pr_form: {e}")
+    for err in errors:
+        print(f"check_pr_form: {err}")
     if not errors:
         print("check_pr_form: ok")
     return 1 if errors else 0

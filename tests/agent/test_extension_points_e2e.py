@@ -167,6 +167,7 @@ def test_fresh_downstream_with_the_project_files_passes_make_check(tmp_path, cle
         tar.extractall(dst)
     (dst / "VERSION").unlink()
     (dst / ".agents" / "managed.json").unlink()
+    (dst / "docs" / "coverage.json").unlink(missing_ok=True)  # the template's own coverage floor: a downstream has none
     shutil.rmtree(dst / "tests")  # keep the template-only tests, as in test_template_sync_e2e.py
     (dst / "tests" / "agent").mkdir(parents=True)
     for name in TEMPLATE_ONLY_TESTS:

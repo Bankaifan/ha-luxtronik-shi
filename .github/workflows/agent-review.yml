@@ -163,9 +163,12 @@ jobs:
             (read the delta and `.review/prior-findings.md`, not the full diff). Without it, review the full diff; if `.review/prior-findings.md`
             exists all the same (rebased head), findings of it that are still open keep their ids.
             `.review/reviewers.txt` lists the specialists a script picked for this change. Start exactly those as
-            subagents (subagent types of the same names), all in one message so they run in parallel; none listed:
-            start none. Check every point they report against the diff yourself, drop what does not hold and class
-            the rest. If a subagent cannot be started, do its check yourself from its role file in .agents/roles/.
+            subagents (subagent types of the same names) with the Agent tool and `run_in_background: false`, all in one
+            message so they run in parallel in the foreground; none listed: start none. Wait for every result before
+            you go on: never end your turn while a subagent still runs, and submit the review only after all results
+            are in. Check every point they report against the diff yourself, drop what does not hold and class
+            the rest. If a subagent cannot be started or returns nothing, do its check yourself from its role file in
+            .agents/roles/.
             Use the verdict classes of the role: approve; changes (defects against the slip, AGENTS.md or CI only);
             scope (work outside the slip: name it, never block the in-scope part); non-blocking `carry:` notes.
             Submit exactly one review: `gh pr review ${{ steps.round.outputs.pr }} --approve --body "..."` or
@@ -193,6 +196,15 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ steps.round.outputs.pr }}
         run: python3 tools/ci/risk.py wait "$PR" "$SHA"
+      # The transcript (staged diff text, no token) makes a silent run readable afterwards.
+      - name: Upload the execution file
+        if: ${{ !cancelled() && steps.claude.outputs.execution_file != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review-execution-${{ github.run_id }}
+          path: ${{ steps.claude.outputs.execution_file }}
+          retention-days: 3
+          if-no-files-found: ignore
       # A round counts only for a finding: an approved head (model or script) gives its round back.
       - name: Give the round back for an approved head
         if: ${{ !cancelled() && steps.round.outputs.skip != 'true' }}

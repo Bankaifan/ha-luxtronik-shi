@@ -56,6 +56,8 @@ def _binary_sensor_constants() -> tuple[tuple, frozenset]:
     for node in tree.body:
         if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
             continue
+        if node.value is None:
+            continue
         if node.target.id == "STATUS_BITS":
             bits = ast.literal_eval(node.value)
         elif node.target.id == "_DISABLED_BY_DEFAULT":
@@ -126,7 +128,8 @@ def _name(entity: Entity, lang: str, trans: dict, page: dict) -> str:
     item = trans.get(entity.platform, {}).get(entity.key)
     if entity.key in registers.RAW_KEYS:
         item = trans.get("sensor", {}).get("raw")
-        return item["name"].replace("{address}", str(entity.reg.address)) if item else entity.key
+        address = entity.reg.address if entity.reg is not None else ""
+        return item["name"].replace("{address}", str(address)) if item else entity.key
     if item and "name" in item:
         return item["name"]
     return page["no_name"]

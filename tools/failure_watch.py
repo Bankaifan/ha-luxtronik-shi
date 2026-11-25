@@ -13,7 +13,7 @@ from urllib.parse import quote
 import ghcall
 import guard_mark
 import liveness
-from agent_guard import add_labels, park
+from agent_guard import add_labels, park, same_login
 
 TITLE_PREFIX = "Failing workflow: "
 MAX_NEW = 5
@@ -27,7 +27,9 @@ CANCEL_TAILS = (" / " + CANCELLED_STEP, " / - / -")  # job never started, or the
 # Cancellations that are normal (design 0012 4.2): value True = only when a newer run of the same branch exists.
 EXPECTED_CANCEL = {"agent-review.yml": False, "validate.yml": True, "orchestrator.yml": True,
                    "agent-security-review.yml": True}  # cancel-in-progress per head branch (#520)
-MERGE_GATES = ("validate.yml", "risk.yml", "agent-security-review.yml")
+JOBLESS_TAIL = " / - / -"
+OWN_ACTORS = ("bankaifan-agent-author", "bankaifan-agent-approver", "Bankaifan")  # author app, approver app, owner
+MERGE_GATES =("validate.yml", "risk.yml", "agent-security-review.yml")
 PR_ONLY = ("risk.yml", "agent-security-review.yml", "agent-review.yml")  # green on any non-agent ref counts
 AGENT_OWNED = ("agent-review.yml",)  # failures on agent/* branches belong to agent-fix rounds
 MAIN_ONLY = ("validate.yml",)  # a red PR run belongs to its PR; only main opens an issue (#410, as priority() and _success_closes)
@@ -107,15 +109,26 @@ def signature(run_obj, run=liveness.gh):
 
 
 def newer_run(run_obj, run=liveness.gh, any_branch=False):
-    """A later run of the same workflow file exists (same branch unless ANY_BRANCH), in any status (a queued one counts)."""
-    if any_branch:
+    """A later run of the same workflow file exists (same branch unless ANY_BRANCH), in any status (a queued one counts).
+    A workflow_run run has head_branch = main whatever it reviews: its group is the triggering branch, so the same
+    display_title (the triggering PR's title) stands for the same group (#811). Known limit: runs of two PRs with
+    the same title suppress each other's cancel report (accepted, it only dedups a notification)."""
+    by_title = run_obj.get("event") == "workflow_run" and not any_branch
+    if any_branch or by_title:
         path = f"repos/{{owner}}/{{repo}}/actions/workflows/{quote(workflow_file(run_obj), safe='')}/runs?per_page=100"
     else:
         branch = quote(run_obj.get("head_branch") or "", safe="")
         path = f"repos/{{owner}}/{{repo}}/actions/runs?branch={branch}&per_page=100"
     runs = _api(path, run).get("workflow_runs") or []
-    return any(o["id"] > run_obj["id"] and workflow_file(o) == workflow_file(run_obj)
-               and (any_branch or o.get("head_branch") == run_obj.get("head_branch")) for o in runs)
+
+    def same_group(o):
+        if any_branch:
+            return True
+        if by_title:
+            return bool(run_obj.get("display_title")) and o.get("display_title") == run_obj.get("display_title")
+        return o.get("head_branch") == run_obj.get("head_branch")
+
+    return any(o["id"] > run_obj["id"] and workflow_file(o) == workflow_file(run_obj) and same_group(o) for o in runs)
 
 
 def expected_cancel(run_obj, started, run=liveness.gh):
@@ -160,6 +173,31 @@ def turn_cap(wf, run_id, conclusion, run=liveness.gh):
 def turn_cap_line(run_id, capped):
     turns, maximum = capped
     return f"run {run_id}: turn cap, {turns} turns over the maximum of {maximum}: no issue, no rerun"
+
+
+def jobless_skip(run_obj, sig, run=liveness.gh):
+    """Reason to skip a failed run that never got a job (#814), else None. Skipped: a trigger by an actor that is
+    neither the author app, the approver app nor the owner (a foreign bot's review event), or a head branch whose
+    PR is merged or closed (the run was queued past the merge). Unreadable PR state keeps the run reported."""
+    if not sig.endswith(JOBLESS_TAIL) or run_obj.get("conclusion") != "failure":
+        return None
+    actor = (run_obj.get("triggering_actor") or run_obj.get("actor") or {}).get("login") or ""
+    if actor and not any(same_login(actor, own) for own in OWN_ACTORS):
+        return f"foreign actor {clean(actor)}"
+    branch = run_obj.get("head_branch") or ""
+    if not branch or branch == "main":
+        return None
+    try:
+        prs = json.loads(run("pr", "list", "--head", branch, "--state", "all", "--json", "state"))
+    except Exception:  # noqa: BLE001 - an unreadable PR state keeps the normal rules
+        return None
+    if prs and not any(p.get("state") == "OPEN" for p in prs):
+        return "its PR is merged or closed"
+    return None
+
+
+def jobless_line(run_id, reason):
+    return f"run {run_id}: no job, {reason}: skipped"
 
 
 def title_for(sig):
@@ -358,6 +396,11 @@ def watch(since, now, overdue_labels, key=None, run=liveness.gh, self_wf=SELF):
             handled = max(handled, created)
             continue
         if expected_cancel(r, started, run):
+            handled = max(handled, created)
+            continue
+        skipped = jobless_skip(r, sig, run)
+        if skipped:
+            actions.append(jobless_line(r["id"], skipped))
             handled = max(handled, created)
             continue
         title = title_for(sig)

@@ -3,6 +3,7 @@
 import json
 import pathlib
 import sys
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "custom_components" / "luxtronik_shi"))
@@ -17,7 +18,9 @@ _tree = ast.parse(
 _bits = next(
     ast.literal_eval(node.value)
     for node in _tree.body
-    if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "STATUS_BITS"
+    if isinstance(node, ast.AnnAssign)
+    and node.value is not None
+    and getattr(node.target, "id", "") == "STATUS_BITS"
 )
 
 
@@ -382,7 +385,7 @@ def exceptions(lang: str) -> dict[str, dict[str, str]]:
 
 # Block select and switch (views on heating_block and dhw_block, see block_views.py). "Hot water only" is also
 # shown while both blocks are set; the switch shows the real off.
-BLOCK_VIEWS = {
+BLOCK_VIEWS: dict[str, dict[str, Any]] = {
     "en": {
         "mode": "Operating mode (blocks)",
         "power": "On/off (blocks)",

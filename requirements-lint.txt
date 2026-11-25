@@ -2,3 +2,5 @@
 # Lives in a requirements file so the Dependabot pip ecosystem opens update PRs for it.
 ruff==0.17.6
 zizmor==1.32.0
+mypy==1.18.2
+types-PyYAML

@@ -85,8 +85,8 @@ def main(argv=None) -> int:
     except (OSError, subprocess.CalledProcessError, ConfigError) as e:
         print(f"check_version_bump: cannot run: {e}", file=sys.stderr)
         return 2
-    for e in errs:
-        print(f"check_version_bump: {e}")
+    for err in errs:
+        print(f"check_version_bump: {err}")
     if not errs:
         print("check_version_bump: ok")
     return 1 if errs else 0

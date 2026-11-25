@@ -59,8 +59,8 @@ def main(root=None) -> int:
         print(f"check_budget: cannot run: {e}", file=sys.stderr)
         return 2
     errs = errors(sizes, budgets)
-    for e in errs:
-        print(f"check_budget: {e}")
+    for err in errs:
+        print(f"check_budget: {err}")
     if not errs:
         print(f"check_budget: ok ({len(sizes)} files, {sum(sizes.values())} of {budgets['total']} bytes)")
     return 1 if errs else 0
