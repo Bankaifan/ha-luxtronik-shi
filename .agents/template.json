@@ -102,6 +102,10 @@
     {
       "path": "tests/agent/test_agent_guard.py",
       "why": "covers an action on a later events page counting for the silent-run guard (#227); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/test_entity_docs.py",
+      "why": "project test for the entity docs generator (tools/gen_entity_docs.py); not a template test"
     }
   ]
 }
