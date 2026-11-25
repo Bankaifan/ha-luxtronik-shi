@@ -62,3 +62,14 @@ def test_both_languages_have_the_same_rows():
         return [line.split("|")[2].split("<br>")[0] for line in gen.render(lang).splitlines() if line.startswith("| ") and "<br>" in line]
 
     assert rows("en") == rows("de")
+
+
+def test_raw_entity_name_fills_the_address_and_survives_a_missing_register(monkeypatch):
+    key = "raw_123"  # RAW_KEYS may be empty: every register is modelled at the moment
+    monkeypatch.setattr(gen.registers, "RAW_KEYS", frozenset({key}))
+    trans = {"sensor": {"raw": {"name": "Raw value {address}"}}}
+    page = {"no_name": "(no name)"}
+    with_reg = gen.Entity(key, "sensor", 0, reg=type("Reg", (), {"address": 123})())
+    assert gen._name(with_reg, "en", trans, page) == "Raw value 123"
+    assert gen._name(gen.Entity(key, "sensor", 0), "en", trans, page) == "Raw value "  # no register: empty address
+    assert gen._name(with_reg, "en", {}, page) == key  # no translation: the key itself
