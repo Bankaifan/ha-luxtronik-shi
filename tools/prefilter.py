@@ -400,5 +400,21 @@ def main(mode) -> int:
     return 0
 
 
+def run(mode) -> int:
+    """main() where a failed GitHub read (gh exits non-zero, an unexpected payload) is `work=false`, reason
+    `read-error`, with the failing call on stderr: the step must not fail the run (#616)."""
+    try:
+        return main(mode)
+    except subprocess.CalledProcessError as err:
+        print(f"read failed, no work: {' '.join(map(str, err.cmd))}: {err.stderr}", file=sys.stderr)
+    except json.JSONDecodeError as err:
+        print(f"read failed, no work: unexpected output: {err}", file=sys.stderr)
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a") as f:
+            f.write("work=false\nstartable=false\nreason=read-error\n")
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else ""))
+    sys.exit(run(sys.argv[1] if len(sys.argv) > 1 else ""))

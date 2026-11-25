@@ -242,7 +242,9 @@ def apply_sync(root, cfg, cmp_json, main_sha, version, read_at, issue=None):
     file changed; otherwise a dict with title, body, commit (None when nothing was staged), conflicted and the file
     lists. With conflicts synced_sha is not bumped and the title is the part 1 shape (4.3).
     """
-    managed = list(cfg.get("managed", []))
+    own = list(cfg.get("managed", []))
+    managed_added = template_prefixes(read_at(main_sha, MANAGED_FILE), own)  # before any write can fail
+    managed = own + managed_added  # a prefix new in this sync brings its files along in the same sync
     changed = changed_files(cmp_json, managed)
     if not changed:
         return None
@@ -254,7 +256,6 @@ def apply_sync(root, cfg, cmp_json, main_sha, version, read_at, issue=None):
             raise ApplyError(f"{path} is missing at {ref}")
         return text
 
-    managed_added = template_prefixes(read_at(main_sha, MANAGED_FILE), managed)  # before any write can fail
     clean_result = ta.apply_clean(root, clean, lambda p: required(main_sha, p), managed)
     merged = ta.merge_overridden(root, overridden, lambda p: read_at(cfg["synced_sha"], p),
                                  lambda p: read_at(main_sha, p), managed)
@@ -264,7 +265,7 @@ def apply_sync(root, cfg, cmp_json, main_sha, version, read_at, issue=None):
     text = cfg_path.read_text()
     if result["managed_added"]:
         obj = json.loads(text)
-        obj["managed"] = managed + result["managed_added"]
+        obj["managed"] = managed
         text = json.dumps(obj, indent=2) + "\n"
     if not result["conflicted"]:
         text = bump(text, main_sha, version)
@@ -398,8 +399,10 @@ def main(force=False, mode="version") -> int:
         sync = ""
     cmp_json = json.loads(gh("api", f"repos/{template}/compare/{cfg['synced_sha']}...{main_sha}"))
     try:
-        changed = changed_files(cmp_json, cfg.get("managed", []))
-    except TruncatedCompare as exc:
+        managed = list(cfg.get("managed", []))
+        managed += template_prefixes(template_reader(template)(main_sha, MANAGED_FILE), managed)
+        changed = changed_files(cmp_json, managed)
+    except (TruncatedCompare, ApplyError) as exc:
         print(f"template-sync: {exc}; no issue created or edited", file=sys.stderr)
         return 1
     if not changed:

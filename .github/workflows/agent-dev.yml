@@ -218,9 +218,11 @@ jobs:
             Porting files: no helper scripts (no `bash /tmp/port.sh`), no loops. Use Read then Write/Edit per file,
             or one plain `cp <src> <dst>` per file; list and compare with `ls`, `diff`, `cmp`.
           # DEV_SHELL=free (repo variable, design 0017 step 6) gives bare Bash; unset keeps the command list below.
+          # A template sync issue ports many files one by one (measured 110 to 126 turns): only its run gets the wider cap;
+          # the value is one of two literals picked by a step output the script sets, never model or issue text.
           claude_args: >-
             --model ${{ env.MODEL }}
-            --max-turns 60
+            --max-turns ${{ steps.template.outputs.dir && '150' || '60' }}
             --setting-sources user
             --settings .github/claude-judge-settings.json
             --permission-mode default

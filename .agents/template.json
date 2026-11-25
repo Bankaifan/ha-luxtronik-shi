@@ -1,6 +1,6 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "4f5612c60b6af80ed0d7b1f31da9a032ba8d72e6",
+  "synced_sha": "1d75d041672c2a617ad2b6f97fd63fda8a8c2ee8",
   "synced_version": "1.115",
   "managed": [
     ".github/workflows/",
@@ -15,7 +15,8 @@
     "CLAUDE.md",
     "Makefile",
     "docs/design/README.md",
-    "tests/agent/"
+    "tests/agent/",
+    "mypy.ini"
   ],
   "overrides": [
     {

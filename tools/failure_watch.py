@@ -37,6 +37,9 @@ SELF = "status.yml"  # default only: each caller passes its own workflow file
 ESCALATE_AT = 3
 PART_MAX = 60
 TURN_CAP_WORKFLOWS = ("agent-dev.yml", "agent-fix.yml")  # agent runs that can stop at their --max-turns cap (#562)
+# template-sync.yml: a red `make check` on the applied sync is handed to the developer by the `report` job, which opens
+# the `Template sync <sha>` issue (design 0014, 4.3). (workflow, failed job, failed step prefix, job that took over).
+HANDED_OVER = ("template-sync.yml", "build", "Checks on the result", "report")
 _BAD = re.compile(r"[^A-Za-z0-9 ._:/()-]")
 _FIELD = re.compile(r"^(Failures|Reopened|Last run|Closed by): (.*)$", re.MULTILINE)
 _TURN_CAP = re.compile(r"reported a successful result after (\d+) turns,\s+exceeding the configured maximum of (\d+)")
@@ -194,6 +197,27 @@ def jobless_skip(run_obj, sig, run=liveness.gh):
     if prs and not any(p.get("state") == "OPEN" for p in prs):
         return "its PR is merged or closed"
     return None
+
+
+def handed_over(run_obj, run=liveness.gh):
+    """True for a template-sync run whose only failure is `make check` on the applied sync and whose `report` job
+    succeeded: that job opened the sync issue for the developer, a failure issue would report the same thing twice.
+    Any other failed step, or a `report` job that did not succeed, keeps the run reported."""
+    wf, failed_job, step_prefix, taker = HANDED_OVER
+    if workflow_file(run_obj) != wf or run_obj.get("conclusion") != "failure":
+        return False
+    jobs = _api(f"repos/{{owner}}/{{repo}}/actions/runs/{run_obj['id']}/jobs", run).get("jobs") or []
+    failed = [j for j in jobs if j.get("conclusion") in FAILED_JOB]
+    if [j.get("name") for j in failed] != [failed_job]:
+        return False
+    step = _first(failed[0].get("steps") or [], FAILED_JOB)
+    if not (step and (step.get("name") or "").startswith(step_prefix)):
+        return False
+    return any(j.get("name") == taker and j.get("conclusion") == "success" for j in jobs)
+
+
+def handed_over_line(run_id):
+    return f"run {run_id}: template sync checks red, handed to the developer by its sync issue: no failure issue"
 
 
 def jobless_line(run_id, reason):
@@ -401,6 +425,10 @@ def watch(since, now, overdue_labels, key=None, run=liveness.gh, self_wf=SELF):
         skipped = jobless_skip(r, sig, run)
         if skipped:
             actions.append(jobless_line(r["id"], skipped))
+            handled = max(handled, created)
+            continue
+        if handed_over(r, run):
+            actions.append(handed_over_line(r["id"]))
             handled = max(handled, created)
             continue
         title = title_for(sig)
