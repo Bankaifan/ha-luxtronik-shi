@@ -8,6 +8,8 @@ import json
 import pathlib
 import subprocess
 
+import pytest
+
 _TOOLS = pathlib.Path(__file__).parent.parent.parent / "tools"
 
 
@@ -222,3 +224,113 @@ def test_apply_writes_the_files_of_a_prefix_that_is_new_in_this_sync(tmp_path):
     assert (root / "mypy.ini").read_text() == "[mypy]\n"
     assert "mypy.ini" in _committed(root)
     assert json.loads((root / ".agents" / "template.json").read_text())["managed"] == ["tools/", "AGENTS.md", "mypy.ini"]
+
+
+THEIRS_SCRIPT = """#!/usr/bin/env bash
+set -euo pipefail
+RUFF=0.17.4
+MYPY=1.18.2
+ZIZMOR=1.32.0
+ACTIONLINT=1.7.7
+COVERAGE=7.6.10
+pins=".agents/tool-pins.env"
+pip install "ruff==$RUFF" "mypy==$MYPY" types-PyYAML "zizmor==$ZIZMOR" pytest pytest-timeout "coverage==$COVERAGE" pyyaml==6.0.2
+for f in requirements.txt requirements_test.txt; do
+  if [ -f "$f" ]; then pip install -r "$f"; fi
+done
+"""
+BASE_SCRIPT = "RUFF=0.17.4\npip install \"ruff==$RUFF\" pytest\n"
+
+
+def test_tool_requirements_read_the_template_script_as_data():
+    reqs = ts.tool_requirements(THEIRS_SCRIPT)
+    assert "mypy==1.18.2" in reqs and "types-PyYAML" in reqs and "ruff==0.17.4" in reqs
+    assert sorted(reqs) == sorted(
+        ["ruff==0.17.4", "mypy==1.18.2", "types-PyYAML", "zizmor==1.32.0", "pytest", "pytest-timeout",
+         "coverage==7.6.10", "pyyaml==6.0.2"])
+
+
+def test_tool_requirements_a_base_lacking_the_tool_gets_it_from_the_synced_script():
+    assert "mypy==1.18.2" not in ts.tool_requirements(BASE_SCRIPT)
+    assert "mypy==1.18.2" in ts.tool_requirements(THEIRS_SCRIPT)
+
+
+def test_tool_requirements_own_pins_override_allowed_names():
+    reqs = ts.tool_requirements(THEIRS_SCRIPT, "MYPY=1.19.0\n\nRUFF=0.9.10\n")
+    assert "mypy==1.19.0" in reqs and "ruff==0.9.10" in reqs and "coverage==7.6.10" in reqs
+
+
+@pytest.mark.parametrize("own", ["COVERAGE=1.0\n", "garbage\n", "MYPY=$(evil)\n"])
+def test_tool_requirements_an_invalid_own_pin_line_fails(own):
+    with pytest.raises(ValueError, match="tool-pins.env"):
+        ts.tool_requirements(THEIRS_SCRIPT, own)
+
+
+@pytest.mark.parametrize("script, message", [
+    ('pip install ruff evilpkg\n', "not allowed"),
+    ('pip install ruff "x;rm"\n', "unusable"),
+    ('pip install ruff $(evil)\n', "unusable"),
+    ('pip install ruff -e .\n', "unusable"),
+    ('pip install ruff http://a/b\n', "unusable"),
+    ('pip install "ruff==$RUFF"\n', "unusable"),  # unresolved pin
+    ('echo nothing to install\n', "no `pip install`"),
+    ('', "no `pip install`"),
+    ('pip install  \n', "empty"),
+    ('pip install\n', "empty"),
+    ('pip install ruff\npip install mypy\n', "expected exactly one"),
+])
+def test_tool_requirements_fail_instead_of_dropping(script, message):
+    with pytest.raises(ValueError, match=message):
+        ts.tool_requirements(script)
+
+
+def test_tool_pins_command_writes_the_requirements_and_never_runs_the_script(tmp_path, monkeypatch):
+    root = tmp_path / "work"
+    (root / ".agents").mkdir(parents=True)
+    (root / ".agents" / "template.json").write_text(json.dumps(
+        {"template": "o/t", "synced_sha": SYNCED, "synced_version": "1.113", "managed": ["tools/"], "overrides": []}))
+    marker = tmp_path / "ran"
+    script = f"touch {marker}\nMYPY=1.18.2\npip install \"mypy==$MYPY\" types-PyYAML\n"
+    monkeypatch.setattr(ts, "read_template_file", lambda template, path, ref: script)
+    out = tmp_path / "reqs.txt"
+    assert ts.cmd_tool_pins(["--root", str(root), "--sha", MAIN, "--out", str(out)]) == 0
+    assert out.read_text() == "mypy==1.18.2\ntypes-PyYAML\n"
+    assert not marker.exists()
+
+
+def _pins_root(tmp_path, own):
+    root = tmp_path / "work"
+    (root / ".agents").mkdir(parents=True)
+    (root / ".agents" / "template.json").write_text(json.dumps(
+        {"template": "o/t", "synced_sha": SYNCED, "synced_version": "1.113", "managed": ["tools/"], "overrides": []}))
+    (root / ".agents" / "tool-pins.env").write_text(own)
+    return root
+
+
+def test_tool_pins_command_applies_the_own_pins_file(tmp_path, monkeypatch):
+    root = _pins_root(tmp_path, "MYPY=1.19.0\n")
+    monkeypatch.setattr(ts, "read_template_file",
+                        lambda template, path, ref: 'MYPY=1.18.2\npip install "mypy==$MYPY" types-PyYAML\n')
+    out = tmp_path / "reqs.txt"
+    assert ts.cmd_tool_pins(["--root", str(root), "--sha", MAIN, "--out", str(out)]) == 0
+    assert out.read_text() == "mypy==1.19.0\ntypes-PyYAML\n"
+
+
+def test_tool_pins_command_fails_on_an_invalid_own_pins_line(tmp_path, monkeypatch):
+    root = _pins_root(tmp_path, "garbage\n")
+    monkeypatch.setattr(ts, "read_template_file", lambda template, path, ref: "pip install mypy\n")
+    out = tmp_path / "reqs.txt"
+    assert ts.cmd_tool_pins(["--root", str(root), "--sha", MAIN, "--out", str(out)]) == 1
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("script", [None, "", "echo no pip here\n", 'pip install "ruff==$RUFF"\n', "pip install evilpkg\n"])
+def test_tool_pins_command_fails_and_writes_nothing_when_the_script_is_unusable(tmp_path, monkeypatch, script):
+    root = tmp_path / "work"
+    (root / ".agents").mkdir(parents=True)
+    (root / ".agents" / "template.json").write_text(json.dumps(
+        {"template": "o/t", "synced_sha": SYNCED, "synced_version": "1.113", "managed": ["tools/"], "overrides": []}))
+    monkeypatch.setattr(ts, "read_template_file", lambda template, path, ref: script)
+    out = tmp_path / "reqs.txt"
+    assert ts.cmd_tool_pins(["--root", str(root), "--sha", MAIN, "--out", str(out)]) == 1
+    assert not out.exists()

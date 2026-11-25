@@ -1,7 +1,7 @@
 {
   "template": "Bankaifan/agent-template",
-  "synced_sha": "1d75d041672c2a617ad2b6f97fd63fda8a8c2ee8",
-  "synced_version": "1.115",
+  "synced_sha": "05a92288cf1563633dc664b17e1ecee70e9c26f9",
+  "synced_version": "1.116",
   "managed": [
     ".github/workflows/",
     ".github/claude-judge-settings.json",
@@ -102,6 +102,10 @@
     {
       "path": "tests/agent/test_agent_guard.py",
       "why": "covers an action on a later events page counting for the silent-run guard (#227); to be proposed upstream in agent-template"
+    },
+    {
+      "path": "tests/agent/test_template_sync_apply.py",
+      "why": "THEIRS_SCRIPT is an inline copy of the template's install_tools.sh: the project's own script installs from requirements-lint.txt and has no pinned pip install line"
     },
     {
       "path": "tests/test_entity_docs.py",
