@@ -6,6 +6,7 @@ commit with the five, leaves synced_sha alone and names the sixth file in the PR
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 
 import pytest
@@ -232,9 +233,9 @@ RUFF=0.17.4
 MYPY=1.18.2
 ZIZMOR=1.32.0
 ACTIONLINT=1.7.7
-COVERAGE=7.6.10
+COVERAGE=7.17.5
 pins=".agents/tool-pins.env"
-pip install "ruff==$RUFF" "mypy==$MYPY" types-PyYAML "zizmor==$ZIZMOR" pytest pytest-timeout "coverage==$COVERAGE" pyyaml==6.0.2
+pip install "ruff==$RUFF" "mypy==$MYPY" types-PyYAML "zizmor==$ZIZMOR" pytest pytest-timeout "coverage==$COVERAGE" pyyaml==6.0.4
 for f in requirements.txt requirements_test.txt; do
   if [ -f "$f" ]; then pip install -r "$f"; fi
 done
@@ -247,7 +248,12 @@ def test_tool_requirements_read_the_template_script_as_data():
     assert "mypy==1.18.2" in reqs and "types-PyYAML" in reqs and "ruff==0.17.4" in reqs
     assert sorted(reqs) == sorted(
         ["ruff==0.17.4", "mypy==1.18.2", "types-PyYAML", "zizmor==1.32.0", "pytest", "pytest-timeout",
-         "coverage==7.6.10", "pyyaml==6.0.2"])
+         "coverage==7.17.5", "pyyaml==6.0.4"])
+
+
+def test_the_template_script_uses_only_exact_pins_older_downstream_parsers_read():
+    for token in ts.tool_requirements(THEIRS_SCRIPT):
+        assert re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*(==[0-9][0-9A-Za-z.]*)?", token), token
 
 
 def test_tool_requirements_a_base_lacking_the_tool_gets_it_from_the_synced_script():
@@ -257,7 +263,7 @@ def test_tool_requirements_a_base_lacking_the_tool_gets_it_from_the_synced_scrip
 
 def test_tool_requirements_own_pins_override_allowed_names():
     reqs = ts.tool_requirements(THEIRS_SCRIPT, "MYPY=1.19.0\n\nRUFF=0.9.10\n")
-    assert "mypy==1.19.0" in reqs and "ruff==0.9.10" in reqs and "coverage==7.6.10" in reqs
+    assert "mypy==1.19.0" in reqs and "ruff==0.9.10" in reqs and "coverage==7.17.5" in reqs
 
 
 @pytest.mark.parametrize("own", ["COVERAGE=1.0\n", "garbage\n", "MYPY=$(evil)\n"])
@@ -268,6 +274,8 @@ def test_tool_requirements_an_invalid_own_pin_line_fails(own):
 
 @pytest.mark.parametrize("script, message", [
     ('pip install ruff evilpkg\n', "not allowed"),
+    ('pip install "ruff<1"\n', "unusable"),
+    ('pip install "ruff~=1.0"\n', "unusable"),
     ('pip install ruff "x;rm"\n', "unusable"),
     ('pip install ruff $(evil)\n', "unusable"),
     ('pip install ruff -e .\n', "unusable"),
