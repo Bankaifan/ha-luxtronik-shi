@@ -1,0 +1,28 @@
+diff --git a/.github/workflows/automerge.yml b/.github/workflows/automerge.yml
+index 767256c..4c5d5be 100644
+--- a/.github/workflows/automerge.yml
++++ b/.github/workflows/automerge.yml
+@@ -143,7 +143,7 @@ jobs:
+           fi
+           # A failed state read is not evidence the PR is closed: it only counts when the state was read and is not OPEN.
+           state=$(gh pr view "$PR" --json state --jq .state 2>/dev/null) || state=""
+-          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open'; then
++          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open|unstable status'; then
+             echo "::notice::PR #$PR is ${state:-unknown}; nothing left to enable: $out"
+             exit 0
+           fi
+diff --git a/.github/workflows/template-sync.yml b/.github/workflows/template-sync.yml
+index 49368a0..c05c328 100644
+--- a/.github/workflows/template-sync.yml
++++ b/.github/workflows/template-sync.yml
+@@ -80,6 +80,10 @@ jobs:
+               sys.exit(0)
+           emit("true", sha)
+           EOF
++      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
++        if: steps.gate.outputs.run == 'true'
++        with:
++          python-version: ${{ vars.PYTHON_VERSION || '3.13' }}
+       - name: Install pinned tools
+         if: steps.gate.outputs.run == 'true'
+         env:

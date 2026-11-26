@@ -234,7 +234,7 @@ ZIZMOR=1.32.0
 ACTIONLINT=1.7.7
 COVERAGE=7.6.10
 pins=".agents/tool-pins.env"
-pip install "ruff==$RUFF" "mypy==$MYPY" types-PyYAML "zizmor==$ZIZMOR" pytest pytest-timeout "coverage==$COVERAGE" pyyaml==6.0.2
+pip install "ruff==$RUFF" "mypy==$MYPY" types-PyYAML "zizmor==$ZIZMOR" pytest pytest-timeout "coverage>=$COVERAGE" "pyyaml>=6.0.2"
 for f in requirements.txt requirements_test.txt; do
   if [ -f "$f" ]; then pip install -r "$f"; fi
 done
@@ -247,7 +247,7 @@ def test_tool_requirements_read_the_template_script_as_data():
     assert "mypy==1.18.2" in reqs and "types-PyYAML" in reqs and "ruff==0.17.4" in reqs
     assert sorted(reqs) == sorted(
         ["ruff==0.17.4", "mypy==1.18.2", "types-PyYAML", "zizmor==1.32.0", "pytest", "pytest-timeout",
-         "coverage==7.6.10", "pyyaml==6.0.2"])
+         "coverage>=7.6.10", "pyyaml>=6.0.2"])
 
 
 def test_tool_requirements_a_base_lacking_the_tool_gets_it_from_the_synced_script():
@@ -257,7 +257,7 @@ def test_tool_requirements_a_base_lacking_the_tool_gets_it_from_the_synced_scrip
 
 def test_tool_requirements_own_pins_override_allowed_names():
     reqs = ts.tool_requirements(THEIRS_SCRIPT, "MYPY=1.19.0\n\nRUFF=0.9.10\n")
-    assert "mypy==1.19.0" in reqs and "ruff==0.9.10" in reqs and "coverage==7.6.10" in reqs
+    assert "mypy==1.19.0" in reqs and "ruff==0.9.10" in reqs and "coverage>=7.6.10" in reqs
 
 
 @pytest.mark.parametrize("own", ["COVERAGE=1.0\n", "garbage\n", "MYPY=$(evil)\n"])
@@ -273,6 +273,8 @@ def test_tool_requirements_an_invalid_own_pin_line_fails(own):
     ('pip install ruff -e .\n', "unusable"),
     ('pip install ruff http://a/b\n', "unusable"),
     ('pip install "ruff==$RUFF"\n', "unusable"),  # unresolved pin
+    ('pip install "ruff<1"\n', "unusable"),  # only == and >= are accepted
+    ('pip install "ruff~=1.0"\n', "unusable"),
     ('echo nothing to install\n', "no `pip install`"),
     ('', "no `pip install`"),
     ('pip install  \n', "empty"),

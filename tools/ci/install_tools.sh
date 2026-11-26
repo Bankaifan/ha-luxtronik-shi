@@ -4,6 +4,8 @@
 # together with its SHA-256; bump both (the checksum is in the release's actionlint_<version>_checksums.txt).
 #   install_tools.sh        everything: ruff, zizmor, pytest-timeout, requirements_test.txt, actionlint
 #   install_tools.sh lint   only the lint tools (ruff, zizmor, actionlint; no test dependencies)
+# coverage is a floor, not an exact pin: its output does not change findings, and an exact pin breaks as soon as the
+# runner's Python gets newer than the pinned release's wheels.
 set -euo pipefail
 ACTIONLINT=1.7.7
 # The override exists only to test that a wrong checksum fails the install.
@@ -12,7 +14,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [ "${1:-}" = lint ]; then
   pip install -r "$root/requirements-lint.txt"
 else
-  pip install -r "$root/requirements-lint.txt" pytest-timeout "coverage==7.6.10"
+  pip install -r "$root/requirements-lint.txt" pytest-timeout "coverage>=7.6.10"
   for f in requirements.txt requirements_test.txt; do
     if [ -f "$root/$f" ]; then pip install -r "$root/$f"; fi
   done

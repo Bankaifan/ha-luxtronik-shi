@@ -362,7 +362,7 @@ def cmd_materialize(argv):
 PIN_NAMES = ("RUFF", "MYPY", "ZIZMOR", "ACTIONLINT")
 _PIN_ASSIGN = re.compile(r"^([A-Z]+)=([0-9][0-9A-Za-z.]*)$")
 _PIP_LINE = re.compile(r"^pip install\b(.*)$", re.MULTILINE)
-_REQUIREMENT = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*)(==[0-9][0-9A-Za-z.]*)?$")
+_REQUIREMENT = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*)((==|>=)[0-9][0-9A-Za-z.]*)?$")
 # The only packages the synced script may make the workflow install (lower case, as pip normalizes them).
 ALLOWED_PACKAGES = frozenset({"ruff", "mypy", "types-pyyaml", "zizmor", "pytest", "pytest-timeout", "coverage", "pyyaml"})
 
@@ -371,7 +371,7 @@ def tool_requirements(script_text, own_pins_text=""):
     """pip requirements of the template's install_tools.sh, read as data (the script is never run).
 
     Pin assignments and the first `pip install` line are parsed; own pins (the project's tool-pins.env) override
-    the four allowed names. Every token must be an allowlisted package, `name` or `name==version`, with its pins
+    the four allowed names. Every token must be an allowlisted package, `name`, `name==version` or `name>=version`, with its pins
     resolved; anything else raises ValueError, so the sync stops instead of continuing without the tools.
     """
     pins = {}

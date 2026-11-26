@@ -80,6 +80,8 @@ def test_other_merge_errors_still_fail():
         # Known phrase: success even if the state read failed.
         (1, "Merge already in progress", 1, "", 0),
         (1, "Pull request is already merged", 1, "", 0),
+        # GitHub refuses auto-merge while the PR is unstable (non-required checks pending): later events retry.
+        (1, "GraphQL: Pull request Pull request is in unstable status (enablePullRequestAutoMerge)", 0, "OPEN", 0),
     ],
 )
 def test_merge_step_exit_code(tmp_path, merge_rc, merge_out, view_rc, view_state, expected_rc):
