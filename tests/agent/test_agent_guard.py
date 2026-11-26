@@ -383,6 +383,12 @@ def test_orchestrator_denials_escalate(orch_env):
     assert not r.made("issue", "create")  # first failure: no issue yet
 
 
+def test_silent_orchestrator_prints_its_reason(orch_env, capsys):
+    orch_env(denials=[DENIAL] * 2)
+    assert g.silent_orchestrator(T0, OrchGh()) == 1
+    assert "silent orchestrator run: 2 tool call(s) were denied" in capsys.readouterr().out
+
+
 def test_denied_gh_run_view_fails_the_run_even_with_a_conclusion(orch_env):
     # Run 42821430379 (issue #313): two denied `gh run view` calls, the run still ended with a Conclusion line.
     # The guard keys on denials, not on the Conclusion line, so that run must fail and name the calls.
