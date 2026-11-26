@@ -12,7 +12,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [ "${1:-}" = lint ]; then
   pip install -r "$root/requirements-lint.txt"
 else
-  pip install -r "$root/requirements-lint.txt" pytest-timeout "coverage==7.6.10"
+  pip install -r "$root/requirements-lint.txt" pytest-timeout "coverage==7.17.5"
   for f in requirements.txt requirements_test.txt; do
     if [ -f "$root/$f" ]; then pip install -r "$root/$f"; fi
   done
