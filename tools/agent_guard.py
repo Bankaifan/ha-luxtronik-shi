@@ -318,8 +318,9 @@ def silent_orchestrator(since, run=gh):
         print("the model call failed (is_error after one turn, no tool use): transient, tolerated; the next run retries")
         return 0
     if os.environ.get("CLAUDE_OUTCOME") == "failure" and denials == 0:
-        escalate_orchestrator("the model step failed without a tool call or an API error pattern",
-                              status_issue(run, bot), repo, bot, run)
+        why = "the model step failed without a tool call or an API error pattern"
+        print(f"silent orchestrator run: {why}")
+        escalate_orchestrator(why, status_issue(run, bot), repo, bot, run)
         return 1
     startable = os.environ.get("STARTABLE") == "true"
     acted = False
@@ -333,6 +334,7 @@ def silent_orchestrator(since, run=gh):
     why = orchestrator_silent(denials, startable, acted)
     if not why:
         return 0
+    print(f"silent orchestrator run: {why}")
     escalate_orchestrator(why, status_issue(run, bot), repo, bot, run)
     return 1
 
