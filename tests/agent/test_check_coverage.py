@@ -1,6 +1,8 @@
 import importlib.util
 import json
 import pathlib
+import subprocess
+import sys
 
 import pytest
 
@@ -73,8 +75,6 @@ def test_measure_failure_fails(repo, monkeypatch, capsys):
 
 def test_measure_reads_the_total_of_real_coverage_data(tmp_path):
     pytest.importorskip("coverage")  # pinned by tools/ci/install_tools.sh
-    import subprocess
-    import sys
     (tmp_path / "half.py").write_text("import sys\nif len(sys.argv) > 5:\n    print('never')\n    print('never')\n",
                                       encoding="utf-8")
     subprocess.run([sys.executable, "-m", "coverage", "run", "half.py"], cwd=tmp_path, check=True)
@@ -85,4 +85,3 @@ def test_measure_reads_the_total_of_real_coverage_data(tmp_path):
     assert mod.main(tmp_path) == 0
     _floor(tmp_path, 51)
     assert mod.main(tmp_path) == 1
-
