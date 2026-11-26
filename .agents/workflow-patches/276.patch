@@ -1,0 +1,65 @@
+diff --git a/.github/workflows/automerge.yml b/.github/workflows/automerge.yml
+index 767256c..4c5d5be 100644
+--- a/.github/workflows/automerge.yml
++++ b/.github/workflows/automerge.yml
+@@ -143,7 +143,7 @@ jobs:
+           fi
+           # A failed state read is not evidence the PR is closed: it only counts when the state was read and is not OPEN.
+           state=$(gh pr view "$PR" --json state --jq .state 2>/dev/null) || state=""
+-          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open'; then
++          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open|unstable status'; then
+             echo "::notice::PR #$PR is ${state:-unknown}; nothing left to enable: $out"
+             exit 0
+           fi
+diff --git a/.github/workflows/template-sync.yml b/.github/workflows/template-sync.yml
+index 49368a0..c05c328 100644
+--- a/.github/workflows/template-sync.yml
++++ b/.github/workflows/template-sync.yml
+@@ -80,6 +80,10 @@ jobs:
+               sys.exit(0)
+           emit("true", sha)
+           EOF
++      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
++        if: steps.gate.outputs.run == 'true'
++        with:
++          python-version: ${{ vars.PYTHON_VERSION || '3.13' }}
+       - name: Install pinned tools
+         if: steps.gate.outputs.run == 'true'
+         env:
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+index 972a056..f62f567 100644
+--- a/.github/workflows/validate.yml
++++ b/.github/workflows/validate.yml
+@@ -189,6 +189,32 @@ jobs:
+       - run: actionlint
+       - run: zizmor --no-progress .github/workflows
+
++  # A project syncs a new release with the tools of its older release (#839): the last releases' parsers must read
++  # install_tools.sh, and its pins must install as wheels both on the runner's own Python and on the one set up here.
++  downstream-compat:
++    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
++    timeout-minutes: 10
++    strategy:
++      fail-fast: false
++      matrix:
++        python: [runner, workflow]
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          persist-credentials: false
++          fetch-depth: 0
++      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
++        if: matrix.python == 'workflow'
++        with:
++          python-version: ${{ vars.PYTHON_VERSION || '3.13' }}
++      - name: Older releases read the tool pins, and they install as wheels
++        run: |
++          set -euo pipefail
++          python3 --version
++          reqs="$RUNNER_TEMP/compat-reqs.txt"
++          python3 tools/check/check_downstream_compat.py --out "$reqs"
++          if [ -f "$reqs" ]; then pip install --only-binary=:all: -r "$reqs"; fi
++
+   # The minimum Home Assistant version declared in hacs.json must pass the tests too (read from hacs.json, not hard-coded).
+   tests-min-ha:
+     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
