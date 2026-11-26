@@ -70,6 +70,8 @@ def check(root, count):
             errors.append(f"projects on release {sha[:7]} cannot read {SCRIPT}: {got}")
         elif reqs is None:
             reqs = got
+    if reqs is None and not errors:
+        errors.append("no release in the window reads tool pins (tool_requirements): nothing was checked")
     return errors, reqs or []
 
 

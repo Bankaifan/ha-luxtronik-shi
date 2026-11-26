@@ -96,3 +96,32 @@ def test_outside_the_template_it_skips(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cdc, "ROOT", tmp_path)
     assert cdc.main(["--out", str(tmp_path / "r.txt")]) == 0
     assert "skipped" in capsys.readouterr().out and not (tmp_path / "r.txt").exists()
+
+
+def test_a_crashing_parser_is_reported_not_skipped(tmp_path):
+    root = _repo(tmp_path, "raise RuntimeError('boom')\n")
+    _script(root, "ruff==0.1")
+    errors, _ = cdc.check(root, 5)
+    assert len(errors) == 1 and "parser crashed" in errors[0] and "boom" in errors[0]
+
+
+def test_main_writes_the_requirements_and_fails_on_an_unreadable_script(tmp_path, monkeypatch, capsys):
+    root = _repo(tmp_path, STRICT)
+    (root / ".agents").mkdir()
+    (root / ".agents" / "managed.json").write_text("{}")
+    monkeypatch.setattr(cdc, "ROOT", root)
+    _script(root, "ruff==0.1 pytest")
+    out = tmp_path / "r.txt"
+    assert cdc.main(["--out", str(out)]) == 0
+    assert out.read_text() == "ruff==0.1\npytest\n"
+    _script(root, "coverage>=7.0")
+    out.unlink()
+    assert cdc.main(["--out", str(out)]) == 1
+    assert "cannot read" in capsys.readouterr().err and not out.exists()
+
+
+def test_a_window_without_any_tool_pin_parser_is_an_error_not_an_empty_pass(tmp_path):
+    root = _repo(tmp_path, None)
+    _script(root, "ruff==0.1")
+    errors, reqs = cdc.check(root, 5)
+    assert reqs == [] and errors and "nothing was checked" in errors[0]

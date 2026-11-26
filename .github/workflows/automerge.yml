@@ -143,7 +143,7 @@ jobs:
           fi
           # A failed state read is not evidence the PR is closed: it only counts when the state was read and is not OPEN.
           state=$(gh pr view "$PR" --json state --jq .state 2>/dev/null) || state=""
-          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open'; then
+          if { [ -n "$state" ] && [ "$state" != "OPEN" ]; } || printf '%s\n' "$out" | grep -qiE 'Merge already in progress|already merged|not open|unstable status'; then
             echo "::notice::PR #$PR is ${state:-unknown}; nothing left to enable: $out"
             exit 0
           fi

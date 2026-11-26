@@ -41,7 +41,18 @@ def project_tree(dst):
         {"template": "Bankaifan/agent-template", "synced_sha": "0" * 40, "synced_version": "1.0", "managed": managed,
          "overrides": []}), encoding="utf-8")
     (dst / "VERSION").write_text("0.1\n", encoding="utf-8")
+    without_pending_workflow_patches(dst)
     return dst
+
+
+def without_pending_workflow_patches(dst):
+    """validate applies the pending `.agents/workflow-patches/` to the working tree before the tests; a project never
+    gets them (they are not synced), so the copy takes them back out (1.119: a test of a pending automerge.yml change
+    broke every project's sync)."""
+    for patch in sorted((ROOT / ".agents" / "workflow-patches").glob("*.patch")):
+        check = subprocess.run(["git", "apply", "-R", "--check", str(patch)], cwd=dst, capture_output=True, check=False)
+        if check.returncode == 0:
+            subprocess.run(["git", "apply", "-R", str(patch)], cwd=dst, check=True, capture_output=True)
 
 
 @pytest.mark.slow
@@ -58,3 +69,17 @@ def test_the_suite_passes_in_a_tree_that_holds_only_the_managed_paths(tmp_path, 
                          check=False)
     assert run.returncode == 0, ("a test reads a file projects do not get by sync; mark it template_only or read a "
                                  "managed path:\n" + run.stdout[-3000:] + run.stderr[-500:])
+
+
+def test_a_pending_workflow_patch_applied_by_validate_is_taken_back_out(tmp_path, monkeypatch):
+    root, dst = tmp_path / "root", tmp_path / "dst"
+    (root / ".agents" / "workflow-patches").mkdir(parents=True)
+    (dst / "w").mkdir(parents=True)
+    (dst / "w" / "a.yml").write_text("one\ntwo-patched\n")
+    (root / ".agents" / "workflow-patches" / "1.patch").write_text(
+        "--- a/w/a.yml\n+++ b/w/a.yml\n@@ -1,2 +1,2 @@\n one\n-two\n+two-patched\n")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", root)
+    without_pending_workflow_patches(dst)
+    assert (dst / "w" / "a.yml").read_text() == "one\ntwo\n"
+    without_pending_workflow_patches(dst)  # not applied (any more): left alone
+    assert (dst / "w" / "a.yml").read_text() == "one\ntwo\n"
