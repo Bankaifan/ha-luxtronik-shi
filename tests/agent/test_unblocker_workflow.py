@@ -62,6 +62,12 @@ def test_model_step_is_confined():
     assert "--settings .github/claude-judge-settings.json" in _model_step()
 
 
+def test_model_step_turn_cap_leaves_room_for_the_verdict():
+    """Issue #277: the judge needed 11 turns and the run failed at --max-turns 10."""
+    cap = int(re.search(r"--max-turns (\d+)", _model_step()).group(1))
+    assert cap >= 30
+
+
 def test_no_untrusted_event_text_in_run_scripts():
     """Only numbers and fixed names reach shell code; titles, bodies and comments are never interpolated."""
     for ref in re.findall(r"\$\{\{[^}]*\}\}", TEXT):

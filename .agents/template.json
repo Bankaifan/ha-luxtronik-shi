@@ -108,6 +108,10 @@
       "why": "THEIRS_SCRIPT is an inline copy of the template's install_tools.sh: the project's own script installs from requirements-lint.txt and has no pinned pip install line"
     },
     {
+      "path": "tests/agent/test_unblocker_workflow.py",
+      "why": "also asserts the unblocker judge turn cap is at least 30 (#277), matching the raised --max-turns in unblocker.yml; to be proposed upstream in agent-template"
+    },
+    {
       "path": "tests/test_entity_docs.py",
       "why": "project test for the entity docs generator (tools/gen_entity_docs.py); not a template test"
     }
